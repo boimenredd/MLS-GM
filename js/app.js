@@ -369,34 +369,58 @@ function renderAcademy() {
 }
 
 function renderStandings() {
-  const renderTable = (conf) => `
-    <div class="panel">
-      <div class="panel-head"><h3>${escapeHtml(conf)} Conference</h3><span>Top 9 qualify</span></div>
-      <table>
-        <thead>
-          <tr><th>#</th><th>Club</th><th class="num">P</th><th class="num">W</th><th class="num">D</th><th class="num">L</th><th class="num">GF</th><th class="num">GA</th><th class="num">GD</th><th class="num">Pts</th></tr>
-        </thead>
-        <tbody>
-          ${state.standings[conf].map((r, i) => `
-            <tr>
-              <td>${i + 1}</td>
-              <td>${escapeHtml(byTeamId(r.teamId).name)}${r.teamId === state.userTeamId ? " <strong>(You)</strong>" : ""}</td>
-              <td class="num">${r.played}</td>
-              <td class="num">${r.wins}</td>
-              <td class="num">${r.draws}</td>
-              <td class="num">${r.losses}</td>
-              <td class="num">${r.gf}</td>
-              <td class="num">${r.ga}</td>
-              <td class="num">${r.gd > 0 ? "+" : ""}${r.gd}</td>
-              <td class="num"><strong>${r.points}</strong></td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </div>
-  `;
+  const renderTable = (conf, tableName) => {
+    const mapped = state.standings[conf].map(r => ({
+      ...r,
+      name: byTeamId(r.teamId).name,
+    }));
 
-  return `${pageHead("Standings", "MLS tiebreaker ordering applied")}${renderTable("East")}${renderTable("West")}`;
+    const sorted = sortRows(mapped, tableSortState[tableName]);
+
+    return `
+      <div class="panel">
+        <div class="panel-head"><h3>${escapeHtml(conf)} Conference</h3><span>Top 9 qualify</span></div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              ${makeSortableTh("Club", tableName, "name")}
+              ${makeSortableTh("P", tableName, "played", "num")}
+              ${makeSortableTh("W", tableName, "wins", "num")}
+              ${makeSortableTh("D", tableName, "draws", "num")}
+              ${makeSortableTh("L", tableName, "losses", "num")}
+              ${makeSortableTh("GF", tableName, "gf", "num")}
+              ${makeSortableTh("GA", tableName, "ga", "num")}
+              ${makeSortableTh("GD", tableName, "gd", "num")}
+              ${makeSortableTh("Pts", tableName, "points", "num")}
+            </tr>
+          </thead>
+          <tbody>
+            ${sorted.map((r, i) => `
+              <tr>
+                <td>${i + 1}</td>
+                <td>${escapeHtml(r.name)}${r.teamId === state.userTeamId ? " <strong>(You)</strong>" : ""}</td>
+                <td class="num">${r.played}</td>
+                <td class="num">${r.wins}</td>
+                <td class="num">${r.draws}</td>
+                <td class="num">${r.losses}</td>
+                <td class="num">${r.gf}</td>
+                <td class="num">${r.ga}</td>
+                <td class="num">${r.gd > 0 ? "+" : ""}${r.gd}</td>
+                <td class="num"><strong>${r.points}</strong></td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  };
+
+  return `
+    ${pageHead("Standings", "Sortable conference tables")}
+    ${renderTable("East", "standingsEast")}
+    ${renderTable("West", "standingsWest")}
+  `;
 }
 
 function renderSchedule() {
