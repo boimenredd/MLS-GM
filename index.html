@@ -154,6 +154,101 @@
   <div id="toastWrap" class="toast-wrap"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <div id="match-sim-overlay">
+  <div id="match-sim-box">
+    <div id="msim-header">
+      <div id="msim-comp-badge">MLS</div>
+      <div id="sim-minute">0'</div>
+      <div id="msim-weather-badge">☀️ Clear</div>
+    </div>
+
+    <div class="match-scoreboard">
+      <div class="match-teams">
+        <div class="match-team" id="sim-home-name">Home</div>
+        <div class="match-score" id="sim-score">0 – 0</div>
+        <div class="match-team away" id="sim-away-name">Away</div>
+      </div>
+
+      <div class="flex" style="justify-content:center; margin-bottom:12px;">
+        <button class="small-btn sim-speed-opt active" data-speed="normal">Normal</button>
+        <button class="small-btn sim-speed-opt" data-speed="fast">Fast</button>
+        <button class="small-btn" id="sim-pause-btn">⏸ Pause</button>
+        <button class="small-btn" id="sim-skip-btn">Skip</button>
+      </div>
+
+      <div class="match-progress">
+        <div class="match-progress-fill" id="sim-progress-fill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div id="msim-body-grid">
+      <div>
+        <div class="msim-section-title">Live Stats</div>
+        <div id="msim-live-stats"></div>
+      </div>
+
+      <div id="msim-col-commentary">
+        <div class="msim-section-title">Commentary</div>
+        <div class="match-events" id="sim-events"></div>
+      </div>
+
+      <div id="msim-col-lineups">
+        <div class="msim-section-title" id="msim-home-lineup-title">HOME</div>
+        <div id="msim-home-lineup"></div>
+        <div class="msim-section-title" id="msim-away-lineup-title" style="margin-top:12px;">AWAY</div>
+        <div id="msim-away-lineup"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="goal-replay-overlay">
+  <div id="goal-replay-inner">
+    <div id="goal-replay-header">
+      <div>
+        <div id="goal-replay-title">GOAL REPLAY</div>
+        <div id="goal-replay-scorer"></div>
+      </div>
+      <div id="goal-replay-badge">REPLAY</div>
+    </div>
+    <div id="goal-replay-body">
+      <div id="goal-replay-pitch-wrap">
+        <canvas id="goal-replay-canvas" width="820" height="460"></canvas>
+      </div>
+      <div id="goal-replay-side">
+        <div class="goal-replay-stat-box">
+          <div class="goal-replay-stat-label">Minute</div>
+          <div class="goal-replay-stat-val" id="goal-replay-minute">0'</div>
+        </div>
+        <div class="goal-replay-stat-box">
+          <div class="goal-replay-stat-label">Assist</div>
+          <div class="goal-replay-stat-val" id="goal-replay-assist">—</div>
+        </div>
+      </div>
+    </div>
+    <button id="goal-replay-close">Continue</button>
+  </div>
+</div>
+
+<div id="var-overlay">
+  <div id="var-broadcast">
+    <div id="var-main-panel">
+      <div id="var-main-label">VAR REVIEW</div>
+      <div id="var-screen"></div>
+    </div>
+    <div id="var-right-col">
+      <div id="var-brand-block">
+        <div id="var-brand-text">VAR</div>
+        <div id="var-brand-sub">Video Review</div>
+      </div>
+      <div id="var-footer">
+        <div id="var-decision-badge"></div>
+        <div id="var-desc"></div>
+        <div id="var-scanning-text"></div>
+      </div>
+    </div>
+  </div>
+</div>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
