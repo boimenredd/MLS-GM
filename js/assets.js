@@ -11,10 +11,10 @@ const COUNTRY_NAME_MAP = {
   "Brazil": "Brazil",
   "Colombia": "Colombia",
   "Uruguay": "Uruguay",
+  "Venezuela": "Venezuela",
   "Paraguay": "Paraguay",
   "Chile": "Chile",
   "Peru": "Peru",
-  "Venezuela": "Venezuela",
   "Costa Rica": "Costa Rica",
   "Honduras": "Honduras",
   "Panama": "Panama",
@@ -40,6 +40,10 @@ const COUNTRY_NAME_MAP = {
   "American Samoa": "American Samoa",
   "Angola": "Angola",
 };
+
+function normalizeCountryName(country) {
+  return COUNTRY_NAME_MAP[country] || country || "USA";
+}
 
 const FALLBACK_NAMES = {
   USA: {
