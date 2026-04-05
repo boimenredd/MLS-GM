@@ -312,28 +312,212 @@ function seedFreeAgents(state) {
 }
 
 function makeSchedule(state) {
-  const eastIds = state.teams.filter(t => t.conference === "East").map(t => t.id);
-  const westIds = state.teams.filter(t => t.conference === "West").map(t => t.id);
-  const matches = [];
+  const teams = state.teams;
+  const eastIds = teams.filter(t => t.conference === "East").map(t => t.id);
+  const westIds = teams.filter(t => t.conference === "West").map(t => t.id);
 
-  function addConferenceGames(ids) {
-    const n = ids.length;
-    for (let i = 0; i < n; i++) {
-      for (let delta = 1; delta <= 6; delta++) {
-        const j = (i + delta) % n;
-        if (i < j || (i + delta) >= n) {
-          matches.push([ids[i], ids[j]]);
-          matches.push([ids[j], ids[i]]);
+  const targetGames = 34;
+  const perTeamCount = Object.fromEntries(teams.map(t => [t.id, 0]));
+  const homeCount = Object.fromEntries(teams.map(t => [t.id, 0]));
+  const awayCount = Object.fromEntries(teams.map(t => [t.id, 0]));
+
+  const matches = [];
+  const pairSeen = new Set();
+
+  function matchKey(a, b, rev = false) {
+    return rev ? `${b}_${a}` : `${a}_${b}`;
+  }
+
+  function addMatch(homeTeamId, awayTeamId) {
+    if (homeTeamId === awayTeamId) return false;
+    if (perTeamCount[homeTeamId] >= targetGames || perTeamCount[awayTeamId] >= targetGames) return false;
+
+    const key = matchKey(homeTeamId, awayTeamId);
+    if (pairSeen.has(key)) return false;
+
+    const homeTeam = teams.find(t => t.id === homeTeamId);
+    const awayTeam = teams.find(t => t.id === awayTeamId);
+
+    matches.push({
+      id: uuid("m"),
+      type: "Regular Season",
+      week: null,
+      played: false,
+      homeTeamId,
+      awayTeamId,
+      homeConf: homeTeam.conference,
+      awayConf: awayTeam.conference,
+      result: null,
+    });
+
+    pairSeen.add(key);
+    perTeamCount[homeTeamId] += 1;
+    perTeamCount[awayTeamId] += 1;
+    homeCount[homeTeamId] += 1;
+    awayCount[awayTeamId] += 1;
+
+    return true;
+  }
+
+  function addHomeAndAwayRoundRobin(ids, repeats = 1) {
+    for (let r = 0; r < repeats; r++) {
+      for (let i = 0; i < ids.length; i++) {
+        for (let j = i + 1; j < ids.length; j++) {
+          addMatch(ids[i], ids[j]);
+          addMatch(ids[j], ids[i]);
         }
       }
     }
-    for (let i = 0; i < n; i++) {
-      const j = (i + 7) % n;
-      const home = i % 2 === 0 ? ids[i] : ids[j];
-      const away = i % 2 === 0 ? ids[j] : ids[i];
-      if (!matches.some(m => m[0] === home && m[1] === away)) matches.push([home, away]);
+  }
+
+  function addSingleConferenceExtras(ids, extrasPerTeam) {
+    const n = ids.length;
+    const targetExtra = Object.fromEntries(ids.map(id => [id, extrasPerTeam]));
+
+    let guard = 0;
+    while (Object.values(targetExtra).some(v => v > 0) && guard < 10000) {
+      guard++;
+
+      const sorted = ids
+        .filter(id => targetExtra[id] > 0 && perTeamCount[id] < targetGames)
+        .sort((a, b) => targetExtra[b] - targetExtra[a]);
+
+      if (sorted.length < 2) break;
+
+      const a = sorted[0];
+
+      let bestB = null;
+      let bestScore = -Infinity;
+
+      for (const b of sorted.slice(1)) {
+        if (a === b) continue;
+        if (perTeamCount[b] >= targetGames) continue;
+
+        const alreadyAB = pairSeen.has(matchKey(a, b));
+        const alreadyBA = pairSeen.has(matchKey(b, a));
+        const meetings = Number(alreadyAB) + Number(alreadyBA);
+        if (meetings >= 2) continue;
+
+        const aNeedsHome = homeCount[a] <= awayCount[a];
+        const bNeedsHome = homeCount[b] <= awayCount[b];
+
+        let score = 0;
+        score += targetExtra[a] + targetExtra[b];
+        score += aNeedsHome !== bNeedsHome ? 2 : 1;
+        score -= Math.abs((homeCount[a] - awayCount[a])) * 0.2;
+        score -= Math.abs((homeCount[b] - awayCount[b])) * 0.2;
+
+        if (score > bestScore) {
+          bestScore = score;
+          bestB = b;
+        }
+      }
+
+      if (!bestB) {
+        targetExtra[a] = 0;
+        continue;
+      }
+
+      const aNeedsHome = homeCount[a] <= awayCount[a];
+      const bNeedsHome = homeCount[bestB] <= awayCount[bestB];
+
+      let home = a;
+      let away = bestB;
+
+      if (bNeedsHome && !aNeedsHome) {
+        home = bestB;
+        away = a;
+      } else if (aNeedsHome === bNeedsHome) {
+        home = Math.random() < 0.5 ? a : bestB;
+        away = home === a ? bestB : a;
+      }
+
+      const added = addMatch(home, away);
+      if (added) {
+        targetExtra[a] -= 1;
+        targetExtra[bestB] -= 1;
+      } else {
+        targetExtra[a] = Math.max(0, targetExtra[a] - 1);
+      }
     }
   }
+
+  function addInterconferenceSingles(aIds, bIds) {
+    const allPairs = [];
+    for (const a of aIds) {
+      for (const b of bIds) {
+        allPairs.push([a, b]);
+      }
+    }
+
+    for (let i = allPairs.length - 1; i > 0; i--) {
+      const j = randInt(0, i);
+      [allPairs[i], allPairs[j]] = [allPairs[j], allPairs[i]];
+    }
+
+    for (const [a, b] of allPairs) {
+      if (perTeamCount[a] >= targetGames || perTeamCount[b] >= targetGames) continue;
+
+      const aNeedsHome = homeCount[a] <= awayCount[a];
+      const bNeedsHome = homeCount[b] <= awayCount[b];
+
+      let home = a;
+      let away = b;
+
+      if (bNeedsHome && !aNeedsHome) {
+        home = b;
+        away = a;
+      } else if (aNeedsHome === bNeedsHome) {
+        home = Math.random() < 0.5 ? a : b;
+        away = home === a ? b : a;
+      }
+
+      addMatch(home, away);
+    }
+  }
+
+  // 26 conference games: everyone plays home-and-away within conference
+  addHomeAndAwayRoundRobin(eastIds, 1);
+  addHomeAndAwayRoundRobin(westIds, 1);
+
+  // + 8 more conference games per team = 34 total
+  addSingleConferenceExtras(eastIds, 8);
+  addSingleConferenceExtras(westIds, 8);
+
+  // Failsafe: if any team somehow still isn't at 34, fill with interconference singles
+  addInterconferenceSingles(eastIds, westIds);
+
+  const incomplete = teams.filter(t => perTeamCount[t.id] !== targetGames);
+  if (incomplete.length) {
+    console.warn("Schedule incomplete for teams:", incomplete.map(t => ({
+      team: t.name,
+      games: perTeamCount[t.id],
+      home: homeCount[t.id],
+      away: awayCount[t.id],
+    })));
+  }
+
+  const weeks = Array.from({ length: 34 }, () => []);
+  const teamWeekUse = Object.fromEntries(teams.map(t => [t.id, new Set()]));
+
+  for (const match of matches) {
+    let placed = false;
+
+    for (let tries = 0; tries < 500 && !placed; tries++) {
+      const week = randInt(1, 34);
+      if (teamWeekUse[match.homeTeamId].has(week)) continue;
+      if (teamWeekUse[match.awayTeamId].has(week)) continue;
+
+      match.week = week;
+      weeks[week - 1].push(match);
+      teamWeekUse[match.homeTeamId].add(week);
+      teamWeekUse[match.awayTeamId].add(week);
+      placed = true;
+    }
+  }
+
+  state.schedule = weeks.flat().filter(Boolean).sort((a, b) => a.week - b.week);
+}
 
   addConferenceGames(eastIds);
   addConferenceGames(westIds);
