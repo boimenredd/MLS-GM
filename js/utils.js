@@ -43,33 +43,23 @@ export function weightedRandom(items) {
 }
 
 export function sortStandingsRows(a, b) {
-  const keys = [
-    "pointsDesc",
-    "winsDesc",
-    "gdDesc",
-    "gfDesc",
-    "disciplineAsc",
-    "awayGdDesc",
-    "awayGfDesc",
-    "homeGdDesc",
-    "homeGfDesc",
+  const checks = [
+    b.points - a.points,
+    b.wins - a.wins,
+    b.gd - a.gd,
+    b.gf - a.gf,
+    a.disciplinePoints - b.disciplinePoints,
+    b.awayGd - a.awayGd,
+    b.awayGf - a.awayGf,
+    b.homeGd - a.homeGd,
+    b.homeGf - a.homeGf,
+    a.randomTiebreak - b.randomTiebreak,
   ];
 
-  for (const key of keys) {
-    const diff = {
-      pointsDesc: b.points - a.points,
-      winsDesc: b.wins - a.wins,
-      gdDesc: b.gd - a.gd,
-      gfDesc: b.gf - a.gf,
-      disciplineAsc: a.disciplinePoints - b.disciplinePoints,
-      awayGdDesc: b.awayGd - a.awayGd,
-      awayGfDesc: b.awayGf - a.awayGf,
-      homeGdDesc: b.homeGd - a.homeGd,
-      homeGfDesc: b.homeGf - a.homeGf,
-    }[key];
+  for (const diff of checks) {
     if (diff !== 0) return diff;
   }
-  return a.randomTiebreak - b.randomTiebreak;
+  return 0;
 }
 
 export function downloadJSON(filename, data) {
