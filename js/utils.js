@@ -21,15 +21,15 @@ export function uuid(prefix = "id") {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`;
 }
 
+export function deepClone(obj) {
+  return structuredClone(obj);
+}
+
 export function formatMoney(n) {
   const abs = Math.abs(n);
   if (abs >= 1_000_000) return `${n < 0 ? "-" : ""}$${(abs / 1_000_000).toFixed(2)}M`;
   if (abs >= 1_000) return `${n < 0 ? "-" : ""}$${(abs / 1_000).toFixed(0)}K`;
   return `${n < 0 ? "-" : ""}$${abs.toFixed(0)}`;
-}
-
-export function deepClone(obj) {
-  return structuredClone(obj);
 }
 
 export function weightedRandom(items) {
@@ -40,26 +40,6 @@ export function weightedRandom(items) {
     if (roll <= 0) return item.value;
   }
   return items[items.length - 1].value;
-}
-
-export function sortStandingsRows(a, b) {
-  const checks = [
-    b.points - a.points,
-    b.wins - a.wins,
-    b.gd - a.gd,
-    b.gf - a.gf,
-    a.disciplinePoints - b.disciplinePoints,
-    b.awayGd - a.awayGd,
-    b.awayGf - a.awayGf,
-    b.homeGd - a.homeGd,
-    b.homeGf - a.homeGf,
-    a.randomTiebreak - b.randomTiebreak,
-  ];
-
-  for (const diff of checks) {
-    if (diff !== 0) return diff;
-  }
-  return 0;
 }
 
 export function downloadJSON(filename, data) {
@@ -94,5 +74,5 @@ export function toast(message, type = "") {
   div.className = `toast ${type}`.trim();
   div.textContent = message;
   wrap.appendChild(div);
-  setTimeout(() => div.remove(), 3200);
+  setTimeout(() => div.remove(), 3000);
 }
