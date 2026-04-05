@@ -1,4 +1,4 @@
-const DB_NAME = "mls_front_office_sim_db";
+const DB_NAME = "mls_gm_2026_db";
 const STORE = "saves";
 
 function openDb() {
