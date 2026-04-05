@@ -5,16 +5,11 @@ export const MLS_RULES = {
   playoffQualifiersPerConference: 9,
   salaryBudget: 6425000,
   maxBudgetCharge: 803125,
-  seniorMin: 113400,
-  reserveMin: 88025,
   youngDpBudgetU20: 150000,
   youngDpBudgetU23: 200000,
   gamAnnual: 3280000,
   tamAnnual: 2125000,
-  tamUpperSalary: 1803125,
-  internationalSlotsDefault: 8,
-  seniorRosterMax: 20,
-  rosterMax: 30,
+  intlSlotsDefault: 8,
 };
 
 export const CONFERENCES = {
@@ -62,32 +57,22 @@ export const RIVALRIES = [
   ["Columbus Crew", "FC Cincinnati"],
   ["Inter Miami CF", "Orlando City SC"],
   ["Toronto FC", "CF Montréal"],
-  ["San Jose Earthquakes", "LA Galaxy"],
-  ["Sporting Kansas City", "St. Louis CITY SC"],
 ];
-
-export const FORMATIONS = {
-  "4-3-3": ["GK", "LB", "CB", "CB", "RB", "CM", "CM", "CAM", "LW", "ST", "RW"],
-  "4-2-3-1": ["GK", "LB", "CB", "CB", "RB", "CDM", "CDM", "LW", "CAM", "RW", "ST"],
-  "4-4-2": ["GK", "LB", "CB", "CB", "RB", "LM", "CM", "CM", "RM", "ST", "ST"],
-  "3-4-3": ["GK", "CB", "CB", "CB", "LM", "CM", "CM", "RM", "LW", "ST", "RW"],
-};
 
 export const POSITIONS = ["GK", "CB", "FB", "CDM", "CM", "CAM", "Winger", "ST"];
 
 export const NATIONS = [
   "USA", "Canada", "Argentina", "Brazil", "Colombia", "Uruguay", "Mexico",
-  "Paraguay", "Chile", "Peru", "Venezuela", "Costa Rica", "Honduras",
-  "Panama", "Jamaica", "Germany", "Spain", "France", "England", "Norway",
-  "Sweden", "Denmark", "Netherlands", "Belgium", "Croatia", "Serbia",
-  "Poland", "Nigeria", "Ghana", "Ivory Coast", "Japan", "South Korea",
+  "Paraguay", "Chile", "Peru", "Venezuela", "Costa Rica", "Honduras", "Panama",
+  "Jamaica", "Germany", "Spain", "France", "England", "Netherlands", "Belgium",
+  "Croatia", "Serbia", "Nigeria", "Ghana", "Ivory Coast", "Japan", "South Korea"
 ];
 
 export const FIRST_NAMES = [
   "Alex","Jordan","Mateo","Diego","Luca","Leo","Noah","Ethan","Julian","Marco","Thiago",
   "Dylan","Gabriel","Daniel","Ben","Chris","Owen","David","Nathan","Tyler","Miguel",
   "Jose","Andres","Emilio","Sebastian","Luis","Carlos","Javier","Felix","Roman","Niko",
-  "Mason","Aiden","Logan","Isaac","Pablo","Victor","Bruno","Enzo","Rafael","Adrian",
+  "Mason","Aiden","Logan","Isaac","Pablo","Victor","Bruno","Enzo","Rafael","Adrian"
 ];
 
 export const LAST_NAMES = [
@@ -95,7 +80,7 @@ export const LAST_NAMES = [
   "Santos","Alvarez","Romero","Gomez","Herrera","Ortiz","Vega","Morales","Diaz",
   "Fernandez","Torres","Ramirez","Pereira","Costa","Mendes","Rossi","Moreira",
   "Ibrahim","Okafor","Mensah","Petrovic","Kovacic","Jansen","Andersson","Svensson",
-  "Kim","Tanaka","Yamamoto","Brown","White","Wright","Hall","Green","Bennett",
+  "Kim","Tanaka","Yamamoto","Brown","White","Wright","Hall","Green","Bennett"
 ];
 
 export const COLLEGES = [
@@ -103,9 +88,3 @@ export const COLLEGES = [
   "Duke","Akron","Syracuse","Georgetown","St. Louis","Notre Dame","Penn State",
   "SMU","Stanford","Clemson","Oregon State","New Hampshire","Kentucky"
 ];
-
-export const DISCIPLINE_POINTS = {
-  yellow: 3,
-  secondYellowRed: 7,
-  straightRed: 7,
-};
