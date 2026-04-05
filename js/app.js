@@ -65,6 +65,57 @@ function populateTeamSelect() {
     .join("");
 }
 
+function getPositionOrder(pos) {
+  const order = {
+    GK: 1,
+    CB: 2,
+    FB: 3,
+    CDM: 4,
+    CM: 5,
+    CAM: 6,
+    Winger: 7,
+    ST: 8,
+  };
+  return order[pos] || 99;
+}
+
+function sortRows(rows, sortConfig) {
+  const { key, dir } = sortConfig;
+  const mult = dir === "asc" ? 1 : -1;
+
+  return rows.slice().sort((a, b) => {
+    const av = a[key];
+    const bv = b[key];
+
+    if (typeof av === "number" && typeof bv === "number") {
+      return (av - bv) * mult;
+    }
+
+    return String(av).localeCompare(String(bv)) * mult;
+  });
+}
+
+function toggleSort(tableName, key) {
+  const current = tableSortState[tableName];
+  if (current.key === key) {
+    current.dir = current.dir === "asc" ? "desc" : "asc";
+  } else {
+    current.key = key;
+    current.dir = key === "name" || key === "position" ? "asc" : "desc";
+  }
+  renderPage();
+}
+
+function sortArrow(tableName, key) {
+  const current = tableSortState[tableName];
+  if (current.key !== key) return "";
+  return current.dir === "asc" ? " ▲" : " ▼";
+}
+
+function makeSortableTh(label, tableName, key, extraClass = "") {
+  return `<th class="${extraClass}" data-sort-table="${tableName}" data-sort-key="${key}" style="cursor:pointer">${label}${sortArrow(tableName, key)}</th>`;
+}
+
 function updateMeta() {
   if (!state) return;
   const team = getUserTeam(state);
@@ -88,6 +139,14 @@ function pageHead(title, sub) {
       </div>
     </div>
   `;
+}
+
+function bindSortableHeaders() {
+  $$("[data-sort-table][data-sort-key]").forEach(el => {
+    el.addEventListener("click", () => {
+      toggleSort(el.dataset.sortTable, el.dataset.sortKey);
+    });
+  });
 }
 
 function renderDashboard() {
@@ -218,70 +277,57 @@ function renderDashboard() {
 function renderRoster() {
   const team = getUserTeam(state);
   const players = getTeamPlayers(state, team.id);
-  const cap = getCapSummary(state, team.id);
+
+  const rows = players.map(p => ({
+    id: p.id,
+    name: p.name,
+    position: p.position,
+    positionOrder: getPositionOrder(p.position),
+    age: p.age,
+    overall: p.overall,
+    potential: p.potential,
+    contract: `${formatMoney(p.contract.salary)} thru ${state.season.year + p.contract.yearsLeft}`,
+    yearsLeft: p.contract.yearsLeft,
+    morale: p.morale,
+    role: p.rosterRole,
+    tag: p.designation || (p.homegrown ? "HG" : p.domestic ? "DOM" : "INTL"),
+    acquired: p.homegrown ? "Academy" : "Squad",
+  }));
+
+  const sorted = sortRows(rows, tableSortState.roster);
 
   return `
-    ${pageHead("Roster Management", "MLS senior / supplemental / reserve structure")}
-    <div class="cards">
-      <div class="card"><div class="card-label">Senior</div><div class="card-value">${cap.seniorCount}</div><div class="card-note">Max 20</div></div>
-      <div class="card"><div class="card-label">Supplemental</div><div class="card-value">${cap.supplementalCount}</div><div class="card-note">Cap exempt</div></div>
-      <div class="card"><div class="card-label">Reserve</div><div class="card-value">${cap.reserveCount}</div><div class="card-note">Developmental</div></div>
-      <div class="card"><div class="card-label">Salary Budget</div><div class="card-value">${formatMoney(cap.budgetUsed)}</div><div class="card-note">${cap.budgetRoom >= 0 ? "Room" : "Over"} ${formatMoney(Math.abs(cap.budgetRoom))}</div></div>
-    </div>
-
+    ${pageHead("Roster", "Sortable squad table with separated positions")}
     <div class="panel">
-      <div class="panel-head"><h3>Squad</h3><span>${players.length} players</span></div>
-      <table>
+      <div class="panel-head"><h3>First Team Squad</h3><span>${players.length} players</span></div>
+      <table class="roster-table">
         <thead>
           <tr>
-            <th>Name</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th class="num">POT</th>
-            <th>Role</th><th>Tag</th><th class="num">Salary</th><th class="num">Budget Charge</th><th class="num">Morale</th>
+            ${makeSortableTh("Name", "roster", "name")}
+            ${makeSortableTh("Pos", "roster", "position")}
+            ${makeSortableTh("Age", "roster", "age", "num")}
+            ${makeSortableTh("Ovr", "roster", "overall", "num")}
+            ${makeSortableTh("Pot", "roster", "potential", "num")}
+            ${makeSortableTh("Contract", "roster", "contract")}
+            ${makeSortableTh("YWT", "roster", "yearsLeft", "num")}
+            ${makeSortableTh("Mood", "roster", "morale", "num")}
+            ${makeSortableTh("Role", "roster", "role")}
+            ${makeSortableTh("Acquired", "roster", "acquired")}
           </tr>
         </thead>
         <tbody>
-          ${players.map(p => `
+          ${sorted.map(p => `
             <tr>
-              <td>
-                ${escapeHtml(p.name)}
-                ${p.injuredUntil ? ` <span class="badge red">${escapeHtml(p.injuryMeta?.type || "Inj")}</span>` : ""}
-              </td>
-              <td>${escapeHtml(p.position)}</td>
+              <td><strong>${escapeHtml(p.name)}</strong></td>
+              <td><span class="pos-badge pos-${p.position}">${escapeHtml(p.position)}</span></td>
               <td class="num">${p.age}</td>
               <td class="num">${p.overall}</td>
               <td class="num">${p.potential}</td>
-              <td>${escapeHtml(p.rosterRole)}</td>
-              <td>${
-                p.designation
-                  ? `<span class="badge blue">${escapeHtml(p.designation)}</span>`
-                  : p.homegrown
-                    ? `<span class="badge green">HG</span>`
-                    : p.domestic
-                      ? "Domestic"
-                      : `<span class="badge yellow">INTL</span>`
-              }</td>
-              <td class="num">${formatMoney(p.contract.salary)}</td>
-              <td class="num">${formatMoney(p.rosterRole === "Senior" ? Math.min(p.contract.salary, 803125) : 0)}</td>
+              <td>${escapeHtml(p.contract)}</td>
+              <td class="num">${p.yearsLeft}</td>
               <td class="num">${p.morale}</td>
-            </tr>
-          `).join("")}
-        </tbody>
-      </table>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head"><h3>Free Agency</h3><span>Out-of-contract pool</span></div>
-      <table>
-        <thead><tr><th>Name</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th class="num">Salary</th><th>Nation</th><th></th></tr></thead>
-        <tbody>
-          ${state.freeAgents.slice(0, 24).map(p => `
-            <tr>
-              <td>${escapeHtml(p.name)}</td>
-              <td>${escapeHtml(p.position)}</td>
-              <td class="num">${p.age}</td>
-              <td class="num">${p.overall}</td>
-              <td class="num">${formatMoney(p.contract.salary)}</td>
-              <td>${escapeHtml(p.nationality)}</td>
-              <td class="num"><button class="small-btn sign-fa-btn" data-id="${p.id}">Sign</button></td>
+              <td>${escapeHtml(p.role)} <span class="badge">${escapeHtml(p.tag)}</span></td>
+              <td>${escapeHtml(p.acquired)}</td>
             </tr>
           `).join("")}
         </tbody>
@@ -521,6 +567,7 @@ async function renderPage() {
 
   $("#pageRoot").innerHTML = html;
   bindPageEvents();
+  bindSortableHeaders();
 }
 
 function bindPageEvents() {
