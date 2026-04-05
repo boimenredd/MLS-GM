@@ -662,5 +662,7 @@ function attachGlobalEvents() {
   });
 }
 
+import { renderTabs, renderPage } from './ui.js';
+
 populateBootTeams();
 attachGlobalEvents();
