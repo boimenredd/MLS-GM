@@ -234,7 +234,10 @@ function renderRoster() {
         <tbody>
           ${players.map(p => `
             <tr>
-              <td>${escapeHtml(p.name)}${p.injuredUntil ? ` <span class="badge red">Inj</span>` : ""}</td>
+              <td>
+                ${escapeHtml(p.name)}
+                ${p.injuredUntil ? ` <span class="badge red">${escapeHtml(p.injuryMeta?.type || "Inj")}</span>` : ""}
+              </td>
               <td>${escapeHtml(p.position)}</td>
               <td class="num">${p.age}</td>
               <td class="num">${p.overall}</td>
@@ -690,8 +693,21 @@ function bindTopLevel() {
   });
 }
 
-function boot() {
+async function boot() {
   populateTeamSelect();
+  await loadExternalData();
+
+  const status = externalDataStatus();
+  if (status.namesLoaded && status.injuriesLoaded) {
+    toast("Loaded names.json and injuries.ods.", "success");
+  } else if (status.namesLoaded && !status.injuriesLoaded) {
+    toast("Loaded names.json. injuries.ods fell back to built-in injury table.", "warn");
+  } else if (!status.namesLoaded && status.injuriesLoaded) {
+    toast("Loaded injuries.ods. Name generation fell back to built-in names.", "warn");
+  } else {
+    toast("External assets not found. Using built-in names and injuries.", "warn");
+  }
+
   bindTopLevel();
   bindNav();
   setAppVisible(false);
