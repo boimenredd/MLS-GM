@@ -695,17 +695,11 @@ function bindTopLevel() {
 
 async function boot() {
   populateTeamSelect();
-  await loadExternalData();
 
-  const status = externalDataStatus();
-  if (status.namesLoaded && status.injuriesLoaded) {
-    toast("Loaded names.json and injuries.ods.", "success");
-  } else if (status.namesLoaded && !status.injuriesLoaded) {
-    toast("Loaded names.json. injuries.ods fell back to built-in injury table.", "warn");
-  } else if (!status.namesLoaded && status.injuriesLoaded) {
-    toast("Loaded injuries.ods. Name generation fell back to built-in names.", "warn");
-  } else {
-    toast("External assets not found. Using built-in names and injuries.", "warn");
+  try {
+    await loadExternalData();
+  } catch (err) {
+    console.error("External data failed to load:", err);
   }
 
   bindTopLevel();
