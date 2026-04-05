@@ -4,8 +4,6 @@ import {
   RIVALRIES,
   POSITIONS,
   NATIONS,
-  FIRST_NAMES,
-  LAST_NAMES,
   COLLEGES,
 } from "./data.js";
 
@@ -17,6 +15,11 @@ import {
   uuid,
   weightedRandom,
 } from "./utils.js";
+
+import {
+  generateNameForCountry,
+  rollInjury,
+} from "./assets.js";
 
 function clubCountry(name) {
   return ["Toronto FC", "CF Montréal", "Vancouver Whitecaps FC"].includes(name) ? "Canada" : "USA";
