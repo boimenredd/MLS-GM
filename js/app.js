@@ -21,6 +21,13 @@ import { CONFERENCES } from "./data.js";
 let state = null;
 let currentPage = "dashboard";
 
+const tableSortState = {
+  roster: { key: "positionOrder", dir: "asc" },
+  standingsEast: { key: "points", dir: "desc" },
+  standingsWest: { key: "points", dir: "desc" },
+  stats: { key: "goals", dir: "desc" },
+};
+
 function byTeamId(id) {
   return state.teams.find(t => t.id === id);
 }
