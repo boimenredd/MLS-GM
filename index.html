@@ -3,104 +3,157 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MLS Front Office Simulator 2026</title>
+  <title>MLS GM 2026</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="brand-title">MLS FRONT OFFICE SIM</div>
-      <div class="brand-sub">Browser-only MLS 2026 management sim</div>
+  <div id="homeScreen" class="home-screen">
+    <div class="hero-bg"></div>
+    <div class="home-card">
+      <div class="eyebrow">MLS FRONT OFFICE SIM</div>
+      <h1>Build your club.<br />Run your league.</h1>
+      <p class="home-sub">
+        Browser-based MLS management sim with roster rules, academy development,
+        SuperDraft, playoffs, free agency, and persistent saves.
+      </p>
+
+      <div class="home-actions">
+        <button id="showCreateLeagueBtn" class="primary-btn big-btn">Create League</button>
+        <button id="showLoadLeagueBtn" class="ghost-btn big-btn">Load Save</button>
+      </div>
+
+      <div class="home-features">
+        <div class="feature-pill">30 MLS clubs</div>
+        <div class="feature-pill">Academy & callups</div>
+        <div class="feature-pill">SuperDraft</div>
+        <div class="feature-pill">IndexedDB saves</div>
+      </div>
     </div>
-
-    <div class="topbar-center">
-      <div class="meta-chip"><span>Club</span><strong id="clubName">—</strong></div>
-      <div class="meta-chip"><span>Season</span><strong id="seasonLabel">2026</strong></div>
-      <div class="meta-chip"><span>Phase</span><strong id="phaseLabel">Regular Season</strong></div>
-      <div class="meta-chip"><span>Week</span><strong id="weekLabel">1</strong></div>
-    </div>
-
-    <div class="topbar-actions">
-      <button id="themeBtn" class="ghost-btn" type="button">☾</button>
-      <button id="saveBtn" class="ghost-btn" type="button">Save</button>
-    </div>
-  </header>
-
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="sidebar-title">Navigation</div>
-      <button class="nav-btn active" data-page="dashboard" type="button">Dashboard</button>
-      <button class="nav-btn" data-page="roster" type="button">Roster</button>
-      <button class="nav-btn" data-page="lineup" type="button">Lineup</button>
-      <button class="nav-btn" data-page="standings" type="button">Standings</button>
-      <button class="nav-btn" data-page="schedule" type="button">Schedule</button>
-      <button class="nav-btn" data-page="stats" type="button">Player Stats</button>
-      <button class="nav-btn" data-page="leaders" type="button">League Leaders</button>
-      <button class="nav-btn" data-page="transactions" type="button">Transactions</button>
-      <button class="nav-btn" data-page="draft" type="button">SuperDraft</button>
-      <button class="nav-btn" data-page="playoffs" type="button">Playoffs</button>
-      <button class="nav-btn" data-page="saves" type="button">Saves</button>
-
-      <div class="sidebar-title spaced">Simulation</div>
-      <button id="simOneBtn" class="action-btn" type="button">Sim Next Week</button>
-      <button id="simSeasonBtn" class="action-btn" type="button">Sim To End Of Season</button>
-      <button id="simYearBtn" class="action-btn" type="button">Sim Offseason + Next Year</button>
-    </aside>
-
-    <main class="main">
-      <section id="page-dashboard" class="page active"></section>
-      <section id="page-roster" class="page"></section>
-      <section id="page-lineup" class="page"></section>
-      <section id="page-standings" class="page"></section>
-      <section id="page-schedule" class="page"></section>
-      <section id="page-stats" class="page"></section>
-      <section id="page-leaders" class="page"></section>
-      <section id="page-transactions" class="page"></section>
-      <section id="page-draft" class="page"></section>
-      <section id="page-playoffs" class="page"></section>
-      <section id="page-saves" class="page"></section>
-    </main>
   </div>
 
-  <div id="bootOverlay" class="overlay open">
-    <div class="modal boot-modal">
-      <h1>Start New Save</h1>
-      <p>Create a new MLS league or load an existing IndexedDB slot.</p>
+  <div id="setupOverlay" class="overlay">
+    <div class="modal setup-modal">
+      <div class="modal-head">
+        <h2>Create New League</h2>
+        <button id="closeSetupBtn" class="icon-btn" type="button">×</button>
+      </div>
 
-      <div class="boot-grid">
-        <div>
-          <label for="userTeamSelect">User Club</label>
-          <select id="userTeamSelect"></select>
-        </div>
-        <div>
+      <div class="setup-grid">
+        <div class="panel-lite">
           <label for="saveSlotInput">Save Slot</label>
-          <input id="saveSlotInput" type="text" value="default" />
-        </div>
-      </div>
+          <input id="saveSlotInput" type="text" value="slot1" />
 
-      <div class="boot-actions">
-        <button id="newLeagueBtn" class="primary-btn" type="button">Create New League</button>
-        <button id="loadLeagueBtn" class="ghost-btn" type="button">Load Existing Slot</button>
+          <label for="userTeamSelect">Your Club</label>
+          <select id="userTeamSelect"></select>
+
+          <label for="salaryCapInput">Salary Cap</label>
+          <input id="salaryCapInput" type="number" value="6425000" />
+
+          <label for="gamInput">Starting GAM</label>
+          <input id="gamInput" type="number" value="3280000" />
+
+          <label for="tamInput">Starting TAM</label>
+          <input id="tamInput" type="number" value="2125000" />
+
+          <label for="academyInput">Academy Prospects Per Team</label>
+          <input id="academyInput" type="number" value="8" min="4" max="14" />
+        </div>
+
+        <div class="panel-lite">
+          <div class="setup-preview-title">League Setup</div>
+          <ul class="setup-list">
+            <li>30 clubs</li>
+            <li>34-match regular season</li>
+            <li>Top 9 per conference qualify</li>
+            <li>Play-in + best-of-3 Round One</li>
+            <li>Free agency + SuperDraft</li>
+            <li>Youth academy + senior callups</li>
+          </ul>
+
+          <div class="setup-actions">
+            <button id="createLeagueBtn" class="primary-btn">Start League</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <div id="matchOverlay" class="overlay">
-    <div class="modal match-modal">
-      <div class="match-head">
-        <h2 id="matchTitle">Latest Match</h2>
-        <div id="matchMinute">FT</div>
+  <div id="loadOverlay" class="overlay">
+    <div class="modal load-modal">
+      <div class="modal-head">
+        <h2>Load Save</h2>
+        <button id="closeLoadBtn" class="icon-btn" type="button">×</button>
       </div>
-      <div id="matchScore" class="scoreline">0 - 0</div>
-      <div id="matchCommentary" class="commentary"></div>
-      <div class="match-foot">
-        <button id="closeMatchBtn" class="ghost-btn" type="button">Close</button>
+
+      <div id="saveSlotsList" class="save-slots-list"></div>
+    </div>
+  </div>
+
+  <div id="appShell" class="app-shell hidden">
+    <header class="topbar">
+      <div class="brand-block">
+        <div class="brand-title">MLS GM 2026</div>
+        <div class="brand-sub">Front office simulator</div>
       </div>
+
+      <div class="top-meta">
+        <div class="meta-box">
+          <span>Club</span>
+          <strong id="metaClub">—</strong>
+        </div>
+        <div class="meta-box">
+          <span>Season</span>
+          <strong id="metaSeason">—</strong>
+        </div>
+        <div class="meta-box">
+          <span>Phase</span>
+          <strong id="metaPhase">—</strong>
+        </div>
+        <div class="meta-box">
+          <span>Week</span>
+          <strong id="metaWeek">—</strong>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button id="saveBtn" class="ghost-btn">Save</button>
+        <button id="exportBtn" class="ghost-btn">Export</button>
+        <label class="ghost-btn file-label">
+          Import
+          <input id="importInput" type="file" accept="application/json" hidden />
+        </label>
+        <button id="backHomeBtn" class="ghost-btn">Home</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="side-section-title">Navigation</div>
+        <button class="nav-btn active" data-page="dashboard">Dashboard</button>
+        <button class="nav-btn" data-page="roster">Roster</button>
+        <button class="nav-btn" data-page="academy">Youth Academy</button>
+        <button class="nav-btn" data-page="standings">Standings</button>
+        <button class="nav-btn" data-page="schedule">Schedule</button>
+        <button class="nav-btn" data-page="stats">Player Stats</button>
+        <button class="nav-btn" data-page="transactions">Transactions</button>
+        <button class="nav-btn" data-page="draft">SuperDraft</button>
+        <button class="nav-btn" data-page="playoffs">Playoffs</button>
+        <button class="nav-btn" data-page="saves">Saves</button>
+
+        <div class="side-section-title spaced">Simulation</div>
+        <button id="simOneBtn" class="action-btn">Sim Next Match</button>
+        <button id="simWeekBtn" class="action-btn">Sim 1 Week</button>
+        <button id="simSeasonBtn" class="action-btn">Sim To Season End</button>
+        <button id="simYearBtn" class="action-btn">Sim Offseason + Next Year</button>
+      </aside>
+
+      <main id="pageRoot" class="page-root"></main>
     </div>
   </div>
 
   <div id="toastWrap" class="toast-wrap"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
