@@ -490,3 +490,29 @@ input, select {
   .two-col, .setup-grid, .grid-2, .grid-3 { grid-template-columns: 1fr; }
   .topbar { grid-template-columns: 1fr; }
 }
+
+.roster-table th,
+.roster-table td {
+  white-space: nowrap;
+}
+
+.pos-badge {
+  display: inline-block;
+  min-width: 56px;
+  text-align: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-family: var(--mono);
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.05);
+}
+
+.pos-GK { color: #f4c44d; }
+.pos-CB { color: #7dd3fc; }
+.pos-FB { color: #38bdf8; }
+.pos-CDM { color: #a78bfa; }
+.pos-CM { color: #c084fc; }
+.pos-CAM { color: #f472b6; }
+.pos-Winger { color: #34d399; }
+.pos-ST { color: #fb7185; }
