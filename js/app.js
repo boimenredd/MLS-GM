@@ -1,5 +1,6 @@
 import { $, $$, formatMoney, downloadJSON, readJSONFile, toast } from "./utils.js";
 import { saveSlot, loadSlot, listSlots, deleteSlot } from "./db.js";
+import { loadExternalData, externalDataStatus } from "./assets.js";
 import {
   createNewState,
   getUserTeam,
@@ -15,7 +16,6 @@ import {
   advanceOneWeek,
   simulateToSeasonEnd,
 } from "./sim.js";
-
 import { CONFERENCES } from "./data.js";
 
 let state = null;
