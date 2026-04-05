@@ -123,7 +123,7 @@ function makePlayer(club, idx, forcedPos = null) {
 
   return {
     id: uuid("p"),
-    name: randomName(),
+    name: generateNameForCountry(nationality),
     age,
     nationality,
     domestic,
@@ -141,6 +141,7 @@ function makePlayer(club, idx, forcedPos = null) {
     morale: clamp(65 + randInt(-12, 12), 20, 100),
     injuryProne: Math.random() < 0.08,
     injuredUntil: null,
+    injuryMeta: null,
     attributes,
     overall: ovr,
     potential,
@@ -162,12 +163,13 @@ function makeAcademyPlayer(team) {
   const attributes = makeAttributes(position, quality, age);
   const ovr = overall({ attributes });
   const potential = clamp(ovr + randInt(10, 24), ovr + 6, 94);
+  const nationality = team.country === "Canada" ? pick(["Canada", "USA"]) : "USA";
 
   return {
     id: uuid("a"),
-    name: randomName(),
+    name: generateNameForCountry(nationality),
     age,
-    nationality: team.country === "Canada" ? pick(["Canada", "USA"]) : "USA",
+    nationality,
     domestic: true,
     preferredFoot: Math.random() < 0.75 ? "Right" : "Left",
     position,
@@ -588,17 +590,22 @@ export function simulateMatch(state, match, opts = {}) {
 }
 
 function maybeInjurePlayers(state) {
-  const activePlayers = state.players.filter(p => p.clubId && (!p.injuredUntil || p.injuredUntil < state.calendar.absoluteDay));
+  const activePlayers = state.players.filter(
+    p => p.clubId && (!p.injuredUntil || p.injuredUntil < state.calendar.absoluteDay)
+  );
+
   for (const player of activePlayers) {
     const risk = player.injuryProne ? 0.018 : 0.008;
     if (Math.random() < risk) {
-      const duration = weightedRandom([
-        { value: randInt(7, 18), weight: 70 },
-        { value: randInt(21, 56), weight: 24 },
-        { value: randInt(90, 240), weight: 6 },
-      ]);
-      player.injuredUntil = state.calendar.absoluteDay + duration;
-      addTransaction(state, "Injury", `${player.name} suffered an injury (${duration} days).`);
+      const injury = rollInjury(player.injuryProne);
+      player.injuredUntil = state.calendar.absoluteDay + injury.days;
+      player.injuryMeta = injury;
+
+      addTransaction(
+        state,
+        "Injury",
+        `${player.name} suffered ${injury.type} (${injury.severity}, ${injury.days} days).`
+      );
     }
   }
 }
