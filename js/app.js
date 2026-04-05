@@ -21,6 +21,21 @@ import { CONFERENCES } from "./data.js";
 let state = null;
 let currentPage = "dashboard";
 
+const SIM_SPEEDS = {
+  slow: 1200,
+  normal: 600,
+  fast: 220,
+  turbo: 80,
+};
+
+let simSpeedKey = "normal";
+let simSpeed = SIM_SPEEDS.normal;
+let simPaused = false;
+let simSkipped = false;
+let simInProgress = false;
+let liveSimMatch = null;
+let liveSimResolve = null;
+
 const tableSortState = {
   roster: { key: "positionOrder", dir: "asc" },
   standingsEast: { key: "points", dir: "desc" },
@@ -95,6 +110,303 @@ function sortRows(rows, sortConfig) {
   });
 }
 
+function ensureLiveSimOverlay() {
+  if (document.getElementById("match-sim-overlay")) return;
+
+  const div = document.createElement("div");
+  div.id = "match-sim-overlay";
+  div.innerHTML = `
+    <div id="match-sim-box" class="panel" style="max-width:1100px;width:min(1100px,96vw);margin:30px auto;">
+      <div class="panel-head">
+        <h3 id="msim-title">Live Match</h3>
+        <span id="msim-weather">Live Sim</span>
+      </div>
+
+      <div style="text-align:center;margin-bottom:12px;">
+        <div id="sim-minute" class="page-sub">Kickoff</div>
+        <div id="sim-score" style="font-size:42px;font-weight:900;">0 – 0</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:220px 1fr 220px;gap:14px;">
+        <div>
+          <div class="panel-head"><h3>Live Stats</h3><span>Updating</span></div>
+          <div id="msim-live-stats"></div>
+          <div class="panel-head" style="margin-top:12px;"><h3>Live Ratings</h3><span>Top XI</span></div>
+          <div id="msim-live-ratings"></div>
+        </div>
+
+        <div>
+          <div class="panel-head"><h3>Commentary</h3><span>Minute by minute</span></div>
+          <div id="sim-events" style="max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--bg3);"></div>
+        </div>
+
+        <div>
+          <div class="panel-head"><h3 id="msim-home-lineup-title">HOME XI</h3><span>Lineup</span></div>
+          <div id="msim-home-lineup" style="margin-bottom:12px;"></div>
+          <div class="panel-head"><h3 id="msim-away-lineup-title">AWAY XI</h3><span>Lineup</span></div>
+          <div id="msim-away-lineup"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:14px;">
+        <button class="small-btn sim-speed-opt active" data-speed="slow" type="button">🐢 Slow</button>
+        <button class="small-btn sim-speed-opt" data-speed="normal" type="button">▶ Normal</button>
+        <button class="small-btn sim-speed-opt" data-speed="fast" type="button">⚡ Fast</button>
+        <button class="small-btn sim-speed-opt" data-speed="turbo" type="button">🚀 Turbo</button>
+        <button id="sim-pause-btn" class="small-btn" type="button">⏸ Pause</button>
+        <button id="sim-skip-btn" class="small-btn" type="button">⏭ Skip</button>
+        <button id="sim-close-btn" class="small-btn" type="button">Close</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(div);
+
+  div.querySelectorAll(".sim-speed-opt").forEach(btn => {
+    btn.addEventListener("click", () => setSimSpeed(btn.dataset.speed));
+  });
+
+  document.getElementById("sim-pause-btn").addEventListener("click", toggleSimPause);
+  document.getElementById("sim-skip-btn").addEventListener("click", () => {
+    simSkipped = true;
+    simPaused = false;
+  });
+  document.getElementById("sim-close-btn").addEventListener("click", () => {
+    if (!simInProgress) {
+      div.classList.remove("open");
+    }
+  });
+}
+
+function addSimEvent(minute, html, style = "") {
+  const wrap = document.getElementById("sim-events");
+  if (!wrap) return;
+
+  const row = document.createElement("div");
+  row.className = "ev";
+  row.style.cssText = `padding:6px 0;border-bottom:1px solid var(--line);${style}`;
+  row.innerHTML = `<span style="display:inline-block;width:34px;font-family:var(--mono);color:var(--accent);">${minute}'</span> ${html}`;
+  wrap.prepend(row);
+}
+
+function renderMiniLineups(match) {
+  const homeTeam = byTeamId(match.homeTeamId);
+  const awayTeam = byTeamId(match.awayTeamId);
+
+  const homeXI = getTeamPlayers(state, homeTeam.id).slice(0, 11);
+  const awayXI = getTeamPlayers(state, awayTeam.id).slice(0, 11);
+
+  document.getElementById("msim-home-lineup-title").textContent = `${homeTeam.shortName || homeTeam.name} XI`;
+  document.getElementById("msim-away-lineup-title").textContent = `${awayTeam.shortName || awayTeam.name} XI`;
+
+  document.getElementById("msim-home-lineup").innerHTML = homeXI.map(p => `
+    <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line);font-size:11px;">
+      <span>${escapeHtml(p.name)}</span><span>${p.overall}</span>
+    </div>
+  `).join("");
+
+  document.getElementById("msim-away-lineup").innerHTML = awayXI.map(p => `
+    <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line);font-size:11px;">
+      <span>${escapeHtml(p.name)}</span><span>${p.overall}</span>
+    </div>
+  `).join("");
+}
+
+function renderLiveStatBars(stats) {
+  const rows = [
+    ["Possession", `${stats.homePoss}%`, `${stats.awayPoss}%`],
+    ["Shots", stats.homeShots, stats.awayShots],
+    ["On Target", stats.homeSot, stats.awaySot],
+    ["xG", stats.homeXg.toFixed(2), stats.awayXg.toFixed(2)],
+    ["Yellows", stats.homeYellows, stats.awayYellows],
+    ["Reds", stats.homeReds, stats.awayReds],
+  ];
+
+  document.getElementById("msim-live-stats").innerHTML = rows.map(([label, left, right]) => `
+    <div style="display:grid;grid-template-columns:42px 1fr 42px;gap:8px;align-items:center;margin-bottom:8px;font-size:11px;">
+      <span style="text-align:center;">${left}</span>
+      <div>
+        <div style="text-align:center;font-size:10px;color:var(--muted);margin-bottom:2px;">${label}</div>
+        <div style="height:6px;background:var(--bg3);border-radius:6px;overflow:hidden;display:flex;">
+          <div style="width:50%;background:var(--accent);"></div>
+          <div style="width:50%;background:#f97316;"></div>
+        </div>
+      </div>
+      <span style="text-align:center;">${right}</span>
+    </div>
+  `).join("");
+}
+
+function renderLiveRatingsPanel(match) {
+  const homeXI = getTeamPlayers(state, match.homeTeamId).slice(0, 6);
+  const awayXI = getTeamPlayers(state, match.awayTeamId).slice(0, 6);
+
+  const merged = [...homeXI.map(p => ({ ...p, side: "H" })), ...awayXI.map(p => ({ ...p, side: "A" }))]
+    .sort((a, b) => b.overall - a.overall)
+    .slice(0, 8);
+
+  document.getElementById("msim-live-ratings").innerHTML = merged.map(p => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--line);font-size:11px;">
+      <span>${p.side} · ${escapeHtml(p.name)}</span>
+      <span style="font-family:var(--mono);font-weight:700;">${(6 + (p.overall - 60) / 10).toFixed(1)}</span>
+    </div>
+  `).join("");
+}
+
+async function showGoalReplay(scorerName, assistName, minute) {
+  addSimEvent(
+    minute,
+    `🎥 <b>Replay:</b> ${escapeHtml(scorerName)}${assistName ? ` <span style="color:var(--muted)">(assist: ${escapeHtml(assistName)})</span>` : ""}`,
+    "color:var(--green);font-weight:600;"
+  );
+  await sleep(Math.min(simSpeed * 1.4, 900));
+}
+
+async function showVARReview(minute) {
+  addSimEvent(minute, `📺 <b>VAR CHECK</b> — Reviewing the incident.`, "color:var(--yellow);font-weight:700;");
+  await sleep(900);
+
+  const confirmed = Math.random() > 0.45;
+  addSimEvent(
+    minute,
+    confirmed ? "✅ Goal confirmed by VAR." : "❌ Goal disallowed after VAR review.",
+    `color:${confirmed ? "var(--green)" : "var(--red)"};font-weight:700;`
+  );
+
+  return confirmed;
+}
+
+async function playLiveMatch(match) {
+  ensureLiveSimOverlay();
+
+  const overlay = document.getElementById("match-sim-overlay");
+  overlay.classList.add("open");
+
+  simInProgress = true;
+  simPaused = false;
+  simSkipped = false;
+  setSimSpeed("normal");
+
+  const homeTeam = byTeamId(match.homeTeamId);
+  const awayTeam = byTeamId(match.awayTeamId);
+
+  document.getElementById("msim-title").textContent = `${homeTeam.name} vs ${awayTeam.name}`;
+  document.getElementById("sim-minute").textContent = "Kickoff";
+  document.getElementById("sim-score").textContent = "0 – 0";
+  document.getElementById("sim-events").innerHTML = "";
+
+  renderMiniLineups(match);
+
+  const result = match.result || {
+    homeGoals: 0,
+    awayGoals: 0,
+    homeXg: 0,
+    awayXg: 0,
+    homeShots: 0,
+    awayShots: 0,
+    homeSot: 0,
+    awaySot: 0,
+    homePoss: 50,
+    awayPoss: 50,
+    homeYellows: 0,
+    awayYellows: 0,
+    homeReds: 0,
+    awayReds: 0,
+    events: [],
+  };
+
+  renderLiveStatBars(result);
+  renderLiveRatingsPanel(match);
+
+  let hg = 0;
+  let ag = 0;
+  let ei = 0;
+  const sortedEvents = [...(result.events || [])].sort((a, b) => a.minute - b.minute);
+
+  addSimEvent(0, `<b>Kickoff!</b> ${escapeHtml(homeTeam.name)} vs ${escapeHtml(awayTeam.name)}`);
+
+  for (let minute = 1; minute <= 90; minute++) {
+    while (simPaused) {
+      await sleep(100);
+    }
+
+    if (simSkipped) break;
+
+    document.getElementById("sim-minute").textContent = `${minute}'`;
+
+    if (Math.random() < 0.18) {
+      const commentaryPool = [
+        "Patient spell of possession in midfield.",
+        "The tempo drops as both teams reset.",
+        "Promising buildup down the flank.",
+        "A dangerous ball flashes across the box.",
+        "The crowd reacts to a half-chance.",
+      ];
+      addSimEvent(minute, commentaryPool[Math.floor(Math.random() * commentaryPool.length)]);
+    }
+
+    while (ei < sortedEvents.length && sortedEvents[ei].minute <= minute) {
+      const ev = sortedEvents[ei];
+      const scorer = ev.scorerId ? byPlayerId(ev.scorerId) : null;
+      const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
+      const pName = scorer?.name || "Unknown";
+
+      if (ev.side === "home") hg++;
+      else ag++;
+
+      document.getElementById("sim-score").textContent = `${hg} – ${ag}`;
+
+      const maybeVAR = Math.random() < 0.10;
+      if (maybeVAR) {
+        simPaused = true;
+        await sleep(0);
+        await sleep(16);
+        const confirmed = await showVARReview(minute);
+        simPaused = false;
+
+        if (!confirmed) {
+          if (ev.side === "home") hg--;
+          else ag--;
+          document.getElementById("sim-score").textContent = `${hg} – ${ag}`;
+          ei++;
+          continue;
+        }
+      }
+
+      addSimEvent(
+        minute,
+        `⚽ <b>GOAL!</b> ${escapeHtml(pName)}${assist ? ` <span style="color:var(--muted)">(assist: ${escapeHtml(assist.name)})</span>` : ""}`,
+        "background:rgba(34,197,94,0.08);border-left:3px solid var(--green);padding-left:6px;border-radius:3px;"
+      );
+
+      document.getElementById("sim-score").style.animation = "goalPulse .5s ease";
+      setTimeout(() => {
+        const el = document.getElementById("sim-score");
+        if (el) el.style.animation = "";
+      }, 500);
+
+      if (!simSkipped) {
+        simPaused = true;
+        await sleep(0);
+        await sleep(0);
+        await showGoalReplay(pName, assist?.name || null, minute);
+        simPaused = false;
+      }
+
+      ei++;
+    }
+
+    renderLiveRatingsPanel(match);
+    await sleep(simSpeed);
+  }
+
+  document.getElementById("sim-minute").textContent = "Full Time";
+  addSimEvent(90, `<b>Full Time.</b> ${escapeHtml(homeTeam.name)} ${hg}–${ag} ${escapeHtml(awayTeam.name)}`, "color:var(--accent);font-weight:700;");
+
+  simInProgress = false;
+  await sleep(400);
+}
+
 function toggleSort(tableName, key) {
   const current = tableSortState[tableName];
   if (current.key === key) {
@@ -150,6 +462,9 @@ function bindSortableHeaders() {
 }
 
 function renderDashboard() {
+  <div class="flex" style="margin-bottom:12px;">
+  <button id="playMyMatchBtn" class="primary-btn" type="button">▶ Play My Match</button>
+  </div>
   const team = getUserTeam(state);
   const cap = getCapSummary(state, team.id);
   const confRows = state.standings[team.conference];
@@ -616,6 +931,27 @@ function bindPageEvents() {
     });
   });
 
+  $("#playMyMatchBtn")?.addEventListener("click", async () => {
+  const userTeamId = state.userTeamId;
+  const nextMatch = state.schedule.find(
+    m => !m.played && (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)
+  );
+
+  if (!nextMatch) {
+    toast("No match ready.", "warn");
+    return;
+  }
+
+  if (!nextMatch.result) {
+    const { simulateMatch } = await import("./sim.js");
+    simulateMatch(state, nextMatch);
+  }
+
+    await playLiveMatch(nextMatch);
+    await persist();
+    await renderPage();
+  });
+
   $("#acceptOfferBtn")?.addEventListener("click", async () => {
     acceptPendingOffer(state);
     await persist();
@@ -710,6 +1046,28 @@ async function openLoadModal() {
   });
 }
 
+function setSimSpeed(key) {
+  if (!SIM_SPEEDS[key]) return;
+  simSpeedKey = key;
+  simSpeed = SIM_SPEEDS[key];
+
+  document.querySelectorAll(".sim-speed-opt").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.speed === key);
+  });
+}
+
+function toggleSimPause() {
+  simPaused = !simPaused;
+  const btn = document.getElementById("sim-pause-btn");
+  if (btn) {
+    btn.textContent = simPaused ? "▶ Resume" : "⏸ Pause";
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 function bindTopLevel() {
   $("#showCreateLeagueBtn").addEventListener("click", () => openOverlay($("#setupOverlay")));
   $("#closeSetupBtn").addEventListener("click", () => closeOverlay($("#setupOverlay")));
@@ -741,12 +1099,37 @@ function bindTopLevel() {
     setAppVisible(false);
   });
 
-  $("#simOneBtn").addEventListener("click", async () => {
-    if (!state) return;
+  $("#simOneBtn")?.addEventListener("click", async () => {
+  if (!state) return;
+
+  if (state.season.phase !== "Regular Season") {
     advanceOneWeek(state);
     await persist();
     await renderPage();
-  });
+    return;
+  }
+
+  const userTeamId = state.userTeamId;
+  const nextMatch = state.schedule.find(
+    m =>
+      !m.played &&
+      (m.homeTeamId === userTeamId || m.awayTeamId === userTeamId)
+  );
+
+  if (!nextMatch) {
+    toast("No upcoming match found.", "warn");
+    return;
+  }
+
+  if (!nextMatch.result) {
+    const { simulateMatch } = await import("./sim.js");
+    simulateMatch(state, nextMatch);
+  }
+
+  await playLiveMatch(nextMatch);
+  await persist();
+  await renderPage();
+});
 
   $("#simWeekBtn").addEventListener("click", async () => {
     if (!state) return;
