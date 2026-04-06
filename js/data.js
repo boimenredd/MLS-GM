@@ -94,11 +94,63 @@ export const TEAM_LOGOS = {
   "Vancouver Whitecaps FC": "https://images.mlssoccer.com/image/upload/t_club_logo_medium/v1748265547/assets/logos/mls-clubs/Club_Logo-Vancouver_ao9phl.png",
 };
 
+
+
+export const TEAM_COLORS = {
+  "Atlanta United": { primary: "#A19060", secondary: "#80000A", text: "#111111" },
+  "Austin FC": { primary: "#00B140", secondary: "#111111", text: "#111111" },
+  "Charlotte FC": { primary: "#1A85C8", secondary: "#111111", text: "#ffffff" },
+  "Chicago Fire FC": { primary: "#6BA4FF", secondary: "#A90F2F", text: "#ffffff" },
+  "FC Cincinnati": { primary: "#0C1F3F", secondary: "#F37021", text: "#ffffff" },
+  "Colorado Rapids": { primary: "#862633", secondary: "#9EA2A2", text: "#ffffff" },
+  "Columbus Crew": { primary: "#FFDD00", secondary: "#111111", text: "#111111" },
+  "D.C. United": { primary: "#111111", secondary: "#CF132B", text: "#ffffff" },
+  "FC Dallas": { primary: "#E31C3D", secondary: "#0B1F41", text: "#ffffff" },
+  "Houston Dynamo FC": { primary: "#F37021", secondary: "#111111", text: "#111111" },
+  "Sporting Kansas City": { primary: "#6AB2E7", secondary: "#0B1F41", text: "#ffffff" },
+  "LA Galaxy": { primary: "#00245D", secondary: "#FFB81C", text: "#ffffff" },
+  "Los Angeles FC": { primary: "#111111", secondary: "#C6A663", text: "#ffffff" },
+  "Inter Miami CF": { primary: "#F7B5CD", secondary: "#111111", text: "#111111" },
+  "Minnesota United FC": { primary: "#7E8AA2", secondary: "#93C1E5", text: "#111111" },
+  "CF Montréal": { primary: "#0F1C35", secondary: "#78A7D8", text: "#ffffff" },
+  "Nashville SC": { primary: "#ECE83A", secondary: "#162B75", text: "#111111" },
+  "New England Revolution": { primary: "#0B1F41", secondary: "#E1261C", text: "#ffffff" },
+  "New York Red Bulls": { primary: "#D71920", secondary: "#1A1A1A", text: "#ffffff" },
+  "New York City FC": { primary: "#6CADDF", secondary: "#0B1F41", text: "#111111" },
+  "Orlando City SC": { primary: "#633492", secondary: "#FAD64A", text: "#ffffff" },
+  "Philadelphia Union": { primary: "#0B1F41", secondary: "#C89A2D", text: "#ffffff" },
+  "Portland Timbers": { primary: "#004812", secondary: "#D69A3D", text: "#ffffff" },
+  "Real Salt Lake": { primary: "#9D2235", secondary: "#FDB913", text: "#ffffff" },
+  "San Diego FC": { primary: "#00B0E6", secondary: "#111111", text: "#111111" },
+  "San Jose Earthquakes": { primary: "#0B1F41", secondary: "#0077C8", text: "#ffffff" },
+  "Seattle Sounders FC": { primary: "#5D9741", secondary: "#005595", text: "#111111" },
+  "St. Louis CITY SC": { primary: "#D61A5E", secondary: "#0B1F41", text: "#ffffff" },
+  "Toronto FC": { primary: "#D71920", secondary: "#3B3B3B", text: "#ffffff" },
+  "Vancouver Whitecaps FC": { primary: "#0B1F41", secondary: "#7A8A9E", text: "#ffffff" },
+};
+
+export const US_OPEN_CUP_MLS_2026 = [
+  "Atlanta United", "Austin FC", "Charlotte FC", "Chicago Fire FC", "Colorado Rapids",
+  "Columbus Crew", "D.C. United", "Houston Dynamo FC", "Minnesota United FC",
+  "New England Revolution", "New York City FC", "Orlando City SC", "New York Red Bulls",
+  "San Jose Earthquakes", "St. Louis CITY SC", "Sporting Kansas City"
+];
+
+export const US_OPEN_CUP_OPEN_FIELD_2026 = [
+  "Asheville City SC", "Des Moines Menace", "El Farolito", "FC Motown", "Flint City Bucks",
+  "Flower City Union", "Hickory FC", "Laredo Heat SC", "Little Rock Rangers", "Michigan Rangers",
+  "Northern Virginia FC", "Ristozi FC", "Tennessee Tempo FC", "Ventura County Fusion",
+  "Vermont Green FC", "West Chester United SC"
+];
+
 export const NATIONS = [
-  "USA", "Canada", "Argentina", "Brazil", "Colombia", "Uruguay", "Mexico",
-  "Paraguay", "Chile", "Peru", "Venezuela", "Costa Rica", "Honduras", "Panama",
-  "Jamaica", "Germany", "Spain", "France", "England", "Netherlands", "Belgium",
-  "Croatia", "Serbia", "Nigeria", "Ghana", "Ivory Coast", "Japan", "South Korea"
+  "USA", "Canada", "Mexico", "Argentina", "Brazil", "Colombia", "Uruguay", "Paraguay", "Chile", "Peru",
+  "Venezuela", "Ecuador", "Bolivia", "Costa Rica", "Honduras", "Panama", "Jamaica", "Haiti", "Dominican Republic",
+  "England", "Scotland", "Ireland", "Wales", "France", "Spain", "Portugal", "Germany", "Netherlands", "Belgium",
+  "Italy", "Switzerland", "Austria", "Denmark", "Sweden", "Norway", "Croatia", "Serbia", "Bosnia and Herzegovina",
+  "Poland", "Czech Republic", "Ukraine", "Romania", "Turkey", "Morocco", "Algeria", "Tunisia", "Egypt",
+  "Nigeria", "Ghana", "Ivory Coast", "Senegal", "Cameroon", "Mali", "Japan", "South Korea", "Australia", "New Zealand",
+  "Israel", "Iran", "Georgia", "Armenia", "India"
 ];
 
 export const FIRST_NAMES = [

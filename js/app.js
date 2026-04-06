@@ -28,8 +28,9 @@ import {
   getExpiringPlayers,
   hydratePlayer,
   autoAssignAllDesignations,
+  ensureOpenCupState,
 } from "./sim.js";
-import { CONFERENCES, TEAM_LOGOS } from "./data.js";
+import { CONFERENCES, TEAM_LOGOS, TEAM_COLORS } from "./data.js";
 
 let state       = null;
 let currentPage = "dashboard";
@@ -59,6 +60,7 @@ let simView = "fitness";
 let simLeftView = "home";
 let simRightView = "away";
 let livePitchScene = null;
+let weeklyScheduleWeek = 1;
 
 const tableSortState = {
   roster:        { key: "positionOrder", dir: "asc" },
@@ -92,6 +94,55 @@ function teamLogoMark(team, cls = "team-logo") {
 function teamLink(teamId, label) {
   const text = label || byTeamId(teamId)?.name || "Unknown";
   return `<button type="button" class="text-link team-link" data-id="${teamId}">${escapeHtml(text)}</button>`;
+}
+
+function teamColors(teamOrId) {
+  const team = typeof teamOrId === "string" ? byTeamId(teamOrId) : teamOrId;
+  return TEAM_COLORS[team?.name] || { primary: "#6ab2e7", secondary: "#0b1f41", text: "#ffffff" };
+}
+
+function escapeAttr(value) {
+  return String(value ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
+function ordinalSuffix(n) {
+  if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
+  if (n % 10 === 1) return `${n}st`;
+  if (n % 10 === 2) return `${n}nd`;
+  if (n % 10 === 3) return `${n}rd`;
+  return `${n}th`;
+}
+
+function ensureJerseyNumbers(st) {
+  if (!st?.players) return;
+  const defaultsByPos = { GK: [1, 12, 18, 99], RB: [2, 22, 14], CB: [4, 5, 13, 15], LB: [3, 16, 21], CDM: [6, 20, 28], CM: [8, 10, 17, 23], CAM: [10, 11, 19], RM: [7, 17, 27], LM: [11, 14, 21], RW: [7, 11, 77], LW: [11, 17, 27], ST: [9, 19, 29] };
+  for (const team of st.teams || []) {
+    const roster = (st.players || []).filter(p => p.clubId === team.id);
+    const used = new Set();
+    roster.sort((a,b) => (b.overall - a.overall) || (a.age - b.age));
+    for (const p of roster) {
+      if (Number.isInteger(p.jerseyNumber) && !used.has(p.jerseyNumber)) { used.add(p.jerseyNumber); continue; }
+      const prefs = defaultsByPos[p.position] || [30,31,32,33];
+      let num = prefs.find(n => !used.has(n));
+      if (!num) { for (let i = 2; i <= 99; i++) if (!used.has(i)) { num = i; break; } }
+      p.jerseyNumber = num || 99;
+      used.add(p.jerseyNumber);
+    }
+  }
+}
+
+function openCupEntryByRef(ref) {
+  const [kind, ...rest] = String(ref || "").split(":");
+  const id = rest.join(":");
+  if (kind === "mls") return byTeamId(id);
+  return state?.openCup?.guestTeams?.find(t => t.id === id) || null;
+}
+
+function openCupEntryLabel(ref) {
+  const entry = openCupEntryByRef(ref);
+  if (!entry) return "—";
+  if (String(ref).startsWith("mls:")) return teamLink(entry.id, entry.name);
+  return escapeHtml(entry.name);
 }
 
 function renderSimClubChip(team, side = "home") {
@@ -197,7 +248,7 @@ function getTeamRecord(teamId) {
 
 function normalizeState(st) {
   if (!st) return st;
-  st.version = Math.max(st.version || 0, 6);
+  st.version = Math.max(st.version || 0, 7);
   st.season ||= { year: 2026, phase: "Regular Season" };
   st.calendar ||= { week: 1, absoluteDay: 0 };
   st.settings ||= {};
@@ -228,6 +279,9 @@ function normalizeState(st) {
       return hydratePlayer(p, seasonYear);
     });
   }
+
+  ensureJerseyNumbers(st);
+  ensureOpenCupState(st);
 
   st.draft ||= {};
   st.draft.pool ||= [];
@@ -471,18 +525,31 @@ function getLivePlayerEnergy(player, minute) {
   return Math.max(36, Math.min(100, Math.round(100 - baseDrop + Math.sin((minute + (player?.overall || 60)) * 0.12) * 5)));
 }
 
+function getLivePlayerRating(player, minute) {
+  const base = livePitchScene?.playerRatings?.[player?.id] ?? (6.0 + Math.max(0, (player?.overall || 58) - 58) * 0.035);
+  const energyAdj = ((getLivePlayerEnergy(player, minute) || 75) - 74) / 115;
+  return Math.max(5.4, Math.min(9.8, base + energyAdj));
+}
+
+function bumpLiveRating(playerId, amount) {
+  if (!livePitchScene?.playerRatings || !playerId) return;
+  livePitchScene.playerRatings[playerId] = Math.max(5.2, Math.min(9.8, (livePitchScene.playerRatings[playerId] || 6.2) + amount));
+}
+
 function renderLineupRows(entries, minute = 1) {
   return entries.map(({ position, player }) => {
     if (!player) return `<div class="msim-lineup-row"><div class="msim-lineup-pos">${escapeHtml(position || "—")}</div><div class="msim-lineup-name">Open Slot</div><div class="msim-lineup-meta">—</div></div>`;
     const energy = getLivePlayerEnergy(player, minute);
-    return `<div class="msim-lineup-row"><div class="msim-lineup-pos">${escapeHtml(position || player.position || "—")}</div><div class="msim-lineup-name">${escapeHtml(player.name)}</div><div class="msim-lineup-meta">${player.overall} OVR</div><div class="msim-energy"><div class="msim-energy-fill" style="width:${energy}%"></div></div></div>`;
+    const rating = getLivePlayerRating(player, minute).toFixed(1);
+    return `<div class="msim-lineup-row"><div class="msim-lineup-pos">${escapeHtml(position || player.position || "—")}</div><div class="msim-lineup-name">${escapeHtml(player.name)}</div><div class="msim-lineup-meta">${rating}</div><div class="msim-energy"><div class="msim-energy-fill" style="width:${energy}%"></div></div></div>`;
   }).join("");
 }
 
 function renderBenchRows(players, minute = 1) {
   return players.map(player => {
     const energy = getLivePlayerEnergy(player, minute);
-    return `<div class="msim-bench-row"><div class="msim-lineup-pos">${escapeHtml(player.position)}</div><div class="msim-lineup-name">${escapeHtml(player.name)}</div><div class="msim-lineup-meta">${player.overall}</div><div class="msim-energy"><div class="msim-energy-fill" style="width:${energy}%"></div></div></div>`;
+    const rating = getLivePlayerRating(player, minute).toFixed(1);
+    return `<div class="msim-bench-row"><div class="msim-lineup-pos">${escapeHtml(player.position)}</div><div class="msim-lineup-name">${escapeHtml(player.name)}</div><div class="msim-lineup-meta">${rating}</div><div class="msim-energy"><div class="msim-energy-fill" style="width:${energy}%"></div></div></div>`;
   }).join("") || `<div class="note">No bench players listed.</div>`;
 }
 
@@ -561,6 +628,11 @@ function buildLivePitchScene(match) {
   const awayFormation = getLiveFormation(at.id);
   const homePack = getLineupForFormation(ht.id, homeFormation);
   const awayPack = getLineupForFormation(at.id, awayFormation);
+  const baselineRatings = {};
+  [...homePack.xi, ...awayPack.xi, ...homePack.bench, ...awayPack.bench].forEach(entry => {
+    const p = entry.player || entry;
+    if (p?.id) baselineRatings[p.id] = Number((6.0 + Math.max(0, p.overall - 58) * 0.035 + Math.random() * 0.35).toFixed(2));
+  });
   return {
     matchId: match.id,
     homeTeamId: match.homeTeamId,
@@ -573,47 +645,52 @@ function buildLivePitchScene(match) {
     momentum: "balanced",
     ballOwner: "home",
     lastEventText: "Build-up play",
+    ballSequence: [5, 6, 8, 10],
+    playerRatings: baselineRatings,
   };
 }
 
-function drawHumanoid(ctx, x, y, color, accent, facing = 1, withBall = false, number = "") {
+function drawHumanoid(ctx, x, y, palette, facing = 1, withBall = false, number = "") {
+  const { primary, secondary, text } = palette || { primary: "#59a8ff", secondary: "#0b1f41", text: "#ffffff" };
   ctx.save();
   ctx.translate(x, y);
   ctx.shadowColor = "rgba(0,0,0,.35)";
   ctx.shadowBlur = 12;
   ctx.fillStyle = "rgba(0,0,0,.18)";
   ctx.beginPath();
-  ctx.ellipse(0, 22, 10, 4, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 22, 11, 4.5, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowBlur = 0;
   ctx.fillStyle = "#f2d3bc";
   ctx.beginPath();
-  ctx.arc(0, -13, 7, 0, Math.PI * 2);
+  ctx.arc(0, -13, 7.2, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = color;
+  ctx.fillStyle = primary;
   ctx.beginPath();
-  ctx.roundRect(-8, -6, 16, 22, 4);
+  ctx.roundRect(-8.5, -6, 17, 22, 4);
   ctx.fill();
-  ctx.fillStyle = accent;
-  ctx.fillRect(-2, -6, 4, 22);
-  ctx.strokeStyle = "rgba(10,14,25,.8)";
-  ctx.lineWidth = 2.4;
-  const armSwing = Math.sin((livePitchScene?.phase || 0) * 3 + x * 0.01) * 5;
-  const legSwing = Math.sin((livePitchScene?.phase || 0) * 4 + y * 0.01) * 6;
+  ctx.fillStyle = secondary;
+  ctx.fillRect(-8.5, -6, 3, 22);
+  ctx.fillRect(5.5, -6, 3, 22);
+  ctx.fillRect(-8.5, 8, 17, 3.2);
+  ctx.strokeStyle = "rgba(10,14,25,.75)";
+  ctx.lineWidth = 2.3;
+  const armSwing = Math.sin((livePitchScene?.phase || 0) * 3 + x * 0.01) * 5.5;
+  const legSwing = Math.sin((livePitchScene?.phase || 0) * 4 + y * 0.01) * 7;
   ctx.beginPath();
   ctx.moveTo(-7, -1); ctx.lineTo(-14 * facing, 5 + armSwing * 0.25);
   ctx.moveTo(7, -1); ctx.lineTo(14 * facing, 5 - armSwing * 0.25);
-  ctx.moveTo(-4, 16); ctx.lineTo(-7 * facing, 27 + legSwing * 0.25);
-  ctx.moveTo(4, 16); ctx.lineTo(7 * facing, 27 - legSwing * 0.25);
+  ctx.moveTo(-4, 16); ctx.lineTo(-7 * facing, 28 + legSwing * 0.25);
+  ctx.moveTo(4, 16); ctx.lineTo(7 * facing, 28 - legSwing * 0.25);
   ctx.stroke();
-  ctx.fillStyle = "rgba(255,255,255,.92)";
-  ctx.font = "700 8px sans-serif";
+  ctx.fillStyle = text || "#ffffff";
+  ctx.font = "800 8px sans-serif";
   ctx.textAlign = "center";
   if (number) ctx.fillText(number, 0, 4);
   if (withBall) {
-    ctx.fillStyle = "#f9fafb";
+    ctx.fillStyle = "#ffffff";
     ctx.beginPath();
-    ctx.arc(11 * facing, 19, 4, 0, Math.PI * 2);
+    ctx.arc(12 * facing, 19, 4, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
@@ -651,10 +728,8 @@ function drawLivePitch(scene, minute, event = null) {
   ctx.beginPath(); ctx.arc(fieldX + 108, fieldY + fieldH / 2, 60, -0.92, 0.92); ctx.stroke();
   ctx.beginPath(); ctx.arc(fieldX + fieldW - 108, fieldY + fieldH / 2, 60, Math.PI - 0.92, Math.PI + 0.92); ctx.stroke();
 
-  const homeColor = "#efb2cd";
-  const awayColor = "#53565b";
-  const homeAccent = "#fbe7f1";
-  const awayAccent = "#d5d7db";
+  const homePalette = teamColors(scene.homeTeamId);
+  const awayPalette = teamColors(scene.awayTeamId);
 
   const homeLayout = FORMATION_LAYOUT[scene.homeFormation] || FORMATION_LAYOUT["4-3-3"];
   const awayLayout = FORMATION_LAYOUT[scene.awayFormation] || FORMATION_LAYOUT["4-3-3"];
@@ -683,26 +758,43 @@ function drawLivePitch(scene, minute, event = null) {
   const awayActors = scene.awayPack.xi.map((entry, idx) => ({ ...entry, ...mapAway(awayLayout[idx] || { x: .5, y: .5 }, idx) }));
   const attackSide = event?.side || (scene.ballOwner === "away" ? "away" : "home");
   const attackingActors = attackSide === "home" ? homeActors : awayActors;
-  const targetIdx = Math.min(attackingActors.length - 1, attackSide === "home" ? 10 : 10);
-  const ballCarrier = attackingActors[targetIdx] || attackingActors[0];
+  const seq = (scene.ballSequence || [5, 6, 8, 10]).map(i => Math.max(0, Math.min(attackingActors.length - 1, i)));
+  const segCount = Math.max(1, seq.length - 1);
+  const phaseLoop = (scene.phase * 0.95) % segCount;
+  const segIdx = Math.min(segCount - 1, Math.floor(phaseLoop));
+  const segProg = phaseLoop - segIdx;
+  const from = attackingActors[seq[segIdx]] || attackingActors[0];
+  const to = event?.type === "goal"
+    ? { x: attackSide === "home" ? fieldX + fieldW - 36 : fieldX + 36, y: fieldY + fieldH / 2 - 8 }
+    : (attackingActors[seq[segIdx + 1]] || attackingActors[attackingActors.length - 1] || from);
+  const ballX = from.x + (to.x - from.x) * segProg;
+  const ballY = from.y + (to.y - from.y) * segProg - Math.sin(segProg * Math.PI) * (event?.type === "goal" ? 26 : 12);
+  const activeIdx = seq[Math.min(seq.length - 1, Math.round(phaseLoop))];
   const ballTrail = [];
-  const ballX = ballCarrier.x + (attackSide === "home" ? 18 : -18);
-  const ballY = ballCarrier.y + Math.sin(phase * 4) * 4;
-  for (let i = 0; i < 8; i++) ballTrail.push({ x: ballX - (attackSide === "home" ? i * 10 : -i * 10), y: ballY + Math.sin(phase * 4 + i * 0.3) * 2, a: 0.14 - i * 0.014 });
+  for (let i = 0; i < 10; i++) ballTrail.push({ x: ballX - (attackSide === "home" ? i * 9 : -i * 9), y: ballY + Math.sin(phase * 4 + i * 0.3) * 2, a: 0.16 - i * 0.014 });
+  ctx.strokeStyle = attackSide === "home" ? 'rgba(255,255,255,.12)' : 'rgba(255,255,255,.12)';
+  ctx.lineWidth = 2.4;
+  ctx.beginPath();
+  ctx.moveTo(from.x, from.y);
+  ctx.lineTo(to.x, to.y);
+  ctx.stroke();
   for (const pt of ballTrail.reverse()) {
     ctx.fillStyle = `rgba(255,255,255,${Math.max(pt.a, 0)})`;
     ctx.beginPath();
-    ctx.arc(pt.x, pt.y, 3.5, 0, Math.PI * 2);
+    ctx.arc(pt.x, pt.y, 3.2, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  homeActors.forEach((actor, idx) => drawHumanoid(ctx, actor.x, actor.y, homeColor, homeAccent, 1, attackSide === "home" && idx === targetIdx, String(idx + 1)));
-  awayActors.forEach((actor, idx) => drawHumanoid(ctx, actor.x, actor.y, awayColor, awayAccent, -1, attackSide === "away" && idx === targetIdx, String(idx + 1)));
+  homeActors.forEach((actor, idx) => drawHumanoid(ctx, actor.x, actor.y, homePalette, 1, attackSide === "home" && idx === activeIdx, String(actor.player?.jerseyNumber || idx + 1)));
+  awayActors.forEach((actor, idx) => drawHumanoid(ctx, actor.x, actor.y, awayPalette, -1, attackSide === "away" && idx === activeIdx, String(actor.player?.jerseyNumber || idx + 1)));
 
-  ctx.fillStyle = "rgba(255,255,255,.96)";
+  ctx.fillStyle = "rgba(255,255,255,.98)";
   ctx.beginPath();
-  ctx.arc(ballX, ballY, 5, 0, Math.PI * 2);
+  ctx.arc(ballX, ballY, 5.2, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = 'rgba(17,24,39,.9)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
 
   const possessionText = scene.ballOwner === "home" ? `${byTeamId(scene.homeTeamId)?.shortName || 'Home'} in possession` : `${byTeamId(scene.awayTeamId)?.shortName || 'Away'} in possession`;
   const attackText = event?.type === "goal" ? `${event.scorer || 'Attacker'} breaks through` : scene.lastEventText || "Build-up play";
@@ -713,12 +805,13 @@ function drawLivePitch(scene, minute, event = null) {
 }
 
 async function animateLiveSegment(scene, minute, stats, match, event = null) {
-  const frames = simSpeedKey === "turbo" ? 2 : simSpeedKey === "fast" ? 4 : simSpeedKey === "normal" ? 7 : 10;
-  const wait = Math.max(18, Math.round(simSpeed / Math.max(1, frames)));
+  const frames = simSpeedKey === "turbo" ? 2 : simSpeedKey === "fast" ? 4 : simSpeedKey === "normal" ? 8 : 11;
+  const wait = Math.max(16, Math.round(simSpeed / Math.max(1, frames)));
   const biasRoll = Math.random();
   scene.ballOwner = event?.side || (biasRoll < ((stats.homePoss || 50) / 100) ? "home" : "away");
   scene.momentum = event?.type === "goal" ? `${scene.ballOwner}Attack` : (scene.ballOwner === "home" ? (biasRoll > 0.72 ? "awayAttack" : "homeAttack") : (biasRoll > 0.72 ? "homeAttack" : "awayAttack"));
   scene.lastEventText = event?.type === "goal" ? `Final third attack` : ["Patient circulation", "Progressive carry", "Wing combination", "Half-space overload", "Counter-press sequence", "Direct ball in behind"][Math.floor(Math.random() * 6)];
+  scene.ballSequence = scene.ballOwner === 'home' ? [5, 6, 8, 10] : [5, 6, 8, 10];
   for (let i = 0; i < frames; i++) {
     if (simAbortRequested || simSkipped) break;
     while (simPaused && !simAbortRequested) await sleep(100);
@@ -1143,6 +1236,9 @@ async function playLiveMatch(match) {
     livePitchScene.lastMinute = minute;
     livePitchScene.lastStats = result;
     livePitchScene.lastMatch = match;
+    Object.keys(livePitchScene.playerRatings || {}).forEach(pid => {
+      livePitchScene.playerRatings[pid] = Math.max(5.3, Math.min(9.7, livePitchScene.playerRatings[pid] + (Math.random() * 0.02 - 0.008)));
+    });
 
     if (Math.random() < 0.18) addSimEvent(minute, commentary[Math.floor(Math.random() * commentary.length)]);
     await animateLiveSegment(livePitchScene, minute, result, match, null);
@@ -1152,6 +1248,10 @@ async function playLiveMatch(match) {
       const scorer = ev.scorerId ? byPlayerId(ev.scorerId) : null;
       const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
       const pName = scorer?.name || "Unknown";
+      bumpLiveRating(scorer?.id, 0.95);
+      bumpLiveRating(assist?.id, 0.35);
+      const concededPack = ev.side === "home" ? livePitchScene?.awayPack : livePitchScene?.homePack;
+      (concededPack?.xi || []).forEach(({ player }) => bumpLiveRating(player?.id, player?.position === 'GK' ? -0.22 : -0.08));
 
       if (ev.side === "home") hg++; else ag++;
       if (el("sim-score")) el("sim-score").textContent = `${hg} – ${ag}`;
@@ -1364,80 +1464,77 @@ function renderDashboard() {
   const cap = getCapSummary(state, team.id);
   const confRows = state.standings[team.conference];
   const rank = confRows.findIndex(r => r.teamId === team.id) + 1;
-  const upcoming = state.schedule
-    .filter(m => !m.played && (m.homeTeamId===team.id || m.awayTeamId===team.id))
-    .slice(0,5);
-  const awards = state.awardsHistory[state.awardsHistory.length-1];
-  const teamPlayers = getTeamPlayers(state, team.id);
-  const intlUsed = teamPlayers.filter(p => takesIntlSlot(p)).length;
-  const record = getTeamRecord(team.id);
+  const record = getTeamRecord(team.id) || { wins: 0, draws: 0, losses: 0, points: 0 };
+  const roster = getTeamPlayers(state, team.id);
+  const scorers = [...roster].sort((a, b) => (b.stats.goals - a.stats.goals) || (b.overall - a.overall));
+  const assisters = [...roster].sort((a, b) => (b.stats.assists - a.stats.assists) || (b.overall - a.overall));
+  const best = [...roster].sort((a, b) => b.overall - a.overall);
+  const headlines = (state.transactions || []).slice(0, 8);
+  const confTable = confRows.slice(0, 15).map((r, i) => {
+    const teamObj = byTeamId(r.teamId);
+    return `<tr class="${r.teamId === team.id ? 'highlight-row' : ''}"><td>${i + 1}</td><td>${teamLink(r.teamId, teamObj?.name || '—')}</td><td class="num">${r.points}</td><td class="num">${r.gd > 0 ? '+' : ''}${r.gd}</td></tr>`;
+  }).join("");
 
-  return `${pageHead("Dashboard", `${team.conference} Conference · simplified club overview`)}
-  <div class="club-hero-simple">
-    <div class="club-hero-left">
-      ${teamLogoMark(team, "club-hero-logo")}
-      <div>
-        <div class="club-hero-name">${escapeHtml(team.name)}</div>
-        <div class="club-hero-sub">${record ? `${record.wins}-${record.draws}-${record.losses} · ${rank}${rank===1?"st":rank===2?"nd":rank===3?"rd":"th"} in ${team.conference}` : team.conference}</div>
+  return `${pageHead(`${team.name} Dashboard`, `${state.season.year} ${state.season.phase.toLowerCase()}`)}
+  <div class="score-ticker">${state.schedule.filter(m => m.played).slice(0, 8).map(m => {
+    const h = byTeamId(m.homeTeamId); const a = byTeamId(m.awayTeamId);
+    return `<div class="ticker-item"><span>${escapeHtml(h.shortName || h.name)}</span><strong>${m.result.homeGoals}</strong><span>${escapeHtml(a.shortName || a.name)}</span><strong>${m.result.awayGoals}</strong></div>`;
+  }).join('') || `<div class="ticker-item"><span>No results yet</span></div>`}</div>
+  <div class="dashboard-fbgm">
+    <div class="dashboard-left panel">
+      <div class="panel-head"><h3>${team.conference}</h3><span>GB</span></div>
+      <table><thead><tr><th>#</th><th>Club</th><th class="num">Pts</th><th class="num">GD</th></tr></thead><tbody>${confTable}</tbody></table>
+      <div class="panel-link-row"><button class="text-link nav-jump-btn" data-target-page="standings">» League Standings</button></div>
+    </div>
+
+    <div class="dashboard-center panel">
+      <div class="dashboard-team-head">
+        <div class="dashboard-title-row">
+          <div class="dashboard-title">${escapeHtml(team.name)}</div>
+          <button class="ghost-btn team-link" type="button" data-id="${team.id}">Open club page</button>
+        </div>
+        <div class="dashboard-record">${record.wins}-${record.draws}-${record.losses}</div>
+        <div class="dashboard-rank">${ordinalSuffix(rank)} in ${team.conference.toLowerCase()}</div>
+      </div>
+      <div class="dashboard-columns">
+        <div>
+          <h4>Team Leaders</h4>
+          <div class="dash-list-row"><span>Goals</span><strong>${escapeHtml(scorers[0]?.name || '—')}</strong><span>${scorers[0]?.stats.goals || 0}</span></div>
+          <div class="dash-list-row"><span>Assists</span><strong>${escapeHtml(assisters[0]?.name || '—')}</strong><span>${assisters[0]?.stats.assists || 0}</span></div>
+          <div class="dash-list-row"><span>Best Overall</span><strong>${escapeHtml(best[0]?.name || '—')}</strong><span>${best[0]?.overall || 0}</span></div>
+          <div class="panel-link-row"><button class="text-link nav-jump-btn" data-target-page="roster">» Full Roster</button></div>
+        </div>
+        <div>
+          <h4>Team Stats</h4>
+          <div class="dash-list-row"><span>Overall</span><strong>${teamOverall(state, team.id).toFixed(1)}</strong><span>First XI</span></div>
+          <div class="dash-list-row"><span>Budget Room</span><strong>${formatMoney(cap.budgetRoom)}</strong><span>${formatMoney(cap.budgetUsed)} used</span></div>
+          <div class="dash-list-row"><span>Intl Slots</span><strong>${cap.intlUsed}/${cap.intlTotal}</strong><span>${cap.dpCount} DP · ${cap.u22Count} U22</span></div>
+          <div class="dash-list-row"><span>Cash</span><strong>${formatMoney(team.finances.cash)}</strong><span>club finances</span></div>
+          <div class="panel-link-row"><button class="text-link nav-jump-btn" data-target-page="budget">» Team Finances</button></div>
+        </div>
+        <div>
+          <h4>Inbox</h4>
+          ${state.pendingOffer ? `<div class="offer-box"><strong>${escapeHtml(state.pendingOffer.bidClub)}</strong> offered ${formatMoney(state.pendingOffer.amount)} for ${escapeHtml(byPlayerId(state.pendingOffer.playerId)?.name || 'your player')}.</div>` : `<div class="note">No messages!</div>`}
+          <div class="dash-list-row"><span>Next sim targets</span><strong>Match · Week · Month</strong><span>Draft · Extensions · FA</span></div>
+          <div class="dash-list-row"><span>Schedule</span><strong>34 regular season matches</strong><span>U.S. Open Cup active</span></div>
+        </div>
       </div>
     </div>
-    <div class="club-hero-actions">
-      <button id="playMyMatchBtn" class="primary-btn" type="button">Play Next Match</button>
-      <button class="ghost-btn team-link" type="button" data-id="${team.id}">Club Page</button>
-    </div>
-  </div>
 
-  <div class="cards">
-    <div class="card"><div class="card-label">Team Overall</div><div class="card-value">${teamOverall(state, team.id).toFixed(1)}</div><div class="card-note">First XI</div></div>
-    <div class="card"><div class="card-label">Budget Room</div><div class="card-value">${formatMoney(cap.budgetRoom)}</div><div class="card-note">${formatMoney(cap.budgetUsed)} used</div></div>
-    <div class="card"><div class="card-label">Intl Slots</div><div class="card-value">${intlUsed}/${cap.intlTotal}</div><div class="card-note">${cap.dpCount} DP · ${cap.u22Count} U22</div></div>
-    <div class="card"><div class="card-label">Current Phase</div><div class="card-value">${escapeHtml(state.season.phase)}</div><div class="card-note">Week ${state.calendar.week}</div></div>
-  </div>
-
-  <div class="two-col">
-    <div>
+    <div class="dashboard-right">
+      <div class="panel">
+        <div class="panel-head"><h3>League Headlines</h3><span>Latest</span></div>
+        <div class="headline-grid">${headlines.map(tx => `<div class="headline-card"><div class="headline-top"><span class="badge">${escapeHtml(tx.type)}</span><span>${tx.season}</span></div><div>${escapeHtml(tx.text)}</div></div>`).join('') || `<div class="note">No headlines yet.</div>`}</div>
+      </div>
       <div class="panel">
         <div class="panel-head"><h3>Upcoming Matches</h3><span>Next 5</span></div>
         <table><thead><tr><th>Week</th><th>Opponent</th><th>Venue</th></tr></thead><tbody>
-          ${upcoming.map(m => {
-            const home = m.homeTeamId===team.id;
-            const opp = byTeamId(home ? m.awayTeamId : m.homeTeamId);
-            return `<tr><td>${m.week}</td><td>${teamLink(opp.id, opp.name)}</td><td>${home ? "Home" : "Away"}</td></tr>`;
-          }).join("") || `<tr><td colspan="3">No remaining matches.</td></tr>`}
+          ${state.schedule.filter(m => !m.played && (m.homeTeamId===team.id || m.awayTeamId===team.id)).slice(0,5).map(m => {
+            const home = m.homeTeamId===team.id; const opp = byTeamId(home ? m.awayTeamId : m.homeTeamId);
+            return `<tr><td>${m.week}</td><td>${teamLink(opp.id, opp.name)}</td><td>${home ? 'Home' : 'Away'}</td></tr>`;
+          }).join('') || `<tr><td colspan="3">No upcoming matches.</td></tr>`}
         </tbody></table>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head"><h3>Recent Transactions</h3><span>Latest</span></div>
-        <table><thead><tr><th>Type</th><th>Detail</th></tr></thead><tbody>
-          ${state.transactions.slice(0,10).map(tx => `<tr><td><span class="badge">${escapeHtml(tx.type)}</span></td><td>${escapeHtml(tx.text)}</td></tr>`).join("")}
-        </tbody></table>
-      </div>
-    </div>
-
-    <div>
-      <div class="panel">
-        <div class="panel-head"><h3>${escapeHtml(team.conference)} Table</h3><span>Playoff line</span></div>
-        <table><thead><tr><th>#</th><th>Club</th><th class="num">GP</th><th class="num">Pts</th><th class="num">GD</th></tr></thead><tbody>
-          ${confRows.slice(0,10).map((r,i) => `<tr>
-            <td>${i+1}</td>
-            <td>${teamLink(r.teamId, byTeamId(r.teamId).name)}${r.teamId===team.id ? ` <span class="badge blue">You</span>` : ""}</td>
-            <td class="num">${r.played}</td>
-            <td class="num">${r.points}</td>
-            <td class="num">${r.gd>0?"+":""}${r.gd}</td>
-          </tr>`).join("")}
-        </tbody></table>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head"><h3>Front Office Notes</h3><span>League windows</span></div>
-        <div class="info-stack">
-          <div class="info-row"><span>Next sim targets</span><strong>Match · Week · Month · Draft · Extensions · Free Agency</strong></div>
-          <div class="info-row"><span>Schedule</span><strong>34 regular season matches per club</strong></div>
-          <div class="info-row"><span>Latest awards</span><strong>${escapeHtml(awards ? `${awards.year} MVP: ${awards.mvp}` : "No awards yet")}</strong></div>
-          ${state.pendingOffer ? `<div class="info-row"><span>Incoming offer</span><strong>${escapeHtml(byPlayerId(state.pendingOffer.playerId)?.name||"Unknown")} · ${formatMoney(state.pendingOffer.amount)}</strong></div>` : `<div class="info-row"><span>Incoming offer</span><strong>None</strong></div>`}
-        </div>
-        ${state.pendingOffer ? `<div class="flex" style="margin-top:12px;"><button id="acceptOfferBtn" class="primary-btn">Accept</button><button id="rejectOfferBtn" class="ghost-btn">Reject</button></div>` : ``}
+        <div class="panel-link-row" style="margin-top:8px;"><button id="playMyMatchBtn" class="primary-btn" type="button">Play Next Match</button></div>
       </div>
     </div>
   </div>`;
@@ -1593,7 +1690,7 @@ function renderStandings() {
 function renderSchedule() {
   const team = getUserTeam(state);
   const rows = state.schedule.filter(m => m.homeTeamId===team.id || m.awayTeamId===team.id);
-  return `${pageHead("Schedule","34-match regular season")}
+  return `${pageHead("Schedule","Team schedule view")}
   <div class="panel"><table>
     <thead><tr><th>Week</th><th>Home</th><th>Away</th><th>Status</th></tr></thead><tbody>
       ${rows.map(m => `<tr>
@@ -1603,6 +1700,44 @@ function renderSchedule() {
         <td>${m.played ? `${m.result.homeGoals}-${m.result.awayGoals}` : "Upcoming"}</td>
       </tr>`).join("")}
     </tbody></table></div>`;
+}
+
+function renderWeeklySchedule() {
+  const maxWeek = Math.max(...state.schedule.map(m => m.week));
+  weeklyScheduleWeek = Math.max(1, Math.min(maxWeek, weeklyScheduleWeek || state.calendar.week || 1));
+  const weekMatches = state.schedule.filter(m => m.week === weeklyScheduleWeek);
+  return `${pageHead("Weekly Schedule","Watch or simulate an entire matchday")}
+  <div class="panel weekly-toolbar">
+    <div class="weekly-nav">
+      <button class="small-btn" id="weekPrevBtn">‹</button>
+      <button class="small-btn" id="weekNextBtn">›</button>
+      <select id="weekSelect">${Array.from({length:maxWeek}, (_,i) => `<option value="${i+1}" ${i+1===weeklyScheduleWeek ? 'selected' : ''}>Matchday ${i+1}</option>`).join('')}</select>
+    </div>
+    <div class="weekly-actions">
+      <button class="ghost-btn" id="simWeekOnlyBtn" type="button">Sim matchday</button>
+      <button class="primary-btn" id="liveWatchWeekBtn" type="button">Live watch all games</button>
+    </div>
+  </div>
+  <div class="weekly-grid">
+    ${weekMatches.map(m => {
+      const home = byTeamId(m.homeTeamId); const away = byTeamId(m.awayTeamId);
+      const homeTop = getTeamPlayers(state, home.id).sort((a,b)=>b.overall-a.overall)[0];
+      const awayTop = getTeamPlayers(state, away.id).sort((a,b)=>b.overall-a.overall)[0];
+      return `<div class="week-game-card">
+        <div class="week-game-main">
+          <div class="week-teams">
+            <div class="week-team-name">${teamLink(home.id, home.name)}<div class="note">${homeTop ? `${homeTop.position} ${escapeHtml(homeTop.name)}` : ''}</div></div>
+            <div class="week-versus">${m.played ? `${m.result.homeGoals} - ${m.result.awayGoals}` : 'vs'}</div>
+            <div class="week-team-name">${teamLink(away.id, away.name)}<div class="note">${awayTop ? `${awayTop.position} ${escapeHtml(awayTop.name)}` : ''}</div></div>
+          </div>
+        </div>
+        <div class="week-game-actions">
+          <button class="small-btn watch-week-match-btn" data-id="${m.id}">Watch game</button>
+          <button class="small-btn sim-week-match-btn" data-id="${m.id}">Sim game</button>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 
 function renderStats() {
@@ -2079,6 +2214,25 @@ function renderTeamPage() {
 }
 
 
+
+function renderOpenCup() {
+  ensureOpenCupState(state);
+  const cup = state.openCup;
+  const entryObj = ref => {
+    const entry = openCupEntryByRef(ref);
+    if (!entry) return null;
+    if (String(ref).startsWith("mls:")) return { teamId: entry.id, name: entry.name };
+    return { name: entry.name };
+  };
+  const round = (key, label) => `<div class="playoff-round-col"><div class="playoff-round-title">${label}</div>${(cup.rounds[key] || []).map(m => renderBracketMatchup(entryObj(m.homeRef), entryObj(m.awayRef), m.played ? `${m.result.homeGoals}-${m.result.awayGoals}` : `Week ${m.week}`)).join('') || `<div class="bracket-match"><div class="note">TBD</div></div>`}</div>`;
+  const champion = cup.championRef ? openCupEntryByRef(cup.championRef)?.name : null;
+  return `${pageHead("U.S. Open Cup", `2026-format single-elimination cup`)}
+  <div class="panel"><div class="panel-head"><h3>Bracket</h3><span>${champion ? 'Champion crowned' : 'In progress'}</span></div>
+    <div class="playoff-bracket-grid">${round('roundOf32','Round of 32')}${round('roundOf16','Round of 16')}${round('quarterfinals','Quarterfinals')}${round('semifinals','Semifinals')}${round('final','Final')}</div>
+    ${champion ? `<div class="playoff-champion-banner">🏆 ${escapeHtml(champion)}</div>` : ''}
+  </div>`;
+}
+
 function renderPlayoffs() {
   const graphic = buildPlayoffGraphicData();
   const projectionSeeds = projectedPlayoffSeeds();
@@ -2272,6 +2426,7 @@ async function renderPage() {
   else if (currentPage==="academy")      html = renderAcademy();
   else if (currentPage==="standings")    html = renderStandings();
   else if (currentPage==="schedule")     html = renderSchedule();
+  else if (currentPage==="weekly")       html = renderWeeklySchedule();
   else if (currentPage==="stats")        html = renderStats();
   else if (currentPage==="transactions") html = renderTransactions();
   else if (currentPage==="trade")        html = renderTrade();
@@ -2279,6 +2434,7 @@ async function renderPage() {
   else if (currentPage==="draft")        html = renderDraft();
   else if (currentPage==="team")         html = renderTeamPage();
   else if (currentPage==="playoffs")     html = renderPlayoffs();
+  else if (currentPage==="openCup")      html = renderOpenCup();
   else if (currentPage==="tactics")      html = renderTactics();
   else if (currentPage==="saves")        html = await renderSaves();
   $("#pageRoot").innerHTML = html;
@@ -2309,6 +2465,43 @@ function bindPageEvents() {
     await playLiveMatch(next);
     await persist(); await renderPage();
   });
+
+  $("#weekPrevBtn")?.addEventListener("click", async () => { weeklyScheduleWeek = Math.max(1, weeklyScheduleWeek - 1); await renderPage(); });
+  $("#weekNextBtn")?.addEventListener("click", async () => { weeklyScheduleWeek = Math.min(Math.max(...state.schedule.map(m => m.week)), weeklyScheduleWeek + 1); await renderPage(); });
+  $("#weekSelect")?.addEventListener("change", async e => { weeklyScheduleWeek = Number(e.target.value) || 1; await renderPage(); });
+  $("#simWeekOnlyBtn")?.addEventListener("click", async () => {
+    state.schedule.filter(m => m.week === weeklyScheduleWeek && !m.played).forEach(m => simulateMatch(state, m));
+    if (state.calendar.week === weeklyScheduleWeek) { state.calendar.week += 1; state.calendar.absoluteDay += 7; }
+    await persist(); await renderPage(); toast(`Matchday ${weeklyScheduleWeek} simulated.`, "success");
+  });
+  $("#liveWatchWeekBtn")?.addEventListener("click", async () => {
+    const games = state.schedule.filter(m => m.week === weeklyScheduleWeek);
+    for (const match of games) {
+      if (!match.played) simulateMatch(state, match);
+      await playLiveMatch(match);
+      if (simAbortRequested) break;
+    }
+    if (!simAbortRequested && state.calendar.week === weeklyScheduleWeek) { state.calendar.week += 1; state.calendar.absoluteDay += 7; }
+    await persist(); await renderPage();
+  });
+  $$(".watch-week-match-btn").forEach(btn => btn.addEventListener("click", async () => {
+    const match = state.schedule.find(m => m.id === btn.dataset.id);
+    if (!match) return;
+    if (!match.played) simulateMatch(state, match);
+    await playLiveMatch(match);
+    await persist(); await renderPage();
+  }));
+  $$(".sim-week-match-btn").forEach(btn => btn.addEventListener("click", async () => {
+    const match = state.schedule.find(m => m.id === btn.dataset.id);
+    if (!match || match.played) return;
+    simulateMatch(state, match);
+    await persist(); await renderPage();
+  }));
+  $$(".nav-jump-btn").forEach(btn => btn.addEventListener("click", async () => {
+    currentPage = btn.dataset.targetPage || "dashboard";
+    $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page === currentPage));
+    await renderPage();
+  }));
 
 
   $("#tradePartnerSelect")?.addEventListener("change", async e => {
@@ -2556,6 +2749,25 @@ function bindTopLevel() {
       await persist();
     }
   });
+
+  const playBtn = $("#playMenuBtn");
+  const playDrop = $("#playMenuDropdown");
+  playBtn?.addEventListener("click", e => { e.stopPropagation(); playDrop?.classList.toggle("hidden"); });
+  document.addEventListener("click", () => playDrop?.classList.add("hidden"));
+  $$(".play-menu-item").forEach(btn => btn.addEventListener("click", async e => {
+    e.stopPropagation();
+    playDrop?.classList.add("hidden");
+    const action = btn.dataset.simAction;
+    if (!state) return;
+    if (action === "week") return $("#simWeekBtn")?.click();
+    if (action === "weeklive") { currentPage = "weekly"; weeklyScheduleWeek = state.calendar.week; await renderPage(); return; }
+    if (action === "month") return $("#simMonthBtn")?.click();
+    if (action === "tradeDeadline") return $("#simToDraftBtn")?.click();
+    if (action === "playoffs") { await advanceUntil(() => state.season.phase === "Playoffs"); await persist(); await renderPage(); return; }
+    if (action === "extensions") return $("#simToExtensionsBtn")?.click();
+    if (action === "freeAgency") return $("#simToFABtn")?.click();
+    if (action === "nextSeason") return $("#simYearBtn")?.click();
+  }));
 
   $("#simOneBtn")?.addEventListener("click", async () => {
     if (!state) return;

@@ -68,9 +68,24 @@
 
   <div id="appShell" class="app-shell hidden">
     <header class="topbar">
-      <div class="brand-block">
-        <div class="brand-title">MLS GM 2026</div>
-        <div class="brand-sub">Front office simulator</div>
+      <div class="topbar-left">
+        <div class="brand-block">
+          <div class="brand-title">MLS GM 2026</div>
+          <div class="brand-sub">Front office simulator</div>
+        </div>
+        <div class="play-menu-wrap">
+          <button id="playMenuBtn" class="play-menu-btn" type="button">Play ▾</button>
+          <div id="playMenuDropdown" class="play-menu-dropdown hidden">
+            <button class="play-menu-item" data-sim-action="week">One week</button>
+            <button class="play-menu-item" data-sim-action="weeklive">One week (live)</button>
+            <button class="play-menu-item" data-sim-action="month">One month</button>
+            <button class="play-menu-item" data-sim-action="tradeDeadline">Until draft</button>
+            <button class="play-menu-item" data-sim-action="playoffs">Until playoffs</button>
+            <button class="play-menu-item" data-sim-action="extensions">Until extensions</button>
+            <button class="play-menu-item" data-sim-action="freeAgency">Until free agency</button>
+            <button class="play-menu-item" data-sim-action="nextSeason">To next season</button>
+          </div>
+        </div>
       </div>
       <div class="top-meta">
         <div class="meta-box"><span>Club</span><strong id="metaClub">&#8212;</strong></div>
@@ -96,12 +111,14 @@
         <button class="nav-btn" data-page="academy">&#127979; Youth Academy</button>
         <button class="nav-btn" data-page="standings">&#127942; Standings</button>
         <button class="nav-btn" data-page="schedule">&#128197; Schedule</button>
+        <button class="nav-btn" data-page="weekly">&#128198; Weekly Schedule</button>
         <button class="nav-btn" data-page="stats">&#128200; Player Stats</button>
         <button class="nav-btn" data-page="transactions">&#128203; Transactions</button>
         <button class="nav-btn" data-page="trade">&#128260; Trade Center</button>
         <button class="nav-btn" data-page="budget">&#128176; Budget</button>
         <button class="nav-btn" data-page="draft">&#127891; SuperDraft</button>
         <button class="nav-btn" data-page="playoffs">&#129351; Playoffs</button>
+        <button class="nav-btn" data-page="openCup">&#127942; U.S. Open Cup</button>
         <button class="nav-btn" data-page="saves">&#128190; Saves</button>
 
         <div class="side-section-title spaced">Simulation</div>

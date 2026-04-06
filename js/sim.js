@@ -5,6 +5,8 @@ import {
   POSITIONS,
   NATIONS,
   COLLEGES,
+  US_OPEN_CUP_MLS_2026,
+  US_OPEN_CUP_OPEN_FIELD_2026,
 } from "./data.js";
 
 import {
@@ -34,6 +36,129 @@ function shortName(name) {
     .replace("Football Club", "FC")
     .replace("Sounders FC", "Sounders")
     .replace("Whitecaps FC", "Whitecaps");
+}
+
+function estimateSalaryByProfile(position, ovr, age, rosterRole) {
+  const youthDiscount = age <= 20 ? 0.74 : age <= 23 ? 0.9 : age >= 32 ? 0.86 : 1;
+  const roleMult = rosterRole === "Senior" ? 1 : rosterRole === "Supplemental" ? 0.72 : 0.52;
+  let base;
+  if (ovr >= 79) base = randInt(3200000, 9200000);
+  else if (ovr >= 76) base = randInt(2000000, 5200000);
+  else if (ovr >= 73) base = randInt(1200000, 2800000);
+  else if (ovr >= 70) base = randInt(600000, 1500000);
+  else if (ovr >= 67) base = randInt(250000, 700000);
+  else if (ovr >= 63) base = randInt(140000, 350000);
+  else if (ovr >= 58) base = randInt(95000, 190000);
+  else base = randInt(88025, 140000);
+  if (position === "GK" && ovr >= 70) base = Math.round(base * 0.88);
+  return Math.max(88025, Math.round(base * youthDiscount * roleMult));
+}
+
+function openCupRef(type, id) {
+  return `${type}:${id}`;
+}
+
+function parseOpenCupRef(ref) {
+  const [type, ...rest] = String(ref || '').split(':');
+  return { type, id: rest.join(':') };
+}
+
+function resolveOpenCupEntry(state, ref) {
+  const { type, id } = parseOpenCupRef(ref);
+  if (type === 'mls') {
+    const team = state.teams.find(t => t.id === id);
+    return team ? { kind: 'mls', id: team.id, name: team.name, shortName: team.shortName, strength: teamOverall(state, team.id), conference: team.conference } : null;
+  }
+  const guest = state.openCup?.guestTeams?.find(t => t.id === id);
+  return guest ? { kind: 'guest', id: guest.id, name: guest.name, shortName: guest.shortName || guest.name, strength: guest.strength || 58 } : null;
+}
+
+function simulateOpenCupMatch(state, match) {
+  const home = resolveOpenCupEntry(state, match.homeRef);
+  const away = resolveOpenCupEntry(state, match.awayRef);
+  if (!home || !away) return null;
+  const homePower = home.strength + randFloat(-2.5, 2.5);
+  const awayPower = away.strength + randFloat(-2.5, 2.5);
+  const baseXg = 1.18;
+  let homeXg = clamp(baseXg + (homePower - awayPower) * 0.045 + 0.18, 0.35, 3.2);
+  let awayXg = clamp(baseXg + (awayPower - homePower) * 0.045, 0.3, 3.0);
+  let homeGoals = poisson(homeXg);
+  let awayGoals = poisson(awayXg);
+  if (homeGoals === awayGoals) {
+    homeGoals += poisson(homeXg * 0.18);
+    awayGoals += poisson(awayXg * 0.18);
+    if (homeGoals === awayGoals) {
+      homeGoals += randInt(0, 1);
+      awayGoals += homeGoals === awayGoals ? 1 : 0;
+    }
+  }
+  match.played = true;
+  match.result = {
+    homeGoals, awayGoals,
+    homeName: home.name, awayName: away.name,
+    homeXg: Number(homeXg.toFixed(2)), awayXg: Number(awayXg.toFixed(2)),
+  };
+  match.winnerRef = homeGoals > awayGoals ? match.homeRef : match.awayRef;
+  return match.result;
+}
+
+function advanceOpenCupWeek(state, week) {
+  ensureOpenCupState(state);
+  const oc = state.openCup;
+  if (!oc || oc.year !== state.season.year || oc.championRef) return;
+  const roundOrder = ['roundOf32','roundOf16','quarterfinals','semifinals','final'];
+  for (const round of roundOrder) {
+    const matches = oc.rounds?.[round] || [];
+    const due = matches.filter(m => m.week === week && !m.played);
+    if (!due.length) continue;
+    due.forEach(m => simulateOpenCupMatch(state, m));
+    if (matches.every(m => m.played)) {
+      const winners = matches.map(m => m.winnerRef).filter(Boolean);
+      if (round === 'final') {
+        oc.championRef = winners[0] || null;
+        oc.currentRound = 'Complete';
+        if (oc.championRef) addTransaction(state, 'U.S. Open Cup', `${resolveOpenCupEntry(state, oc.championRef)?.name || 'Unknown'} won the U.S. Open Cup.`);
+      } else {
+        const nextMap = { roundOf32: ['roundOf16', 9], roundOf16: ['quarterfinals', 12], quarterfinals: ['semifinals', 24], semifinals: ['final', 31] };
+        const [nextRound, nextWeek] = nextMap[round];
+        if (!oc.rounds[nextRound]?.length) {
+          oc.rounds[nextRound] = [];
+          for (let i = 0; i < winners.length; i += 2) {
+            const a = winners[i];
+            const b = winners[i + 1];
+            if (!a || !b) continue;
+            oc.rounds[nextRound].push({ id: uuid('ocm'), round: nextRound, week: nextWeek, played: false, homeRef: Math.random() < 0.5 ? a : b, awayRef: Math.random() < 0.5 ? b : a });
+          }
+          oc.currentRound = nextRound;
+        }
+      }
+    }
+    break;
+  }
+}
+
+export function ensureOpenCupState(state) {
+  if (state.openCup && state.openCup.year === state.season.year) return state.openCup;
+  const mlsTeams = state.teams.filter(t => US_OPEN_CUP_MLS_2026.includes(t.name));
+  const guestTeams = US_OPEN_CUP_OPEN_FIELD_2026.map(name => ({ id: uuid('ocg'), name, shortName: name.replace(/ SC$| FC$/,'').slice(0, 18), strength: randInt(51, 66) }));
+  const shuffledGuests = [...guestTeams].sort(() => Math.random() - 0.5);
+  const shuffledMls = [...mlsTeams].sort(() => Math.random() - 0.5);
+  const roundOf32 = shuffledMls.map((team, idx) => ({
+    id: uuid('ocm'),
+    round: 'roundOf32',
+    week: 6,
+    played: false,
+    homeRef: Math.random() < 0.5 ? openCupRef('mls', team.id) : openCupRef('guest', shuffledGuests[idx].id),
+    awayRef: Math.random() < 0.5 ? openCupRef('guest', shuffledGuests[idx].id) : openCupRef('mls', team.id),
+  }));
+  state.openCup = {
+    year: state.season.year,
+    guestTeams,
+    rounds: { roundOf32, roundOf16: [], quarterfinals: [], semifinals: [], final: [] },
+    currentRound: 'roundOf32',
+    championRef: null,
+  };
+  return state.openCup;
 }
 
 function posBucket(pos) {
@@ -288,33 +413,28 @@ function makePlayer(club, idx, forcedPos = null) {
   const preferredFoot = Math.random() < 0.76 ? "Right" : "Left";
   const position = normalizeGeneratedPosition(rawPosition, preferredFoot);
 
-  let qualityBase = club.marketRating + randInt(-10, 10);
-  if (idx < 3)  qualityBase += 10;
-  if (idx > 20) qualityBase -= 6;
+  let qualityBase = club.marketRating + randInt(-9, 9);
+  if (idx < 3) qualityBase += 11;
+  if (idx > 20) qualityBase -= 5;
 
-  const homegrown  = age <= 22 && Math.random() < 0.22;
+  const homegrown  = age <= 22 && Math.random() < 0.18;
+  const rosterRole = idx < 18 ? "Senior" : idx < 24 ? "Supplemental" : "Reserve";
   const attributes = makeAttributes(position, clamp(qualityBase, 48, 84), age);
   const ovr        = overall({ attributes });
-  const potential  = clamp(ovr + randInt(-3, 14) + (age <= 22 ? 8 : 0), ovr, 93);
+  const potential  = clamp(ovr + randInt(-2, 12) + (age <= 22 ? 6 : 0), ovr, 91);
 
-  const salaryBase = Math.max(
-    age <= 21 ? 88025 : 113400,
-    Math.round(ovr * ovr * 90 + randInt(-50000, 100000))
-  );
+  const salaryBase = estimateSalaryByProfile(position, ovr, age, rosterRole);
 
   let designation = null;
-  if      (idx === 0 && ovr >= 76 && Math.random() < 0.65) designation = "DP";
-  else if (age <= 22 && ovr >= 64 && Math.random() < 0.24) designation = "U22";
-  else if (salaryBase > MLS_RULES.maxBudgetCharge && Math.random() < 0.42) designation = "TAM";
+  if ((idx < 2 && ovr >= 74) || (ovr >= 77 && Math.random() < 0.42)) designation = "DP";
+  else if (age <= 22 && potential >= 70 && ovr >= 60 && Math.random() < 0.28) designation = "U22";
+  else if ((salaryBase > MLS_RULES.maxBudgetCharge && ovr >= 67) || (ovr >= 70 && Math.random() < 0.35)) designation = "TAM";
 
-  const salary =
-    designation === "DP"
-      ? Math.max(salaryBase, randInt(1400000, 6200000))
-      : designation === "TAM"
-        ? clamp(Math.max(salaryBase, randInt(850000, 1750000)), 820000, 1803125)
-        : salaryBase;
-
-  const rosterRole = idx < 18 ? "Senior" : idx < 24 ? "Supplemental" : "Reserve";
+  const salary = designation === "DP"
+    ? Math.max(salaryBase, randInt(2200000, 8200000))
+    : designation === "TAM"
+      ? clamp(Math.max(salaryBase, randInt(900000, 2200000)), 850000, 2200000)
+      : salaryBase;
 
   return hydratePlayer({
     id:           uuid("p"),
@@ -354,10 +474,10 @@ function makePlayer(club, idx, forcedPos = null) {
 function makeAcademyPlayer(team) {
   const age        = randInt(15, 18);
   const position   = pick(POSITIONS);
-  const quality    = randInt(50, 68);
+  const quality    = randInt(42, 56);
   const attributes = makeAttributes(position, quality, age);
   const ovr        = overall({ attributes });
-  const potential  = clamp(ovr + randInt(10, 24), ovr + 6, 94);
+  const potential  = clamp(ovr + randInt(6, 14), ovr + 4, 82);
   const nationality =
     team.country === "Canada" ? pick(["Canada", "USA"]) : "USA";
 
@@ -1462,6 +1582,7 @@ function finalizeOffseason(state) {
     team.finances.cash += randInt(-2000000, 8000000);
   }
   autoAssignAllDesignations(state);
+  ensureOpenCupState(state);
 
   ensureDraftPickLedger(state, state.season.year + 1, 3);
   state.draft = {
@@ -1678,11 +1799,11 @@ function ageAndDevelop(state) {
     academy.forEach(a => {
       a.age += 1;
       for (const key of Object.keys(a.attributes)) {
-        a.attributes[key] = clamp(a.attributes[key] + randInt(0, 2), 25, 98);
+        a.attributes[key] = clamp(a.attributes[key] + randInt(0, 1), 25, 98);
       }
       a.overall   = overall(a);
-      a.potential = clamp(a.potential + randInt(-1, 2), a.overall, 95);
-      a.morale    = clamp(a.morale + randInt(-4, 6), 20, 100);
+      a.potential = clamp(a.potential + randInt(-1, 1), a.overall, 86);
+      a.morale    = clamp(a.morale + randInt(-5, 4), 20, 100);
     });
     while ((state.academies[team.id] || []).length < state.settings.academyPerTeam) {
       state.academies[team.id].push(makeAcademyPlayer(team));
@@ -1730,6 +1851,7 @@ function resetStandingsAndSchedule(state) {
   makeSchedule(state);
   state.playoffs    = null;
   state.pendingOffer = null;
+  ensureOpenCupState(state);
 }
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -1810,6 +1932,7 @@ export function createNewState(options) {
 
   autoAssignAllDesignations(state);
   makeSchedule(state);
+  ensureOpenCupState(state);
   seedFreeAgents(state);
   ensureDraftPickLedger(state, state.season.year + 1, 3);
   addTransaction(state, "League", `League initialized for ${state.season.year}.`);
@@ -1929,10 +2052,12 @@ export function rejectPendingOffer(state) {
 
 export function advanceOneWeek(state) {
   if (state.season.phase === "Regular Season") {
+    ensureOpenCupState(state);
     const matches = state.schedule.filter(
       m => m.week === state.calendar.week && !m.played
     );
     for (const match of matches) simulateMatch(state, match);
+    advanceOpenCupWeek(state, state.calendar.week);
 
     maybeInjurePlayers(state);
     maybeExternalOffer(state);
