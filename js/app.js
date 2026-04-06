@@ -55,6 +55,10 @@ let tradePartnerTeamId = "";
 let selectedTeamId = "";
 let simAbortRequested = false;
 let pendingOpenInNewTab = null;
+let simView = "fitness";
+let simLeftView = "home";
+let simRightView = "away";
+let livePitchScene = null;
 
 const tableSortState = {
   roster:        { key: "positionOrder", dir: "asc" },
@@ -370,6 +374,20 @@ function bindOverlayButtons() {
   document.getElementById("sim-skip-btn")
     ?.addEventListener("click", () => { simSkipped = true; simPaused = false; });
 
+  document.querySelectorAll(".msim-tab-btn").forEach(btn => btn.addEventListener("click", () => {
+    simView = btn.dataset.view || "fitness";
+    document.querySelectorAll(".msim-tab-btn").forEach(b => b.classList.toggle("active", b === btn));
+    if (livePitchScene) renderLiveStatBars(livePitchScene.lastStats || {}, livePitchScene.lastMatch || null, livePitchScene.lastMinute || 1);
+  }));
+
+  document.querySelectorAll(".msim-side-tab").forEach(btn => btn.addEventListener("click", () => {
+    const parent = btn.closest('.msim-side-switcher');
+    parent?.querySelectorAll('.msim-side-tab').forEach(b => b.classList.toggle('active', b === btn));
+    if (btn.dataset.sideView === 'events' || btn.dataset.sideView === 'home') simLeftView = btn.dataset.sideView;
+    else simRightView = btn.dataset.sideView;
+    if (livePitchScene?.lastMatch) renderMiniLineups(livePitchScene.lastMatch, livePitchScene.lastMinute || 1);
+  }));
+
   const overlay = document.getElementById("match-sim-overlay");
   if (overlay && !document.getElementById("sim-close-btn")) {
     const cb = document.createElement("button");
@@ -413,45 +431,303 @@ function addSimEvent(minute, html, style = "") {
   wrap.prepend(row);
 }
 
-function renderMiniLineups(match) {
+function defaultLiveFormation(teamId) {
+  const pool = ["4-3-3", "4-2-3-1", "4-4-2", "4-1-4-1", "3-5-2"];
+  const n = String(teamId || "").split("").reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  return pool[n % pool.length];
+}
+
+function getLiveFormation(teamId) {
+  return teamId === state?.userTeamId ? (tactics?.formation || "4-3-3") : defaultLiveFormation(teamId);
+}
+
+function getLineupForFormation(teamId, formation, benchCount = 7) {
+  const players = [...getTeamPlayers(state, teamId)].sort((a, b) => (b.overall - a.overall) || (b.potential - a.potential));
+  const positions = FORMATIONS[formation] || FORMATIONS["4-3-3"];
+  const used = new Set();
+  const xi = positions.map(pos => {
+    let player = players.find(p => !used.has(p.id) && p.position === pos);
+    if (!player) {
+      const fallbackMap = {
+        LB: ["LM", "CB", "RB"], RB: ["RM", "CB", "LB"],
+        LM: ["LW", "CM", "LB"], RM: ["RW", "CM", "RB"],
+        CDM: ["CM", "CB"], CM: ["CDM", "CAM", "LM", "RM"], CAM: ["CM", "ST", "LW", "RW"],
+        LW: ["LM", "RW", "ST"], RW: ["RM", "LW", "ST"], ST: ["CAM", "LW", "RW"], CB: ["CDM", "LB", "RB"], GK: []
+      };
+      const fallbacks = fallbackMap[pos] || [];
+      player = players.find(p => !used.has(p.id) && fallbacks.includes(p.position));
+    }
+    if (!player) player = players.find(p => !used.has(p.id));
+    if (player) used.add(player.id);
+    return { position: pos, player };
+  });
+  const bench = players.filter(p => !used.has(p.id)).slice(0, benchCount);
+  return { xi, bench };
+}
+
+function getLivePlayerEnergy(player, minute) {
+  const stamina = player?.detailed?.physical?.stamina ?? player?.attributes?.physical ?? 62;
+  const baseDrop = minute * (0.36 + Math.max(0, 72 - stamina) / 240);
+  return Math.max(36, Math.min(100, Math.round(100 - baseDrop + Math.sin((minute + (player?.overall || 60)) * 0.12) * 5)));
+}
+
+function renderLineupRows(entries, minute = 1) {
+  return entries.map(({ position, player }) => {
+    if (!player) return `<div class="msim-lineup-row"><div class="msim-lineup-pos">${escapeHtml(position || "—")}</div><div class="msim-lineup-name">Open Slot</div><div class="msim-lineup-meta">—</div></div>`;
+    const energy = getLivePlayerEnergy(player, minute);
+    return `<div class="msim-lineup-row"><div class="msim-lineup-pos">${escapeHtml(position || player.position || "—")}</div><div class="msim-lineup-name">${escapeHtml(player.name)}</div><div class="msim-lineup-meta">${player.overall} OVR</div><div class="msim-energy"><div class="msim-energy-fill" style="width:${energy}%"></div></div></div>`;
+  }).join("");
+}
+
+function renderBenchRows(players, minute = 1) {
+  return players.map(player => {
+    const energy = getLivePlayerEnergy(player, minute);
+    return `<div class="msim-bench-row"><div class="msim-lineup-pos">${escapeHtml(player.position)}</div><div class="msim-lineup-name">${escapeHtml(player.name)}</div><div class="msim-lineup-meta">${player.overall}</div><div class="msim-energy"><div class="msim-energy-fill" style="width:${energy}%"></div></div></div>`;
+  }).join("") || `<div class="note">No bench players listed.</div>`;
+}
+
+function renderMiniLineups(match, minute = 1) {
   const ht = byTeamId(match.homeTeamId);
   const at = byTeamId(match.awayTeamId);
-  const hxi = getTeamPlayers(state, ht.id).slice(0, 11);
-  const axi = getTeamPlayers(state, at.id).slice(0, 11);
+  const homePack = livePitchScene?.homePack || getLineupForFormation(ht.id, getLiveFormation(ht.id));
+  const awayPack = livePitchScene?.awayPack || getLineupForFormation(at.id, getLiveFormation(at.id));
   const hTitle = document.getElementById("msim-home-lineup-title");
   const aTitle = document.getElementById("msim-away-lineup-title");
   const hList  = document.getElementById("msim-home-lineup");
   const aList  = document.getElementById("msim-away-lineup");
+  const eventsWrap = document.getElementById("sim-events-wrap");
   if (hTitle) hTitle.textContent = `${ht.shortName || ht.name} XI`;
-  if (aTitle) aTitle.textContent = `${at.shortName || at.name} XI`;
-  const row = p => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--line);font-size:11px;"><span>${escapeHtml(p.name)}</span><span>${p.overall}</span></div>`;
-  if (hList) hList.innerHTML = hxi.map(row).join("");
-  if (aList) aList.innerHTML = axi.map(row).join("");
+  if (aTitle) aTitle.textContent = simRightView === "bench" ? `${at.shortName || at.name} Bench` : `${at.shortName || at.name} XI`;
+  if (eventsWrap) eventsWrap.classList.toggle("hidden", simLeftView !== "events");
+  if (hList) hList.innerHTML = simLeftView === "events" ? "" : renderLineupRows(homePack.xi, minute);
+  if (aList) aList.innerHTML = simRightView === "bench" ? renderBenchRows(awayPack.bench, minute) : renderLineupRows(awayPack.xi, minute);
 }
 
-function renderLiveStatBars(stats) {
+function buildStatCard(label, left, right, leftPct = 50) {
+  const pct = Math.max(0, Math.min(100, Number(leftPct) || 50));
+  return `<div class="msim-stat-card"><div class="lbl">${escapeHtml(label)}</div><div class="vals"><strong>${escapeHtml(String(left))}</strong><span>vs</span><strong>${escapeHtml(String(right))}</strong></div><div class="msim-compare-bar"><span style="width:${pct}%"></span><span style="width:${100 - pct}%"></span></div></div>`;
+}
+
+function renderLiveStatBars(stats, match = null, minute = 1) {
   const el = document.getElementById("msim-live-stats");
   if (!el) return;
-  const rows = [
-    ["Possession", `${stats.homePoss||50}%`, `${stats.awayPoss||50}%`],
-    ["Shots",      stats.homeShots||0,        stats.awayShots||0],
-    ["On Target",  stats.homeSot||0,          stats.awaySot||0],
-    ["xG",         (stats.homeXg||0).toFixed(2), (stats.awayXg||0).toFixed(2)],
-    ["Yellows",    stats.homeYellows||0,       stats.awayYellows||0],
-    ["Reds",       stats.homeReds||0,          stats.awayReds||0],
-  ];
-  el.innerHTML = rows.map(([label, l, r]) => `
-    <div style="display:grid;grid-template-columns:42px 1fr 42px;gap:6px;align-items:center;margin-bottom:7px;font-size:11px;">
-      <span style="text-align:center;">${l}</span>
-      <div>
-        <div style="text-align:center;font-size:9px;color:var(--muted);margin-bottom:2px;">${label}</div>
-        <div style="height:5px;background:var(--bg3);border-radius:6px;overflow:hidden;display:flex;">
-          <div style="width:50%;background:var(--accent);"></div>
-          <div style="width:50%;background:#f97316;"></div>
-        </div>
-      </div>
-      <span style="text-align:center;">${r}</span>
-    </div>`).join("");
+  const hp = livePitchScene?.homePack;
+  const ap = livePitchScene?.awayPack;
+  const avg = arr => arr.length ? (arr.reduce((s, v) => s + v, 0) / arr.length) : 0;
+  const homeEnergy = hp ? Math.round(avg(hp.xi.map(({ player }) => getLivePlayerEnergy(player, minute)))) : 78;
+  const awayEnergy = ap ? Math.round(avg(ap.xi.map(({ player }) => getLivePlayerEnergy(player, minute)))) : 78;
+  const homeAvg = hp ? avg(hp.xi.map(({ player }) => player?.overall || 0)).toFixed(1) : "0.0";
+  const awayAvg = ap ? avg(ap.xi.map(({ player }) => player?.overall || 0)).toFixed(1) : "0.0";
+  const homePress = state?.userTeamId === match?.homeTeamId ? (tactics?.pressingIntensity || "Medium") : "Balanced";
+  const awayPress = state?.userTeamId === match?.awayTeamId ? (tactics?.pressingIntensity || "Medium") : "Balanced";
+  const poss = stats.homePoss || 50;
+  const xgTotal = (stats.homeXg || 0) + (stats.awayXg || 0) || 1;
+  if (simView === "ratings") {
+    const homeTop = hp?.xi.slice().sort((a, b) => (b.player?.overall || 0) - (a.player?.overall || 0)).slice(0, 3).map(({ player }) => `${player?.name?.split(" ").pop() || "—"} ${player?.overall || 0}`).join(" · ") || "—";
+    const awayTop = ap?.xi.slice().sort((a, b) => (b.player?.overall || 0) - (a.player?.overall || 0)).slice(0, 3).map(({ player }) => `${player?.name?.split(" ").pop() || "—"} ${player?.overall || 0}`).join(" · ") || "—";
+    el.innerHTML = [
+      buildStatCard("XI Overall", homeAvg, awayAvg, (Number(homeAvg) / (Number(homeAvg) + Number(awayAvg) || 1)) * 100),
+      buildStatCard("Top 3", homeTop, awayTop, 50),
+      buildStatCard("Chance Creation", `${stats.homeSot || 0} SOT`, `${stats.awaySot || 0} SOT`, ((stats.homeSot || 0) / (((stats.homeSot || 0) + (stats.awaySot || 0)) || 1)) * 100),
+    ].join("");
+  } else if (simView === "gameplan") {
+    el.innerHTML = [
+      buildStatCard("Formation", getLiveFormation(match?.homeTeamId), getLiveFormation(match?.awayTeamId), 50),
+      buildStatCard("Pressing", homePress, awayPress, 50),
+      buildStatCard("Attack Flow", document.getElementById("msim-attack-chip")?.textContent || "Build-up play", document.getElementById("msim-possession-chip")?.textContent || "Balanced", 50),
+    ].join("");
+  } else if (simView === "stats") {
+    el.innerHTML = [
+      buildStatCard("Possession", `${stats.homePoss || 50}%`, `${stats.awayPoss || 50}%`, poss),
+      buildStatCard("Shots", stats.homeShots || 0, stats.awayShots || 0, ((stats.homeShots || 0) / (((stats.homeShots || 0) + (stats.awayShots || 0)) || 1)) * 100),
+      buildStatCard("xG", (stats.homeXg || 0).toFixed(2), (stats.awayXg || 0).toFixed(2), ((stats.homeXg || 0) / xgTotal) * 100),
+      buildStatCard("Cards", `${stats.homeYellows || 0}Y ${stats.homeReds || 0}R`, `${stats.awayYellows || 0}Y ${stats.awayReds || 0}R`, 50),
+      buildStatCard("Pass Momentum", document.getElementById("msim-possession-chip")?.textContent || "Balanced", document.getElementById("msim-attack-chip")?.textContent || "Build-up play", 50),
+      buildStatCard("Minute", `${minute}'`, `${minute}'`, 50),
+    ].join("");
+  } else {
+    el.innerHTML = [
+      buildStatCard("Fitness", `${homeEnergy}%`, `${awayEnergy}%`, homeEnergy),
+      buildStatCard("Possession", `${stats.homePoss || 50}%`, `${stats.awayPoss || 50}%`, poss),
+      buildStatCard("Shots", stats.homeShots || 0, stats.awayShots || 0, ((stats.homeShots || 0) / (((stats.homeShots || 0) + (stats.awayShots || 0)) || 1)) * 100),
+    ].join("");
+  }
+}
+
+function buildLivePitchScene(match) {
+  const ht = byTeamId(match.homeTeamId);
+  const at = byTeamId(match.awayTeamId);
+  const homeFormation = getLiveFormation(ht.id);
+  const awayFormation = getLiveFormation(at.id);
+  const homePack = getLineupForFormation(ht.id, homeFormation);
+  const awayPack = getLineupForFormation(at.id, awayFormation);
+  return {
+    matchId: match.id,
+    homeTeamId: match.homeTeamId,
+    awayTeamId: match.awayTeamId,
+    homeFormation,
+    awayFormation,
+    homePack,
+    awayPack,
+    phase: 0,
+    momentum: "balanced",
+    ballOwner: "home",
+    lastEventText: "Build-up play",
+  };
+}
+
+function drawHumanoid(ctx, x, y, color, accent, facing = 1, withBall = false, number = "") {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.shadowColor = "rgba(0,0,0,.35)";
+  ctx.shadowBlur = 12;
+  ctx.fillStyle = "rgba(0,0,0,.18)";
+  ctx.beginPath();
+  ctx.ellipse(0, 22, 10, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = "#f2d3bc";
+  ctx.beginPath();
+  ctx.arc(0, -13, 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(-8, -6, 16, 22, 4);
+  ctx.fill();
+  ctx.fillStyle = accent;
+  ctx.fillRect(-2, -6, 4, 22);
+  ctx.strokeStyle = "rgba(10,14,25,.8)";
+  ctx.lineWidth = 2.4;
+  const armSwing = Math.sin((livePitchScene?.phase || 0) * 3 + x * 0.01) * 5;
+  const legSwing = Math.sin((livePitchScene?.phase || 0) * 4 + y * 0.01) * 6;
+  ctx.beginPath();
+  ctx.moveTo(-7, -1); ctx.lineTo(-14 * facing, 5 + armSwing * 0.25);
+  ctx.moveTo(7, -1); ctx.lineTo(14 * facing, 5 - armSwing * 0.25);
+  ctx.moveTo(-4, 16); ctx.lineTo(-7 * facing, 27 + legSwing * 0.25);
+  ctx.moveTo(4, 16); ctx.lineTo(7 * facing, 27 - legSwing * 0.25);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255,255,255,.92)";
+  ctx.font = "700 8px sans-serif";
+  ctx.textAlign = "center";
+  if (number) ctx.fillText(number, 0, 4);
+  if (withBall) {
+    ctx.fillStyle = "#f9fafb";
+    ctx.beginPath();
+    ctx.arc(11 * facing, 19, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawLivePitch(scene, minute, event = null) {
+  const canvas = document.getElementById("msim-pitch-canvas");
+  if (!canvas || !scene) return;
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const fieldX = 70, fieldY = 60, fieldW = w - 140, fieldH = h - 120;
+  const stripeW = fieldW / 12;
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = i % 2 === 0 ? "#102c35" : "#0b2330";
+    ctx.fillRect(fieldX + i * stripeW, fieldY, stripeW, fieldH);
+  }
+  ctx.strokeStyle = "rgba(255,255,255,.75)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(fieldX, fieldY, fieldW, fieldH);
+  ctx.beginPath();
+  ctx.moveTo(fieldX + fieldW / 2, fieldY); ctx.lineTo(fieldX + fieldW / 2, fieldY + fieldH); ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(fieldX + fieldW / 2, fieldY + fieldH / 2, 64, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(fieldX + fieldW / 2, fieldY + fieldH / 2, 3, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,255,255,.85)"; ctx.fill();
+  const boxW = 172, boxH = 220;
+  ctx.strokeRect(fieldX, fieldY + fieldH / 2 - boxH / 2, boxW, boxH);
+  ctx.strokeRect(fieldX + fieldW - boxW, fieldY + fieldH / 2 - boxH / 2, boxW, boxH);
+  ctx.strokeRect(fieldX, fieldY + fieldH / 2 - 110 / 2, 62, 110);
+  ctx.strokeRect(fieldX + fieldW - 62, fieldY + fieldH / 2 - 110 / 2, 62, 110);
+  ctx.beginPath(); ctx.arc(fieldX + 108, fieldY + fieldH / 2, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(fieldX + fieldW - 108, fieldY + fieldH / 2, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(fieldX + 108, fieldY + fieldH / 2, 60, -0.92, 0.92); ctx.stroke();
+  ctx.beginPath(); ctx.arc(fieldX + fieldW - 108, fieldY + fieldH / 2, 60, Math.PI - 0.92, Math.PI + 0.92); ctx.stroke();
+
+  const homeColor = "#efb2cd";
+  const awayColor = "#53565b";
+  const homeAccent = "#fbe7f1";
+  const awayAccent = "#d5d7db";
+
+  const homeLayout = FORMATION_LAYOUT[scene.homeFormation] || FORMATION_LAYOUT["4-3-3"];
+  const awayLayout = FORMATION_LAYOUT[scene.awayFormation] || FORMATION_LAYOUT["4-3-3"];
+  const phase = scene.phase;
+  const homeAttackBias = scene.momentum === "homeAttack" ? 0.11 : scene.momentum === "awayAttack" ? -0.04 : 0.03;
+  const awayAttackBias = scene.momentum === "awayAttack" ? 0.11 : scene.momentum === "homeAttack" ? -0.04 : 0.03;
+
+  const mapHome = (slot, idx) => {
+    const baseX = fieldX + (1 - slot.y) * fieldW;
+    const baseY = fieldY + slot.x * fieldH;
+    const wave = Math.sin(phase * 2.2 + idx) * 9;
+    const drift = Math.cos(phase * 1.7 + idx * 0.7) * 7;
+    const press = homeAttackBias * fieldW;
+    return { x: baseX + press + wave, y: baseY + drift };
+  };
+  const mapAway = (slot, idx) => {
+    const baseX = fieldX + slot.y * fieldW;
+    const baseY = fieldY + (1 - slot.x) * fieldH;
+    const wave = Math.sin(phase * 2.1 + idx) * 9;
+    const drift = Math.cos(phase * 1.8 + idx * 0.55) * 7;
+    const press = awayAttackBias * fieldW;
+    return { x: baseX - press + wave, y: baseY + drift };
+  };
+
+  const homeActors = scene.homePack.xi.map((entry, idx) => ({ ...entry, ...mapHome(homeLayout[idx] || { x: .5, y: .5 }, idx) }));
+  const awayActors = scene.awayPack.xi.map((entry, idx) => ({ ...entry, ...mapAway(awayLayout[idx] || { x: .5, y: .5 }, idx) }));
+  const attackSide = event?.side || (scene.ballOwner === "away" ? "away" : "home");
+  const attackingActors = attackSide === "home" ? homeActors : awayActors;
+  const targetIdx = Math.min(attackingActors.length - 1, attackSide === "home" ? 10 : 10);
+  const ballCarrier = attackingActors[targetIdx] || attackingActors[0];
+  const ballTrail = [];
+  const ballX = ballCarrier.x + (attackSide === "home" ? 18 : -18);
+  const ballY = ballCarrier.y + Math.sin(phase * 4) * 4;
+  for (let i = 0; i < 8; i++) ballTrail.push({ x: ballX - (attackSide === "home" ? i * 10 : -i * 10), y: ballY + Math.sin(phase * 4 + i * 0.3) * 2, a: 0.14 - i * 0.014 });
+  for (const pt of ballTrail.reverse()) {
+    ctx.fillStyle = `rgba(255,255,255,${Math.max(pt.a, 0)})`;
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  homeActors.forEach((actor, idx) => drawHumanoid(ctx, actor.x, actor.y, homeColor, homeAccent, 1, attackSide === "home" && idx === targetIdx, String(idx + 1)));
+  awayActors.forEach((actor, idx) => drawHumanoid(ctx, actor.x, actor.y, awayColor, awayAccent, -1, attackSide === "away" && idx === targetIdx, String(idx + 1)));
+
+  ctx.fillStyle = "rgba(255,255,255,.96)";
+  ctx.beginPath();
+  ctx.arc(ballX, ballY, 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  const possessionText = scene.ballOwner === "home" ? `${byTeamId(scene.homeTeamId)?.shortName || 'Home'} in possession` : `${byTeamId(scene.awayTeamId)?.shortName || 'Away'} in possession`;
+  const attackText = event?.type === "goal" ? `${event.scorer || 'Attacker'} breaks through` : scene.lastEventText || "Build-up play";
+  const possChip = document.getElementById("msim-possession-chip");
+  const attackChip = document.getElementById("msim-attack-chip");
+  if (possChip) possChip.textContent = possessionText;
+  if (attackChip) attackChip.textContent = attackText;
+}
+
+async function animateLiveSegment(scene, minute, stats, match, event = null) {
+  const frames = simSpeedKey === "turbo" ? 2 : simSpeedKey === "fast" ? 4 : simSpeedKey === "normal" ? 7 : 10;
+  const wait = Math.max(18, Math.round(simSpeed / Math.max(1, frames)));
+  const biasRoll = Math.random();
+  scene.ballOwner = event?.side || (biasRoll < ((stats.homePoss || 50) / 100) ? "home" : "away");
+  scene.momentum = event?.type === "goal" ? `${scene.ballOwner}Attack` : (scene.ballOwner === "home" ? (biasRoll > 0.72 ? "awayAttack" : "homeAttack") : (biasRoll > 0.72 ? "homeAttack" : "awayAttack"));
+  scene.lastEventText = event?.type === "goal" ? `Final third attack` : ["Patient circulation", "Progressive carry", "Wing combination", "Half-space overload", "Counter-press sequence", "Direct ball in behind"][Math.floor(Math.random() * 6)];
+  for (let i = 0; i < frames; i++) {
+    if (simAbortRequested || simSkipped) break;
+    while (simPaused && !simAbortRequested) await sleep(100);
+    scene.phase += 0.12 + i * 0.005;
+    drawLivePitch(scene, minute, event);
+    renderMiniLineups(match, minute);
+    renderLiveStatBars(stats, match, minute);
+    await sleep(wait);
+  }
 }
 
 
@@ -808,7 +1084,20 @@ async function playLiveMatch(match) {
   if (el("sim-progress-fill")) el("sim-progress-fill").style.width = "0%";
   if (el("sim-close-btn")) el("sim-close-btn").style.display = "";
 
-  renderMiniLineups(match);
+  simView = "fitness";
+  simLeftView = "home";
+  simRightView = "away";
+  document.querySelectorAll(".msim-tab-btn").forEach(b => b.classList.toggle("active", b.dataset.view === simView));
+  const sideTabs = document.querySelectorAll(".msim-side-tab");
+  sideTabs.forEach(b => {
+    const active = [simLeftView, simRightView].includes(b.dataset.sideView);
+    b.classList.toggle("active", active);
+  });
+  livePitchScene = buildLivePitchScene(match);
+  livePitchScene.lastMatch = match;
+  if (el("sim-score-sub")) el("sim-score-sub").textContent = `${state.season.phase} · Tactical View`;
+  renderMiniLineups(match, 1);
+  drawLivePitch(livePitchScene, 1);
 
   const result = match.result || {
     homeGoals:0, awayGoals:0, homeXg:0, awayXg:0,
@@ -818,7 +1107,9 @@ async function playLiveMatch(match) {
     events:[],
   };
 
-  renderLiveStatBars(result);
+  livePitchScene.lastStats = result;
+  livePitchScene.lastMinute = 1;
+  renderLiveStatBars(result, match, 1);
 
   let hg = 0, ag = 0, ei = 0;
   const sortedEvents = [...(result.events || [])].sort((a, b) => a.minute - b.minute);
@@ -849,8 +1140,12 @@ async function playLiveMatch(match) {
 
     if (el("sim-minute")) el("sim-minute").textContent = `${minute}'`;
     if (el("sim-progress-fill")) el("sim-progress-fill").style.width = `${(minute/90)*100}%`;
+    livePitchScene.lastMinute = minute;
+    livePitchScene.lastStats = result;
+    livePitchScene.lastMatch = match;
 
     if (Math.random() < 0.18) addSimEvent(minute, commentary[Math.floor(Math.random() * commentary.length)]);
+    await animateLiveSegment(livePitchScene, minute, result, match, null);
 
     while (ei < sortedEvents.length && sortedEvents[ei].minute <= minute) {
       const ev = sortedEvents[ei];
@@ -872,6 +1167,9 @@ async function playLiveMatch(match) {
         }
       }
 
+      livePitchScene.lastMinute = minute;
+      await animateLiveSegment(livePitchScene, minute, result, match, { type: "goal", side: ev.side, scorer: pName });
+
       addSimEvent(minute,
         `⚽ <b>GOAL!</b> ${escapeHtml(pName)}${assist ? ` <span style="color:var(--muted)">(assist: ${escapeHtml(assist.name)})</span>` : ""}`,
         "background:rgba(34,197,94,0.08);border-left:3px solid var(--green);padding-left:6px;border-radius:3px;");
@@ -891,7 +1189,7 @@ async function playLiveMatch(match) {
       }
       ei++;
     }
-    await sleep(simSpeed);
+    await sleep(simSpeedKey === "turbo" ? 10 : simSpeedKey === "fast" ? 14 : 18);
   }
 
   simInProgress = false;
@@ -899,6 +1197,7 @@ async function playLiveMatch(match) {
     overlay.classList.remove("open");
     document.getElementById("goal-replay-overlay")?.classList.remove("open");
     document.getElementById("var-overlay")?.classList.remove("open");
+    livePitchScene = null;
     return;
   }
 
@@ -908,6 +1207,7 @@ async function playLiveMatch(match) {
     `<b>Full Time.</b> ${escapeHtml(ht.name)} ${result.homeGoals}–${result.awayGoals} ${escapeHtml(at.name)}`,
     "color:var(--accent);font-weight:700;");
   await sleep(400);
+  livePitchScene = null;
 }
 
 // ── Sortable tables ──────────────────────────────────────────────────────────

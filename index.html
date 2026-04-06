@@ -129,39 +129,68 @@
         <div id="sim-minute">0'</div>
         <div id="msim-weather-badge">&#9728;&#65039; Clear</div>
       </div>
-      <div class="match-scoreboard">
+      <div class="match-scoreboard fc-scoreboard">
         <div class="match-teams">
           <div class="match-team" id="sim-home-name">Home</div>
-          <div class="match-score-wrap"><div class="match-score" id="sim-score">0 &#8211; 0</div><div class="match-score-sub">Regular Season Broadcast</div></div>
+          <div class="match-score-wrap">
+            <div class="match-score" id="sim-score">0 &#8211; 0</div>
+            <div class="match-score-sub" id="sim-score-sub">Regular Season Broadcast</div>
+          </div>
           <div class="match-team away" id="sim-away-name">Away</div>
         </div>
-        <div class="flex" style="justify-content:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
-          <button class="small-btn sim-speed-opt" data-speed="slow">&#128034; Slow</button>
-          <button class="small-btn sim-speed-opt active" data-speed="normal">&#9654; Normal</button>
-          <button class="small-btn sim-speed-opt" data-speed="fast">&#9889; Fast</button>
-          <button class="small-btn sim-speed-opt" data-speed="turbo">&#128640; Turbo</button>
-          <button class="small-btn" id="sim-pause-btn">&#9208;&#65039; Pause</button>
-          <button class="small-btn" id="sim-skip-btn">&#9197;&#65039; Skip</button>
-        </div>
-        <div class="match-progress">
-          <div class="match-progress-fill" id="sim-progress-fill" style="width:0%"></div>
-        </div>
+        <div class="match-progress"><div class="match-progress-fill" id="sim-progress-fill" style="width:0%"></div></div>
       </div>
-      <div id="msim-body-grid">
-        <div>
-          <div class="msim-section-title">Live Stats</div>
-          <div id="msim-live-stats"></div>
+
+      <div id="msim-fc-layout">
+        <aside class="msim-side-panel" id="msim-left-rail">
+          <div class="msim-side-switcher"><button class="msim-side-tab active" data-side-view="home">Starting XI</button><button class="msim-side-tab" data-side-view="events">Commentary</button></div>
+          <div class="msim-side-scroll">
+            <div class="msim-section-title" id="msim-home-lineup-title">HOME</div>
+            <div id="msim-home-lineup"></div>
+            <div id="sim-events-wrap" class="hidden"><div class="msim-section-title">Commentary</div><div class="match-events" id="sim-events"></div></div>
+          </div>
+        </aside>
+
+        <section id="msim-center-stage">
+          <div id="msim-pitch-wrap">
+            <canvas id="msim-pitch-canvas" width="1080" height="620"></canvas>
+            <div id="msim-pitch-hud">
+              <div class="msim-possession-chip" id="msim-possession-chip">Balanced</div>
+              <div class="msim-attack-chip" id="msim-attack-chip">Build-up play</div>
+            </div>
+          </div>
+          <div id="msim-tabbar">
+            <button class="msim-tab-btn active" data-view="fitness">Fitness</button>
+            <button class="msim-tab-btn" data-view="ratings">Ratings</button>
+            <button class="msim-tab-btn" data-view="stats">Stats</button>
+            <button class="msim-tab-btn" data-view="gameplan">Gameplan</button>
+          </div>
+          <div id="msim-detail-row">
+            <div id="msim-live-stats"></div>
+          </div>
+        </section>
+
+        <aside class="msim-side-panel" id="msim-right-rail">
+          <div class="msim-side-switcher"><button class="msim-side-tab active" data-side-view="away">Starting XI</button><button class="msim-side-tab" data-side-view="bench">Bench</button></div>
+          <div class="msim-side-scroll">
+            <div class="msim-section-title" id="msim-away-lineup-title">AWAY</div>
+            <div id="msim-away-lineup"></div>
+          </div>
+        </aside>
+      </div>
+
+      <div id="msim-control-bar">
+        <div class="msim-control-left">
+          <button class="small-btn sim-speed-opt" data-speed="slow">Slow</button>
+          <button class="small-btn sim-speed-opt active" data-speed="normal">Normal</button>
+          <button class="small-btn sim-speed-opt" data-speed="fast">Fast</button>
+          <button class="small-btn sim-speed-opt" data-speed="turbo">Turbo</button>
         </div>
-        <div id="msim-col-commentary">
-          <div class="msim-section-title">Commentary</div>
-          <div class="match-events" id="sim-events"></div>
+        <div class="msim-control-center">
+          <button class="small-btn" id="sim-pause-btn">Pause</button>
+          <button class="small-btn" id="sim-skip-btn">Skip Match</button>
         </div>
-        <div id="msim-col-lineups">
-          <div class="msim-section-title" id="msim-home-lineup-title">HOME</div>
-          <div id="msim-home-lineup"></div>
-          <div class="msim-section-title" id="msim-away-lineup-title" style="margin-top:10px;">AWAY</div>
-          <div id="msim-away-lineup"></div>
-        </div>
+        <div class="msim-control-right"><span id="msim-control-hint">Live match simulation</span></div>
       </div>
     </div>
   </div>

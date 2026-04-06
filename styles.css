@@ -1254,3 +1254,462 @@ html[data-theme="light"] {
 #var-decision-badge {
   background: linear-gradient(135deg, rgba(77,163,255,.18), rgba(255,255,255,.05));
 }
+
+/* ==== v5 UI simplification + FC-inspired live sim ==== */
+html, body {
+  background: var(--bg);
+}
+.topbar {
+  grid-template-columns: 180px 1fr auto;
+  padding: 10px 14px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 15;
+}
+.brand-title {
+  font-size: 16px;
+  letter-spacing: 0;
+}
+.brand-sub {
+  font-size: 11px;
+}
+.layout {
+  grid-template-columns: 210px 1fr;
+  min-height: calc(100vh - 63px);
+}
+.sidebar {
+  padding: 12px 10px;
+  background: var(--bg2);
+}
+.nav-btn,
+.action-btn,
+.ghost-btn,
+.primary-btn,
+.icon-btn,
+.small-btn,
+button,
+select,
+input {
+  border-radius: 10px;
+}
+.nav-btn {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text);
+  font-size: 13px;
+}
+.nav-btn:hover,
+.nav-btn.active {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+.action-btn {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  background: var(--bg3);
+  border: 1px solid var(--line);
+  color: var(--text);
+  text-align: left;
+}
+.page-root {
+  padding: 14px;
+  max-width: 1500px;
+}
+.page-head {
+  margin-bottom: 12px;
+}
+.page-title {
+  font-size: 24px;
+}
+.cards {
+  gap: 10px;
+}
+.card, .panel, .panel-lite {
+  border-radius: 12px;
+  box-shadow: none;
+}
+.card, .panel {
+  background: var(--panel);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+thead th {
+  position: sticky;
+  top: 0;
+  background: color-mix(in srgb, var(--bg2) 88%, transparent);
+  z-index: 1;
+}
+th, td {
+  border-bottom: 1px solid var(--line);
+  padding: 9px 10px;
+  font-size: 13px;
+}
+tr:hover td {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+.home-card {
+  width: min(900px, calc(100% - 28px));
+  border-radius: 16px;
+  padding: 28px;
+  box-shadow: none;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg2) 84%, transparent);
+}
+.hero-bg {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(77,163,255,.14), transparent 28%),
+    radial-gradient(circle at 80% 25%, rgba(46,214,128,.08), transparent 26%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+}
+.home-card h1 {
+  line-height: 1.02;
+}
+.modal {
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: none;
+}
+.setup-grid {
+  gap: 12px;
+}
+.setup-modal label,
+.setup-modal input,
+.setup-modal select {
+  display: block;
+  width: 100%;
+}
+.setup-modal label {
+  margin: 8px 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.setup-modal input,
+.setup-modal select {
+  padding: 10px 11px;
+  background: var(--bg3);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+.save-slot-card,
+.bracket-match,
+.bracket-team {
+  border-radius: 12px;
+}
+.club-hero-simple {
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+/* better light theme blending, especially on pick team/setup */
+html[data-theme="light"] .hero-bg {
+  background:
+    radial-gradient(circle at 18% 20%, rgba(29,95,191,.10), transparent 28%),
+    radial-gradient(circle at 82% 18%, rgba(31,155,95,.08), transparent 24%),
+    linear-gradient(180deg, #f6f8fb 0%, #edf2f7 100%);
+}
+html[data-theme="light"] .home-card,
+html[data-theme="light"] .modal,
+html[data-theme="light"] .panel,
+html[data-theme="light"] .card,
+html[data-theme="light"] .panel-lite {
+  background: rgba(255,255,255,0.97);
+}
+html[data-theme="light"] .setup-modal input,
+html[data-theme="light"] .setup-modal select {
+  background: #f4f7fb;
+  border-color: #d7e0ea;
+}
+html[data-theme="light"] .feature-pill,
+html[data-theme="light"] .save-slot-card,
+html[data-theme="light"] .bracket-team,
+html[data-theme="light"] .trade-check {
+  background: #f7f9fc;
+}
+html[data-theme="light"] .nav-btn:hover,
+html[data-theme="light"] .nav-btn.active {
+  background: rgba(29,95,191,.08);
+}
+
+/* live sim redesign */
+#match-sim-overlay {
+  background:
+    radial-gradient(circle at top, rgba(59,130,246,.12), transparent 36%),
+    linear-gradient(180deg, rgba(4,8,16,.94), rgba(4,8,16,.98));
+}
+#match-sim-box {
+  width: min(1600px, 100%);
+  max-height: 96vh;
+  padding: 14px;
+  border-radius: 18px;
+  overflow: auto;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(38,122,224,.10), transparent 30%),
+    linear-gradient(180deg, #09111e 0%, #0a1424 100%);
+}
+#msim-header {
+  margin-bottom: 10px;
+}
+#sim-minute {
+  font-size: 42px;
+  line-height: 1;
+}
+.fc-scoreboard {
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+}
+.match-score {
+  font-size: clamp(44px, 7vw, 72px);
+  color: #42f3ff;
+  text-shadow: 0 0 22px rgba(66,243,255,.2);
+}
+.match-team {
+  font-size: clamp(22px, 2vw, 34px);
+}
+#msim-fc-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(560px, 1fr) 300px;
+  gap: 14px;
+  align-items: stretch;
+}
+.msim-side-panel {
+  border: 1px solid rgba(255,255,255,.08);
+  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+  border-radius: 16px;
+  min-height: 650px;
+  display: flex;
+  flex-direction: column;
+}
+.msim-side-switcher {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 12px 12px 0;
+}
+.msim-side-tab,
+.msim-tab-btn {
+  padding: 9px 12px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.08);
+  color: rgba(255,255,255,.7);
+  cursor: pointer;
+}
+.msim-side-tab.active,
+.msim-tab-btn.active {
+  background: rgba(255,255,255,.11);
+  color: #fff;
+  border-color: rgba(66,243,255,.25);
+}
+.msim-side-scroll {
+  padding: 12px;
+  overflow: auto;
+  flex: 1;
+}
+#msim-home-lineup,
+#msim-away-lineup,
+#sim-events-wrap,
+#msim-live-stats {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+#sim-events {
+  max-height: none;
+  background: rgba(255,255,255,.03);
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.06);
+  padding: 10px;
+}
+#msim-center-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#msim-pitch-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 650px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.12);
+  background:
+    radial-gradient(circle at center, rgba(255,255,255,.06), transparent 38%),
+    linear-gradient(90deg, rgba(255,255,255,.03) 0 8%, transparent 8% 16%, rgba(255,255,255,.03) 16% 24%, transparent 24% 32%, rgba(255,255,255,.03) 32% 40%, transparent 40% 48%, rgba(255,255,255,.03) 48% 56%, transparent 56% 64%, rgba(255,255,255,.03) 64% 72%, transparent 72% 80%, rgba(255,255,255,.03) 80% 88%, transparent 88% 96%, rgba(255,255,255,.03) 96% 100%),
+    linear-gradient(180deg, #0d2531, #10202d);
+}
+#msim-pitch-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+#msim-pitch-hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  pointer-events: none;
+}
+.msim-possession-chip,
+.msim-attack-chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(8,12,24,.68);
+  border: 1px solid rgba(255,255,255,.09);
+  color: #eef7ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .02em;
+}
+#msim-tabbar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+#msim-detail-row {
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 14px;
+  padding: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+}
+#msim-live-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.msim-stat-card {
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 12px;
+  background: rgba(255,255,255,.03);
+  padding: 10px;
+}
+.msim-stat-card .lbl {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: rgba(255,255,255,.55);
+}
+.msim-stat-card .vals {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 10px;
+}
+.msim-stat-card strong {
+  font-size: 20px;
+  color: #fff;
+}
+.msim-compare-bar {
+  margin-top: 8px;
+  height: 7px;
+  background: rgba(255,255,255,.07);
+  border-radius: 999px;
+  overflow: hidden;
+  display: flex;
+}
+.msim-compare-bar span:first-child {
+  background: linear-gradient(90deg, #61c5ff, #42f3ff);
+}
+.msim-compare-bar span:last-child {
+  background: linear-gradient(90deg, #77f1ad, #20d87a);
+}
+#msim-control-bar {
+  margin-top: 12px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,.025));
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+.msim-control-left,
+.msim-control-center,
+.msim-control-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.msim-control-center { justify-content: center; }
+.msim-control-right { justify-content: flex-end; color: rgba(255,255,255,.62); font-size: 12px; }
+.msim-section-title {
+  color: rgba(255,255,255,.72);
+}
+.msim-lineup-row,
+.msim-bench-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.05);
+}
+.msim-lineup-pos {
+  font-size: 11px;
+  font-weight: 800;
+  color: #42f3ff;
+  min-width: 34px;
+}
+.msim-lineup-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msim-lineup-meta {
+  min-width: 62px;
+  text-align: right;
+  font-size: 11px;
+  color: rgba(255,255,255,.75);
+}
+.msim-energy {
+  grid-column: 1 / -1;
+  height: 5px;
+  background: rgba(255,255,255,.07);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.msim-energy-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #9efc78, #2ed680);
+}
+@media (max-width: 1280px) {
+  #msim-fc-layout {
+    grid-template-columns: 260px minmax(480px, 1fr) 260px;
+  }
+}
+@media (max-width: 1100px) {
+  #msim-fc-layout,
+  #msim-control-bar,
+  #msim-live-stats {
+    grid-template-columns: 1fr;
+  }
+  .msim-control-right,
+  .msim-control-center,
+  .msim-control-left {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .msim-side-panel {
+    min-height: auto;
+  }
+  #msim-pitch-wrap {
+    min-height: 420px;
+  }
+}
