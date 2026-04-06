@@ -124,10 +124,13 @@ const COACH_STAT_DEFS = [
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function byTeamId(id)   { return state.teams.find(t => t.id === id); }
-function byPlayerId(id) {
-  return state.players.find(p => p.id === id)
-      || state.freeAgents?.find(p => p.id === id);
+function byTeamId(id, st = state) {
+  return (st?.teams || []).find(t => t.id === id) || null;
+}
+function byPlayerId(id, st = state) {
+  return (st?.players || []).find(p => p.id === id)
+      || (st?.freeAgents || []).find(p => p.id === id)
+      || null;
 }
 
 function byDraftPickId(id) {
@@ -437,7 +440,8 @@ function syncCoachStats(st) {
   ensureCoachState(st);
   for (const coach of st.coaches || []) {
     if (!coach.teamId) continue;
-    const row = (st.standings?.[byTeamId(coach.teamId)?.conference] || []).find(r => r.teamId === coach.teamId);
+    const team = byTeamId(coach.teamId, st);
+    const row = (st.standings?.[team?.conference] || []).find(r => r.teamId === coach.teamId);
     if (!row) continue;
     coach.careerTotals = {
       matches: row.played || 0,
