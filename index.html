@@ -36,6 +36,11 @@
         <div class="panel-lite">
           <label for="saveSlotInput">Save Slot</label><input id="saveSlotInput" type="text" value="slot1" />
           <label for="userTeamSelect">Your Club</label><select id="userTeamSelect"></select>
+          <label for="leagueModeSelect">League Type</label>
+          <select id="leagueModeSelect">
+            <option value="real">Real MLS players</option>
+            <option value="generated" selected>Auto-generated players</option>
+          </select>
           <label for="salaryCapInput">Salary Cap</label><input id="salaryCapInput" type="number" value="6425000" />
           <label for="gamInput">Starting GAM</label><input id="gamInput" type="number" value="3280000" />
           <label for="tamInput">Starting TAM</label><input id="tamInput" type="number" value="2125000" />
@@ -45,6 +50,7 @@
           <div class="setup-preview-title">League Setup</div>
           <ul class="setup-list">
             <li>30 clubs &mdash; all MLS 2026</li>
+            <li>Choose real MLS rosters or a full fictional universe</li>
             <li>34-match regular season</li>
             <li>Top 9 per conference qualify</li>
             <li>Play-in + best-of-3 Round One</li>

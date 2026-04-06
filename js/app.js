@@ -626,7 +626,7 @@ function rebalanceTeamBudgetView(st) {
 
 function normalizeState(st) {
   if (!st) return st;
-  st.version = Math.max(st.version || 0, 9);
+  st.version = Math.max(st.version || 0, 10);
   st.season ||= { year: 2026, phase: "Regular Season" };
   st.calendar ||= { week: 1, absoluteDay: 0 };
   st.settings ||= {};
@@ -634,6 +634,7 @@ function normalizeState(st) {
   st.settings.gamAnnual ||= 3280000;
   st.settings.tamAnnual ||= 2125000;
   st.settings.academyPerTeam ||= 8;
+  st.settings.leagueMode ||= "generated";
   st.settings.theme ||= localStorage.getItem("mls-gm-theme") || "dark";
 
   for (const team of st.teams || []) {
@@ -3046,6 +3047,7 @@ async function createLeagueFromForm() {
   const opts = {
     saveSlot:       $("#saveSlotInput").value.trim()||"slot1",
     userTeamName:   $("#userTeamSelect").value,
+    leagueMode:     $("#leagueModeSelect")?.value || "generated",
     salaryBudget:   Number($("#salaryCapInput").value)||6425000,
     gamAnnual:      Number($("#gamInput").value)||3280000,
     tamAnnual:      Number($("#tamInput").value)||2125000,
@@ -3059,7 +3061,7 @@ async function createLeagueFromForm() {
   currentPage = "dashboard";
   $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page==="dashboard"));
   await renderPage();
-  toast(`League created — ${opts.saveSlot}.`,"success");
+  toast(`League created — ${opts.saveSlot} (${opts.leagueMode === "real" ? "Real MLS Players" : "Auto-generated"}).`,"success");
 }
 
 async function openLoadModal() {

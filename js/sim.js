@@ -23,6 +23,8 @@ import {
   rollInjury,
 } from "./assets.js";
 
+import { REAL_MLS_PLAYERS } from "./real-mls-data.js";
+
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 function clubCountry(name) {
@@ -184,6 +186,133 @@ function normalizeGeneratedPosition(pos, preferredFoot = "Right") {
   if (pos === "FB") return preferredFoot === "Left" ? "LB" : "RB";
   if (pos === "Winger") return preferredFoot === "Left" ? "LW" : "RW";
   return pos;
+}
+
+function normalizeRealNation(nation) {
+  const map = {
+    "United States": "USA",
+    "Korea Republic": "South Korea",
+    "Republic of Ireland": "Ireland",
+    "Côte d'Ivoire": "Ivory Coast",
+  };
+  return map[nation] || nation || "USA";
+}
+
+function mean(values) {
+  const nums = values.map(v => Number(v)).filter(v => Number.isFinite(v));
+  return nums.length ? nums.reduce((sum, v) => sum + v, 0) / nums.length : 0;
+}
+
+function contractYearsForAge(age) {
+  if (age <= 20) return randInt(4, 5);
+  if (age <= 24) return randInt(3, 5);
+  if (age <= 29) return randInt(2, 4);
+  if (age <= 33) return randInt(1, 3);
+  return randInt(1, 2);
+}
+
+function makeRealPlayerAttributes(row, position) {
+  let attrs;
+  if (position === "GK") {
+    const gkBase = mean([row.gkDiv, row.gkHan, row.gkKic, row.gkPos, row.gkRef]) || row.ovr || 60;
+    attrs = {
+      pace: clamp(Math.round((Number(row.pac) || 42) * 0.9), 20, 90),
+      shooting: clamp(Math.round((Number(row.sho) || 14) * 0.55), 5, 50),
+      passing: clamp(Math.round((Number(row.pas) || 45) * 0.95), 18, 88),
+      dribbling: clamp(Math.round((Number(row.dri) || 30) * 0.82), 12, 82),
+      defense: clamp(Math.round(gkBase), 25, 98),
+      physical: clamp(Math.round((Number(row.phy) || 62) * 0.95), 20, 95),
+    };
+  } else {
+    attrs = {
+      pace: clamp(Math.round(Number(row.pac) || 40), 20, 99),
+      shooting: clamp(Math.round(Number(row.sho) || 30), 20, 99),
+      passing: clamp(Math.round(Number(row.pas) || 35), 20, 99),
+      dribbling: clamp(Math.round(Number(row.dri) || 35), 20, 99),
+      defense: clamp(Math.round(Number(row.deff) || 25), 20, 99),
+      physical: clamp(Math.round(Number(row.phy) || 35), 20, 99),
+    };
+  }
+
+  const target = Number(row.ovr) || 60;
+  const current = mean(Object.values(attrs));
+  const gap = target - current;
+  const gapMultiplier = position === "GK" ? 0.9 : 0.96;
+  for (const key of Object.keys(attrs)) {
+    const boosted = attrs[key] + gap * gapMultiplier;
+    attrs[key] = clamp(Math.round(boosted), position === "GK" && key === "shooting" ? 5 : 20, 99);
+  }
+  return attrs;
+}
+
+function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
+  const age = Number(row.age) || randInt(18, 31);
+  const position = normalizeGeneratedPosition(row.position || "CM", row.preferredFoot || "Right");
+  const nationality = normalizeRealNation(row.nation);
+  const domestic = domesticForTeam(nationality, team.country);
+  const rosterRole = idx < 20 ? "Senior" : idx < 24 ? "Supplemental" : "Reserve";
+  const attributes = makeRealPlayerAttributes(row, position);
+  const displayedOvr = clamp(Math.round(Number(row.ovr) || overall({ attributes })), 46, 92);
+  const upside = age <= 18 ? randInt(8, 14)
+    : age <= 20 ? randInt(6, 11)
+    : age <= 22 ? randInt(4, 8)
+    : age <= 24 ? randInt(2, 5)
+    : age <= 27 ? randInt(0, 3)
+    : age <= 30 ? randInt(0, 2)
+    : randInt(0, 1);
+  const potential = clamp(displayedOvr + upside, displayedOvr, 92);
+  let salary = estimateSalaryByProfile(position, displayedOvr, age, rosterRole);
+  if (displayedOvr >= 82) salary = Math.max(salary, randInt(4500000, 12000000));
+  else if (displayedOvr >= 78) salary = Math.max(salary, randInt(2200000, 6500000));
+  else if (displayedOvr >= 74) salary = Math.max(salary, randInt(1200000, 3200000));
+
+  return hydratePlayer({
+    id: uuid("p"),
+    name: row.name,
+    age,
+    nationality,
+    domestic,
+    preferredFoot: row.preferredFoot || "Right",
+    clubId: team.id,
+    position,
+    rosterRole,
+    designation: null,
+    designationMode: "auto",
+    homegrown: false,
+    contract: {
+      yearsLeft: contractYearsForAge(age),
+      salary,
+      status: "Active",
+    },
+    morale: clamp(68 + randInt(-10, 10), 20, 100),
+    injuryProne: Math.random() < 0.08,
+    injuredUntil: null,
+    injuryMeta: null,
+    attributes,
+    overall: displayedOvr,
+    potential,
+    stats: {
+      gp: 0, gs: 0, min: 0, goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, xg: 0,
+      yellows: 0, reds: 0, cleanSheets: 0, ga: 0, motm: 0,
+    },
+    source: "real-mls-csv",
+    realPlayer: true,
+  }, seasonYear);
+}
+
+function buildRealMlsPlayerPool(teams, seasonYear = 2026) {
+  const rowsByTeam = new Map();
+  for (const row of REAL_MLS_PLAYERS) {
+    if (!row?.team) continue;
+    if (!rowsByTeam.has(row.team)) rowsByTeam.set(row.team, []);
+    rowsByTeam.get(row.team).push(row);
+  }
+  const players = [];
+  for (const team of teams) {
+    const rows = (rowsByTeam.get(team.name) || []).slice().sort((a, b) => (Number(b.ovr) || 0) - (Number(a.ovr) || 0) || (Number(a.age) || 99) - (Number(b.age) || 99) || String(a.name).localeCompare(String(b.name)));
+    rows.forEach((row, idx) => players.push(makeRealMlsPlayer(team, row, idx, seasonYear)));
+  }
+  return players;
 }
 
 function makeDetailedRatings(position, a) {
@@ -1868,6 +1997,7 @@ function resetStandingsAndSchedule(state) {
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 export function createNewState(options) {
+  const leagueMode = options?.leagueMode === "real" ? "real" : "generated";
   const teams = [];
   let ordinal = 0;
 
@@ -1896,13 +2026,24 @@ export function createNewState(options) {
     }
   }
 
-  const players = [];
+  const players = leagueMode === "real"
+    ? buildRealMlsPlayerPool(teams, MLS_RULES.seasonStartYear)
+    : (() => {
+        const generated = [];
+        for (const team of teams) {
+          const rolePlan = [
+            "GK","GK","CB","CB","CB","LB","RB","LB","RB","CDM","CDM","CM",
+            "CM","CAM","LM","RM","LW","RW","ST","ST","CB","CM","GK","LW","RW","ST",
+          ];
+          rolePlan.forEach((pos, idx) => generated.push(makePlayer(team, idx, pos)));
+        }
+        return generated;
+      })();
+
   for (const team of teams) {
-    const rolePlan = [
-      "GK","GK","CB","CB","CB","LB","RB","LB","RB","CDM","CDM","CM",
-      "CM","CAM","LM","RM","LW","RW","ST","ST","CB","CM","GK","LW","RW","ST",
-    ];
-    rolePlan.forEach((pos, idx) => players.push(makePlayer(team, idx, pos)));
+    const roster = players.filter(p => p.clubId === team.id);
+    const topXI = roster.slice().sort((a, b) => (b.overall - a.overall) || (b.potential - a.potential)).slice(0, 11);
+    team.marketRating = clamp(Math.round(mean(topXI.map(p => p.overall)) || team.marketRating), 54, 86);
   }
 
   const academies = {};
@@ -1914,7 +2055,7 @@ export function createNewState(options) {
   }
 
   const state = {
-    version: 8,
+    version: 10,
     season:  { year: 2026, phase: "Regular Season" },
     calendar: { week: 1, absoluteDay: 0 },
     teams,
@@ -1938,6 +2079,7 @@ export function createNewState(options) {
       salaryBudget:   Number(options.salaryBudget),
       gamAnnual:      Number(options.gamAnnual),
       tamAnnual:      Number(options.tamAnnual),
+      leagueMode,
     },
   };
 
@@ -1957,7 +2099,7 @@ export function createNewState(options) {
   autoAssignAllDesignations(state);
   makeSchedule(state);
   ensureOpenCupState(state);
-  seedFreeAgents(state);
+  if (leagueMode !== "real") seedFreeAgents(state);
   ensureDraftPickLedger(state, state.season.year + 1, 3);
   addTransaction(state, "League", `League initialized for ${state.season.year}.`);
   return state;
