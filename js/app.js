@@ -1,4 +1,4 @@
-import { $, $$, formatMoney, downloadJSON, readJSONFile, toast } from "./utils.js";
+import { $, $$, formatMoney, formatNumber, downloadJSON, readJSONFile, toast } from "./utils.js";
 import { saveSlot, loadSlot, listSlots, deleteSlot } from "./db.js";
 import { loadExternalData } from "./assets.js";
 import {
@@ -27,6 +27,7 @@ import {
   getContractDemand,
   getExpiringPlayers,
   hydratePlayer,
+  autoAssignAllDesignations,
 } from "./sim.js";
 import { CONFERENCES, TEAM_LOGOS } from "./data.js";
 
@@ -87,6 +88,12 @@ function teamLogoMark(team, cls = "team-logo") {
 function teamLink(teamId, label) {
   const text = label || byTeamId(teamId)?.name || "Unknown";
   return `<button type="button" class="text-link team-link" data-id="${teamId}">${escapeHtml(text)}</button>`;
+}
+
+function renderSimClubChip(team, side = "home") {
+  const src = teamLogoUrl(team);
+  const cls = side === "away" ? "away" : "home";
+  return `<span class="msim-team-chip ${cls}">${src ? `<img src="${src}" alt="${escapeHtml(team.name)} logo" class="msim-team-logo" />` : `<span class="msim-team-logo msim-team-logo-fallback">${escapeHtml((team.shortName || team.name).slice(0, 2).toUpperCase())}</span>`}<span class="msim-team-text">${escapeHtml(team.shortName || team.name)}</span></span>`;
 }
 
 function normalizeLegacyPosition(player) {
@@ -186,7 +193,7 @@ function getTeamRecord(teamId) {
 
 function normalizeState(st) {
   if (!st) return st;
-  st.version = Math.max(st.version || 0, 5);
+  st.version = Math.max(st.version || 0, 6);
   st.season ||= { year: 2026, phase: "Regular Season" };
   st.calendar ||= { week: 1, absoluteDay: 0 };
   st.settings ||= {};
@@ -253,6 +260,7 @@ function normalizeState(st) {
     }
   }
 
+  autoAssignAllDesignations(st);
   selectedTeamId ||= st.userTeamId;
   applyTheme(st.settings.theme);
   return st;
@@ -454,116 +462,195 @@ async function showGoalReplay(scorerName, assistName, minute, side = "home") {
     await sleep(Math.min(simSpeed * 1.2, 700));
     return;
   }
-  document.getElementById("goal-replay-title").textContent = "Goal Sequence";
+  document.getElementById("goal-replay-title").textContent = "Broadcast Replay";
   document.getElementById("goal-replay-scorer").textContent = scorerName;
   document.getElementById("goal-replay-minute").textContent = `${minute}'`;
   document.getElementById("goal-replay-assist").textContent = assistName || "Unassisted";
+  document.getElementById("goal-replay-badge").textContent = "Goal Check";
   overlay.classList.add("open");
 
   const ctx = canvas.getContext("2d");
-  const w = canvas.width, h = canvas.height;
+  const w = canvas.width;
+  const h = canvas.height;
   const attackColor = side === "home" ? "#59a8ff" : "#ff9d59";
   const defendColor = side === "home" ? "#ff9d59" : "#59a8ff";
+  const keeperColor = "#f8fafc";
 
-  const playerDot = (x, y, color, scale = 1, dir = 1) => {
+  const drawPlayer = (x, y, color, scale = 1, facing = 1, withBall = false) => {
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(scale, scale);
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(0, -8, 5, 0, Math.PI * 2);
+    ctx.arc(0, -13, 6, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillRect(-4, -3, 8, 15);
-    ctx.strokeStyle = "rgba(0,0,0,.35)";
-    ctx.lineWidth = 2;
+    ctx.fillRect(-5, -6, 10, 20);
+    ctx.strokeStyle = "rgba(10,14,28,.45)";
+    ctx.lineWidth = 2.3;
     ctx.beginPath();
-    ctx.moveTo(0, 2);
-    ctx.lineTo(dir * 6, 8);
-    ctx.moveTo(0, 2);
-    ctx.lineTo(-dir * 5, 9);
-    ctx.moveTo(-1, 12);
-    ctx.lineTo(-4, 20);
-    ctx.moveTo(1, 12);
-    ctx.lineTo(4, 20);
+    ctx.moveTo(-5, -2); ctx.lineTo(-10 * facing, 6);
+    ctx.moveTo(5, -2); ctx.lineTo(10 * facing, 5);
+    ctx.moveTo(-3, 14); ctx.lineTo(-6 * facing, 24);
+    ctx.moveTo(3, 14); ctx.lineTo(7 * facing, 24);
     ctx.stroke();
+    if (withBall) {
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(13 * facing, 16, 4.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#111827";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
     ctx.restore();
   };
 
-  const drawPitch = () => {
-    const grad = ctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, "#0b7a39");
-    grad.addColorStop(1, "#065229");
-    ctx.fillStyle = grad;
+  const drawPitch = (camX = 0, camY = 0, zoom = 1) => {
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.scale(zoom, zoom);
+    ctx.translate(-w / 2 + camX, -h / 2 + camY);
+
+    const grass = ctx.createLinearGradient(0, 0, 0, h);
+    grass.addColorStop(0, "#0a6b34");
+    grass.addColorStop(1, "#064722");
+    ctx.fillStyle = grass;
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = "rgba(255,255,255,0.78)";
-    ctx.lineWidth = 3;
+    for (let i = 0; i < 10; i++) {
+      ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.04)";
+      ctx.fillRect(24, 24 + ((h - 48) / 10) * i, w - 48, (h - 48) / 10);
+    }
+
+    ctx.strokeStyle = "rgba(255,255,255,.88)";
+    ctx.lineWidth = 2.8;
     ctx.strokeRect(24, 24, w - 48, h - 48);
     ctx.beginPath(); ctx.moveTo(w / 2, 24); ctx.lineTo(w / 2, h - 24); ctx.stroke();
-    ctx.beginPath(); ctx.arc(w / 2, h / 2, 58, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeRect(w * 0.69, h * 0.18, w * 0.18, h * 0.38);
-    ctx.strokeRect(w * 0.78, h * 0.29, w * 0.09, h * 0.16);
-    ctx.fillStyle = "rgba(255,255,255,.08)";
-    for (let i = 0; i < 8; i++) ctx.fillRect(24, 24 + ((h - 48) / 8) * i, w - 48, ((h - 48) / 16));
+    ctx.beginPath(); ctx.arc(w / 2, h / 2, 56, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeRect(w * 0.70, h * 0.17, w * 0.17, h * 0.40);
+    ctx.strokeRect(w * 0.79, h * 0.30, w * 0.08, h * 0.14);
+    ctx.beginPath(); ctx.arc(w * 0.76, h / 2, 3, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,255,255,.82)"; ctx.fill();
+
+    ctx.fillStyle = "rgba(255,255,255,.10)";
+    ctx.fillRect(0, 0, w, 70);
+    ctx.fillRect(0, h - 60, w, 60);
+    ctx.restore();
   };
 
-  const frames = 64;
+  const lowerThird = (phaseText) => {
+    ctx.save();
+    const boxY = h - 58;
+    ctx.fillStyle = "rgba(10,14,24,.86)";
+    ctx.fillRect(24, boxY, w * 0.54, 34);
+    ctx.fillStyle = "#59a8ff";
+    ctx.fillRect(24, boxY, 110, 34);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "700 12px sans-serif";
+    ctx.fillText("MLS LIVE", 42, boxY + 21);
+    ctx.font = "700 18px sans-serif";
+    ctx.fillText(scorerName, 148, boxY + 22);
+    ctx.font = "600 12px sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,.75)";
+    ctx.fillText(assistName ? `Assist: ${assistName} · ${phaseText}` : phaseText, 148, boxY + 36);
+    ctx.restore();
+  };
+
+  const drawNet = (ripple = 0) => {
+    ctx.save();
+    const gx = w * 0.87;
+    const gy = h * 0.30;
+    const gw = 52;
+    const gh = 95;
+    ctx.strokeStyle = "rgba(255,255,255,.86)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(gx, gy, gw, gh);
+    ctx.strokeStyle = "rgba(255,255,255,.18)";
+    for (let i = 1; i < 6; i++) {
+      const x = gx + (gw / 6) * i + Math.sin(ripple + i) * 1.6;
+      ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x, gy + gh); ctx.stroke();
+    }
+    for (let i = 1; i < 5; i++) {
+      const y = gy + (gh / 5) * i + Math.cos(ripple * 1.3 + i) * 1.2;
+      ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx + gw, y); ctx.stroke();
+    }
+    ctx.restore();
+  };
+
+  const frames = 96;
   for (let i = 0; i <= frames; i++) {
     if (simAbortRequested) break;
     const t = i / frames;
+    const phase1 = Math.min(1, t / 0.38);
+    const phase2 = t < 0.38 ? 0 : Math.min(1, (t - 0.38) / 0.34);
+    const phase3 = t < 0.72 ? 0 : Math.min(1, (t - 0.72) / 0.28);
+
     ctx.clearRect(0, 0, w, h);
-    drawPitch();
+    const camX = Math.sin(t * Math.PI) * 16;
+    const camY = Math.sin(t * Math.PI * 0.9) * -10;
+    const zoom = 1 + Math.sin(Math.min(1, t) * Math.PI) * 0.07;
+    drawPitch(camX, camY, zoom);
 
-    const cam = 1 + Math.sin(t * Math.PI) * 0.045;
-    ctx.save();
-    ctx.translate(w * (1 - cam) / 2, h * (1 - cam) / 2);
-    ctx.scale(cam, cam);
+    const passerX = w * 0.18 + phase1 * 38;
+    const passerY = h * 0.76 - phase1 * 12;
+    const runnerX = w * 0.46 + phase1 * 60 + phase2 * 54;
+    const runnerY = h * 0.58 - phase1 * 34 - phase2 * 56;
+    const shooterX = w * 0.69 + phase2 * 18;
+    const shooterY = h * 0.43 - phase2 * 10;
+    const keeperX = w * 0.87 - phase3 * 20;
+    const keeperY = h * 0.46 + Math.sin(phase3 * Math.PI) * 18;
 
-    const sx = w * 0.18, sy = h * 0.72;
-    const mx = w * 0.52, my = h * 0.44;
-    const ex = w * 0.82, ey = h * 0.37;
-    const bx = (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * mx + t * t * ex;
-    const by = (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * my + t * t * ey;
-
-    const attackers = [
-      [sx - 8, sy + 10, 1.02, 1],
-      [w * 0.32 + t * 26, h * 0.60 - t * 14, 0.98, 1],
-      [w * 0.44 + t * 24, h * 0.49 - t * 10, 0.96, 1],
-      [w * 0.60 + t * 10, h * 0.42 - t * 8, 0.98, 1],
-    ];
     const defenders = [
-      [w * 0.54 - t * 14, h * 0.52, 0.98, -1],
-      [w * 0.64 - t * 22, h * 0.46 + t * 7, 1.0, -1],
-      [w * 0.71 - t * 16, h * 0.37 + t * 5, 0.96, -1],
+      [w * 0.54 - phase2 * 20, h * 0.57 - phase2 * 8, 1, -1],
+      [w * 0.62 - phase2 * 14, h * 0.46 + phase2 * 4, 0.96, -1],
+      [w * 0.76 - phase2 * 6, h * 0.38 + phase2 * 3, 0.94, -1],
+      [w * 0.81 - phase3 * 7, h * 0.50 + phase3 * 6, 0.98, -1],
     ];
 
-    attackers.forEach(args => playerDot(args[0], args[1], attackColor, args[2], args[3]));
-    defenders.forEach(args => playerDot(args[0], args[1], defendColor, args[2], args[3]));
-    playerDot(w * 0.85 - t * 14, h * 0.37 + Math.sin(t * Math.PI) * 18, "#e5e7eb", 1.08, -1);
+    drawPlayer(passerX, passerY, attackColor, 1.03, 1, t < 0.18);
+    drawPlayer(runnerX, runnerY, attackColor, 0.98, 1, t >= 0.18 && t < 0.62);
+    drawPlayer(shooterX, shooterY, attackColor, 1.04, 1, t >= 0.62 && t < 0.76);
+    defenders.forEach(d => drawPlayer(d[0], d[1], defendColor, d[2], d[3], false));
+    drawPlayer(keeperX, keeperY, keeperColor, 1.08, -1, false);
+    drawNet(phase3 * 14);
 
-    ctx.strokeStyle = "rgba(255,255,255,.22)";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.quadraticCurveTo(mx, my, bx, by);
-    ctx.stroke();
+    let ballX = passerX + 12;
+    let ballY = passerY + 16;
+    if (t >= 0.18 && t < 0.62) {
+      const pt = (t - 0.18) / 0.44;
+      const cx = w * 0.36;
+      const cy = h * 0.57;
+      ballX = (1 - pt) * (1 - pt) * (passerX + 12) + 2 * (1 - pt) * pt * cx + pt * pt * (runnerX + 10);
+      ballY = (1 - pt) * (1 - pt) * (passerY + 14) + 2 * (1 - pt) * pt * cy + pt * pt * (runnerY + 8);
+    } else if (t >= 0.62) {
+      const st = Math.min(1, (t - 0.62) / 0.38);
+      const cx = w * 0.80;
+      const cy = h * 0.18 + Math.sin(st * Math.PI) * -12;
+      ballX = (1 - st) * (1 - st) * (shooterX + 12) + 2 * (1 - st) * st * cx + st * st * (w * 0.90);
+      ballY = (1 - st) * (1 - st) * (shooterY + 6) + 2 * (1 - st) * st * cy + st * st * (h * 0.41);
+      ctx.strokeStyle = "rgba(255,255,255,.18)";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(shooterX + 10, shooterY + 4);
+      ctx.quadraticCurveTo(cx, cy, ballX, ballY);
+      ctx.stroke();
+    }
 
     ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.arc(bx, by, 8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#111827";
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(ballX, ballY, 6.6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#111827"; ctx.lineWidth = 1.2; ctx.stroke();
 
+    ctx.save();
+    ctx.fillStyle = "rgba(8,12,20,.60)";
+    ctx.fillRect(24, 24, 250, 42);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "800 24px sans-serif";
+    ctx.fillText("REPLAY", 38, 51);
+    ctx.font = "600 13px sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,.72)";
+    ctx.fillText(`${minute}' · Final action`, 148, 51);
     ctx.restore();
 
-    ctx.fillStyle = "rgba(255,255,255,.92)";
-    ctx.font = "bold 28px sans-serif";
-    ctx.fillText("GOAL", 30, 42);
-    ctx.font = "600 16px sans-serif";
-    ctx.fillStyle = "rgba(255,255,255,.72)";
-    ctx.fillText(`${scorerName}${assistName ? ` · Assist ${assistName}` : ""}`, 30, 68);
-    await sleep(Math.min(simSpeed * 0.42, 50));
+    lowerThird(t < 0.62 ? "Build-up" : phase3 < 0.55 ? "Finish" : "Net cam");
+    await sleep(Math.min(simSpeed * 0.38, 40));
   }
 
   await sleep(Math.min(simSpeed * 0.9, 420));
@@ -577,9 +664,9 @@ async function showVARReview(minute, scorerName = "") {
   const badge = document.getElementById("var-decision-badge");
   const desc = document.getElementById("var-desc");
   const scan = document.getElementById("var-scanning-text");
-  const confirmed = Math.random() > 0.5;
+  const confirmed = Math.random() > 0.46;
 
-  addSimEvent(minute, `📺 <b>VAR CHECK</b> — Reviewing the incident.`, "color:var(--yellow);font-weight:700;");
+  addSimEvent(minute, `📺 <b>VAR CHECK</b> — Reviewing the attacking phase.`, "color:var(--yellow);font-weight:700;");
   if (!overlay || !screen) {
     await sleep(900);
     addSimEvent(minute, confirmed ? "✅ Goal confirmed by VAR." : "❌ Goal disallowed after VAR review.", `color:${confirmed ? "var(--green)" : "var(--red)"};font-weight:700;`);
@@ -589,84 +676,102 @@ async function showVARReview(minute, scorerName = "") {
   screen.innerHTML = `<canvas id="var-canvas" width="740" height="360"></canvas>`;
   const canvas = document.getElementById("var-canvas");
   const ctx = canvas.getContext("2d");
-  const w = canvas.width, h = canvas.height;
+  const w = canvas.width;
+  const h = canvas.height;
 
-  const drawFrame = progress => {
+  const drawScene = (progress, stage = 0) => {
     ctx.clearRect(0, 0, w, h);
     const bg = ctx.createLinearGradient(0, 0, w, h);
-    bg.addColorStop(0, "#0a1224");
-    bg.addColorStop(1, "#17314e");
+    bg.addColorStop(0, "#0a1428");
+    bg.addColorStop(1, "#162e4a");
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
 
-    ctx.fillStyle = "#0b6a34";
-    ctx.fillRect(70, 40, w - 140, h - 80);
-    ctx.strokeStyle = "rgba(255,255,255,.8)";
+    ctx.fillStyle = "#0b6d35";
+    ctx.fillRect(72, 40, w - 144, h - 80);
+    for (let i = 0; i < 8; i++) {
+      ctx.fillStyle = i % 2 === 0 ? "rgba(255,255,255,.045)" : "rgba(0,0,0,.035)";
+      ctx.fillRect(72, 40 + ((h - 80) / 8) * i, w - 144, (h - 80) / 8);
+    }
+    ctx.strokeStyle = "rgba(255,255,255,.82)";
     ctx.lineWidth = 2;
-    ctx.strokeRect(70, 40, w - 140, h - 80);
-    ctx.beginPath();
-    ctx.moveTo(w / 2, 40);
-    ctx.lineTo(w / 2, h - 40);
-    ctx.stroke();
+    ctx.strokeRect(72, 40, w - 144, h - 80);
+    ctx.beginPath(); ctx.moveTo(w / 2, 40); ctx.lineTo(w / 2, h - 40); ctx.stroke();
 
-    const defLineX = w * 0.58 + Math.sin(progress * Math.PI * 2) * 2;
-    ctx.strokeStyle = "rgba(255,80,80,.95)";
-    ctx.lineWidth = 3;
+    const defLineX = w * 0.58 + Math.sin(progress * Math.PI * 2) * 1.5;
+    const attX = w * 0.60 + progress * 16;
+    const attY = h * 0.48 - progress * 6;
+    const defX = w * 0.54;
+    const defY = h * 0.53;
+
+    const drawPlayer = (x, y, color, active = false) => {
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(x, y - 10, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(x - 7, y - 4, 14, 22);
+      ctx.fillRect(x - 12, y + 18, 6, 16);
+      ctx.fillRect(x + 6, y + 18, 6, 16);
+      if (active) {
+        ctx.strokeStyle = "rgba(255,255,255,.82)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - 14, y - 22, 28, 58);
+      }
+    };
+
+    drawPlayer(attX, attY, "#59a8ff", true);
+    drawPlayer(defX, defY, "#ff9d59", true);
+    drawPlayer(w * 0.72 - progress * 10, h * 0.42 + progress * 3, "#ff9d59");
+
+    ctx.strokeStyle = stage >= 1 ? "rgba(255,84,84,.96)" : "rgba(255,255,255,.22)";
+    ctx.lineWidth = stage >= 1 ? 3.4 : 2;
     ctx.beginPath();
     ctx.moveTo(defLineX, 48);
     ctx.lineTo(defLineX, h - 48);
     ctx.stroke();
 
-    const attX = w * 0.60 + progress * 18;
-    const attY = h * 0.48 - progress * 4;
-    const defX = w * 0.54;
-    const defY = h * 0.52;
-    const drawPlayer = (x, y, color) => {
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(x, y - 10, 7, 0, Math.PI * 2); ctx.fill();
-      ctx.fillRect(x - 7, y - 4, 14, 22);
-      ctx.fillRect(x - 11, y + 18, 6, 16);
-      ctx.fillRect(x + 5, y + 18, 6, 16);
-    };
-    drawPlayer(attX, attY, "#59a8ff");
-    drawPlayer(defX, defY, "#ff9d59");
-    drawPlayer(w * 0.72 - progress * 10, h * 0.42 + progress * 3, "#ff9d59");
-
-    ctx.strokeStyle = "rgba(255,255,255,.85)";
     ctx.setLineDash([8, 6]);
+    ctx.strokeStyle = stage >= 2 ? (confirmed ? "rgba(34,197,94,.95)" : "rgba(255,84,84,.95)") : "rgba(255,255,255,.86)";
+    ctx.lineWidth = 2.2;
     ctx.beginPath();
-    ctx.moveTo(attX, attY - 12);
-    ctx.lineTo(defLineX, attY - 12);
+    ctx.moveTo(attX, attY - 13);
+    ctx.lineTo(defLineX, attY - 13);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.fillStyle = "rgba(255,255,255,.86)";
-    ctx.font = "bold 22px sans-serif";
-    ctx.fillText("VAR", 24, 32);
-    ctx.font = "600 14px sans-serif";
-    ctx.fillText(scorerName ? `${scorerName} under review` : "Checking attacking phase", 24, 56);
-
     const scanY = 48 + ((h - 96) * progress);
-    const grad2 = ctx.createLinearGradient(0, scanY - 18, 0, scanY + 18);
+    const grad2 = ctx.createLinearGradient(0, scanY - 24, 0, scanY + 24);
     grad2.addColorStop(0, "rgba(77,163,255,0)");
-    grad2.addColorStop(0.5, "rgba(77,163,255,.30)");
+    grad2.addColorStop(0.5, "rgba(77,163,255,.34)");
     grad2.addColorStop(1, "rgba(77,163,255,0)");
     ctx.fillStyle = grad2;
-    ctx.fillRect(74, scanY - 18, w - 148, 36);
+    ctx.fillRect(76, scanY - 24, w - 152, 48);
+
+    ctx.fillStyle = "rgba(255,255,255,.88)";
+    ctx.font = "800 20px sans-serif";
+    ctx.fillText("MULTI-ANGLE REVIEW", 24, 31);
+    ctx.font = "600 14px sans-serif";
+    ctx.fillText(scorerName ? `${scorerName} phase under review` : "Checking attacking phase", 24, 55);
+
+    if (stage >= 2) {
+      ctx.fillStyle = confirmed ? "rgba(34,197,94,.18)" : "rgba(255,84,84,.18)";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = confirmed ? "#7df0a5" : "#ff8f8f";
+      ctx.font = "900 40px sans-serif";
+      ctx.fillText(confirmed ? "ONSIDE" : "OFFSIDE", w - 214, 54);
+    }
   };
 
   overlay.classList.add("open");
   badge.textContent = "Checking";
-  desc.textContent = "Possible offside / foul in the attacking phase";
-  for (let i = 0; i <= 22; i++) {
+  desc.textContent = "Possible offside in the attacking phase";
+  for (let i = 0; i <= 28; i++) {
     if (simAbortRequested) break;
-    const progress = i / 22;
-    drawFrame(progress);
-    scan.textContent = ["Selecting angle", "Drawing defensive line", "Tracking attacker", "Reviewing APP"][i % 4];
-    await sleep(85);
+    const stage = i < 10 ? 0 : i < 20 ? 1 : 2;
+    drawScene(i / 28, stage);
+    scan.textContent = ["Selecting angle", "Calibrating line", "Tracking attacker", "Checking APP", "Final decision incoming"][Math.min(4, Math.floor(i / 6))];
+    await sleep(70);
   }
   badge.textContent = confirmed ? "Goal stands" : "No goal";
-  desc.textContent = confirmed ? "After review, the attacking player is onside." : "The attacker is beyond the last defender. Goal overturned.";
+  desc.textContent = confirmed ? "The attacker is level with the last defender." : "The attacker is beyond the defensive line. Goal overturned.";
   scan.textContent = confirmed ? "Restart: kickoff" : "Restart: indirect free kick";
   await sleep(900);
   overlay.classList.remove("open");
@@ -694,8 +799,9 @@ async function playLiveMatch(match) {
 
   const el = id => document.getElementById(id);
 
-  if (el("sim-home-name")) el("sim-home-name").textContent = ht.shortName || ht.name;
-  if (el("sim-away-name")) el("sim-away-name").textContent = at.shortName || at.name;
+  if (el("sim-home-name")) el("sim-home-name").innerHTML = renderSimClubChip(ht, "home");
+  if (el("sim-away-name")) el("sim-away-name").innerHTML = renderSimClubChip(at, "away");
+  if (el("msim-comp-badge")) el("msim-comp-badge").textContent = `MLS ${state.season.year} Live`;
   if (el("sim-minute")) el("sim-minute").textContent = "Kickoff";
   if (el("sim-score")) el("sim-score").textContent = "0 – 0";
   if (el("sim-events")) el("sim-events").innerHTML = "";
@@ -879,7 +985,7 @@ function openPlayerProfile(playerId) {
           <div class="pp-logo-slot">${team ? teamLogoMark(team, "profile-team-logo") : ""}</div>
           <div>
             <div class="pp-player-name">${escapeHtml(p.name)}</div>
-            <div class="pp-club-name">${team ? teamLink(team.id, team.name) : "Free Agent"} · ${escapeHtml(p.position)}</div>
+            <div class="pp-club-name">${team ? teamLink(team.id, team.name) : "Free Agent"} · ${escapeHtml(p.position)} · ${escapeHtml(p.nationality || "Unknown")}</div>
             <div class="pp-badges">
               <span class="badge blue">${escapeHtml(tag)}</span>
               ${intlBadge}
@@ -907,6 +1013,7 @@ function openPlayerProfile(playerId) {
         <div class="pp-info-box"><div class="pp-info-lbl">Years Left</div><div class="pp-info-val">${p.contract.yearsLeft}</div></div>
         <div class="pp-info-box"><div class="pp-info-lbl">Contract Thru</div><div class="pp-info-val">${p.contract.expiresYear || (state.season.year + p.contract.yearsLeft)}</div></div>
         <div class="pp-info-box"><div class="pp-info-lbl">Foot</div><div class="pp-info-val">${escapeHtml(p.preferredFoot || "Right")}</div></div>
+        <div class="pp-info-box"><div class="pp-info-lbl">Country</div><div class="pp-info-val">${escapeHtml(p.nationality || "Unknown")}</div></div>
         <div class="pp-info-box"><div class="pp-info-lbl">Morale</div><div class="pp-info-val">${p.morale || "—"}</div></div>
         <div class="pp-info-box"><div class="pp-info-lbl">Role</div><div class="pp-info-val">${escapeHtml(p.rosterRole || "—")}</div></div>
       </div>
@@ -1541,7 +1648,13 @@ function renderBudget() {
           <td class="num">${p.overall}</td>
           <td>
             <select class="budget-designation-select" data-id="${p.id}">
-              ${["None","DP","U22","TAM"].map(opt => `<option value="${opt}" ${(p.designation || "None")===opt?"selected":""}>${opt}</option>`).join("")}
+              ${[
+                { value: "Auto", label: `Auto (${p.designation || "None"})` },
+                { value: "None", label: "None" },
+                { value: "DP", label: "DP" },
+                { value: "U22", label: "U22" },
+                { value: "TAM", label: "TAM" },
+              ].map(opt => `<option value="${opt.value}" ${((p.designationMode || "auto") === "auto" ? "Auto" : (p.designation || "None"))===opt.value?"selected":""}>${opt.label}</option>`).join("")}
             </select>
           </td>
         </tr>`).join("")}

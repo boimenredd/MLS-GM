@@ -1162,3 +1162,95 @@ html[data-theme="light"] {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* --- Broadcast sim polish --- */
+#match-sim-box {
+  background:
+    radial-gradient(circle at top, rgba(77,163,255,.12), transparent 34%),
+    linear-gradient(180deg, rgba(8,12,22,.98), rgba(6,10,18,.98));
+}
+#msim-header {
+  background: linear-gradient(90deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px 14px;
+}
+#sim-minute {
+  min-width: 110px;
+  text-align: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.04));
+  border: 1px solid var(--line);
+}
+.match-scoreboard {
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.025));
+  border-radius: 22px;
+}
+.match-score-wrap {
+  display: grid;
+  place-items: center;
+  gap: 4px;
+}
+.match-score-sub {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.msim-team-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+  border: 1px solid var(--line);
+  min-width: 170px;
+}
+.msim-team-chip.away {
+  justify-content: flex-end;
+}
+.msim-team-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,.35));
+}
+.msim-team-logo-fallback {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255,255,255,.10);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 800;
+}
+.msim-team-text {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+#goal-replay-inner,
+#var-broadcast {
+  background:
+    radial-gradient(circle at top, rgba(77,163,255,.11), transparent 34%),
+    linear-gradient(180deg, rgba(8,12,22,.98), rgba(6,10,18,.98));
+}
+#goal-replay-header,
+#var-main-panel,
+#var-right-col,
+#goal-replay-pitch-wrap,
+#goal-replay-side {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+}
+#goal-replay-canvas,
+#var-screen canvas {
+  box-shadow: 0 18px 40px rgba(0,0,0,.32);
+}
+#goal-replay-badge,
+#var-decision-badge {
+  background: linear-gradient(135deg, rgba(77,163,255,.18), rgba(255,255,255,.05));
+}

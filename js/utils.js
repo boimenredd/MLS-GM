@@ -25,11 +25,18 @@ export function deepClone(obj) {
   return structuredClone(obj);
 }
 
+export function formatNumber(n, options = {}) {
+  const value = Number(n ?? 0);
+  if (!Number.isFinite(value)) return "0";
+  const maximumFractionDigits = Number.isInteger(value) ? 0 : 2;
+  return value.toLocaleString("en-US", { maximumFractionDigits, ...options });
+}
+
 export function formatMoney(n) {
-  const abs = Math.abs(n);
-  if (abs >= 1_000_000) return `${n < 0 ? "-" : ""}$${(abs / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `${n < 0 ? "-" : ""}$${(abs / 1_000).toFixed(0)}K`;
-  return `${n < 0 ? "-" : ""}$${abs.toFixed(0)}`;
+  const value = Number(n ?? 0);
+  if (!Number.isFinite(value)) return "$0";
+  const sign = value < 0 ? "-" : "";
+  return `${sign}$${Math.abs(Math.round(value)).toLocaleString("en-US")}`;
 }
 
 export function weightedRandom(items) {

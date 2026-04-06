@@ -133,6 +133,95 @@ export function hydratePlayer(player, seasonYear = 2026) {
   return player;
 }
 
+function ensureDesignationMeta(player) {
+  if (!player) return;
+  if (!player.designationMode) player.designationMode = player.designation ? "manual" : "auto";
+}
+
+function dpFitScore(player) {
+  const salary = Number(player.contract?.salary || 0);
+  const primeBoost = player.age >= 21 && player.age <= 29 ? 18 : player.age <= 20 ? 10 : Math.max(-10, 8 - (player.age - 29) * 2);
+  const roleBoost = ["ST", "CAM", "LW", "RW"].includes(player.position) ? 12 : ["CM", "CDM"].includes(player.position) ? 6 : 0;
+  return (player.overall * 5.8) + (player.potential * 1.9) + (salary / 65000) + primeBoost + roleBoost;
+}
+
+function u22FitScore(player) {
+  const salary = Number(player.contract?.salary || 0);
+  const ageBoost = Math.max(0, 24 - player.age) * 12;
+  const upsideBoost = Math.max(0, player.potential - player.overall) * 3.4;
+  const homegrownBoost = player.homegrown ? 12 : 0;
+  return (player.overall * 4.2) + (player.potential * 3.7) + ageBoost + upsideBoost + homegrownBoost - (salary / 90000);
+}
+
+function tamFitScore(player) {
+  const salary = Number(player.contract?.salary || 0);
+  const rosterBoost = player.rosterRole === "Senior" ? 18 : 0;
+  return (player.overall * 4.8) + (player.potential * 1.2) + (salary / 50000) + rosterBoost;
+}
+
+export function autoAssignTeamDesignations(state, teamId) {
+  const team = state.teams.find(t => t.id === teamId);
+  if (!team) return { ok: false, reason: "Team not found." };
+  const teamPlayers = getTeamPlayers(state, teamId);
+  teamPlayers.forEach(ensureDesignationMeta);
+
+  // Clean illegal manual U22 tags after aging.
+  for (const p of teamPlayers) {
+    if (p.designationMode === "manual" && p.designation === "U22" && p.age > 23) {
+      p.designationMode = "auto";
+      p.designation = null;
+    }
+  }
+
+  for (const p of teamPlayers) {
+    if (p.designationMode !== "manual") p.designation = null;
+  }
+
+  const manualDp = teamPlayers.filter(p => p.designationMode === "manual" && p.designation === "DP").length;
+  const manualU22 = teamPlayers.filter(p => p.designationMode === "manual" && p.designation === "U22").length;
+  const openDp = Math.max(0, (team.dpSlots ?? 3) - manualDp);
+  const openU22 = Math.max(0, (team.u22Slots ?? 3) - manualU22);
+
+  const seniorAuto = teamPlayers.filter(p => p.rosterRole === "Senior" && p.designationMode !== "manual");
+
+  const u22Candidates = seniorAuto
+    .filter(p => p.age <= 23)
+    .sort((a, b) => u22FitScore(b) - u22FitScore(a));
+  for (const player of u22Candidates.slice(0, openU22)) {
+    player.designation = "U22";
+  }
+
+  const dpCandidates = seniorAuto
+    .filter(p => !p.designation)
+    .sort((a, b) => dpFitScore(b) - dpFitScore(a));
+  let dpAssigned = 0;
+  for (const player of dpCandidates) {
+    if (dpAssigned >= openDp) break;
+    const salary = Number(player.contract?.salary || 0);
+    if (salary >= MLS_RULES.maxBudgetCharge * 1.1 || player.overall >= 73 || (player.potential >= 77 && salary >= 600000)) {
+      player.designation = "DP";
+      dpAssigned += 1;
+    }
+  }
+
+  const tamCandidates = seniorAuto
+    .filter(p => !p.designation)
+    .sort((a, b) => tamFitScore(b) - tamFitScore(a));
+  for (const player of tamCandidates) {
+    const salary = Number(player.contract?.salary || 0);
+    if (salary > MLS_RULES.maxBudgetCharge || (salary >= 650000 && player.overall >= 66) || (player.overall >= 71 && player.potential >= 74)) {
+      player.designation = "TAM";
+    }
+  }
+
+  return { ok: true };
+}
+
+export function autoAssignAllDesignations(state) {
+  for (const team of state.teams || []) autoAssignTeamDesignations(state, team.id);
+  return state;
+}
+
 // ─── Player stats/ratings ────────────────────────────────────────────────────
 
 export function overall(player) {
@@ -952,7 +1041,7 @@ function awardSeason(state) {
 
 function generateDraftPool(state) {
   const pool = [];
-  for (let i = 0; i < 180; i++) {
+  for (let i = 0; i < 260; i++) {
     const fakeClub = { id: null, marketRating: randInt(42, 59), country: "USA" };
     const pos = pick(POSITIONS);
     const p   = makePlayer(fakeClub, i + 20, pos);
@@ -965,7 +1054,7 @@ function generateDraftPool(state) {
     p.rosterRole      = "Supplemental";
     p.contract.status = "Draft Eligible";
     // Bring SuperDraft talent closer to real MLS depth: mostly low 40s to upper 50s, with only a few 60 OVR types.
-    const targetOverall = clamp(randInt(42, 58) + (i < 10 ? randInt(0, 4) : 0), 40, 62);
+    const targetOverall = clamp(randInt(39, 55) + (i < 14 ? randInt(0, 4) : 0), 38, 60);
     for (const key of Object.keys(p.attributes)) {
       p.attributes[key] = clamp(Math.round(p.attributes[key] + (targetOverall - p.overall) * 0.75 + randInt(-3, 3)), 22, 82);
     }
@@ -1009,6 +1098,7 @@ function runDraft(state) {
       player.designation      = round === 1 && Math.random() < 0.35 ? "U22" : null;
       player.domestic         = true;
       state.players.push(player);
+      autoAssignTeamDesignations(state, teamId);
       addTransaction(
         state,
         "Draft",
@@ -1076,6 +1166,7 @@ function createDraftSelectionRecord(state, pickObj, player, teamId) {
   player.designation        = pickObj.round === 1 && player.age <= 22 && Math.random() < 0.35 ? "U22" : null;
   player.domestic           = true;
   state.players.push(player);
+  autoAssignTeamDesignations(state, teamId);
   state.draft.pool = state.draft.pool.filter(p => p.id !== player.id);
   const historyItem = {
     id: uuid("draftsel"),
@@ -1370,6 +1461,7 @@ function finalizeOffseason(state) {
     team.tam = state.settings.tamAnnual;
     team.finances.cash += randInt(-2000000, 8000000);
   }
+  autoAssignAllDesignations(state);
 
   ensureDraftPickLedger(state, state.season.year + 1, 3);
   state.draft = {
@@ -1411,11 +1503,19 @@ export function setPlayerDesignation(state, playerId, designation) {
   const nextValue = designation === "None" || designation === "" ? null : designation;
   if (nextValue === "U22" && player.age > 23) return { ok: false, reason: "U22 Initiative players must be 23 or younger." };
   const teamPlayers = getTeamPlayers(state, team.id);
-  const otherDp = teamPlayers.filter(p => p.id !== player.id && p.designation === "DP").length;
-  const otherU22 = teamPlayers.filter(p => p.id !== player.id && p.designation === "U22").length;
+  const otherDp = teamPlayers.filter(p => p.id !== player.id && p.designationMode === "manual" && p.designation === "DP").length;
+  const otherU22 = teamPlayers.filter(p => p.id !== player.id && p.designationMode === "manual" && p.designation === "U22").length;
   if (nextValue === "DP" && otherDp >= (team.dpSlots ?? 3)) return { ok: false, reason: "No DP slots available." };
   if (nextValue === "U22" && otherU22 >= (team.u22Slots ?? 3)) return { ok: false, reason: "No U22 slots available." };
+  if (designation === "Auto") {
+    player.designationMode = "auto";
+    player.designation = null;
+    autoAssignTeamDesignations(state, team.id);
+    return { ok: true };
+  }
+  player.designationMode = "manual";
   player.designation = nextValue;
+  autoAssignTeamDesignations(state, team.id);
   return { ok: true };
 }
 
@@ -1518,6 +1618,8 @@ export function proposeTrade(state, proposal) {
   partner.tam += outgoingTAM - incomingTAM;
   userTeam.internationalSlots += incomingIntlSlots - outgoingIntlSlots;
   partner.internationalSlots += outgoingIntlSlots - incomingIntlSlots;
+  autoAssignTeamDesignations(state, userTeam.id);
+  autoAssignTeamDesignations(state, partner.id);
   outgoingPicks.forEach(p => { p.ownerTeamId = partner.id; });
   incomingPicks.forEach(p => { p.ownerTeamId = userTeam.id; });
 
@@ -1679,7 +1781,7 @@ export function createNewState(options) {
   }
 
   const state = {
-    version: 3,
+    version: 6,
     season:  { year: 2026, phase: "Regular Season" },
     calendar: { week: 1, absoluteDay: 0 },
     teams,
@@ -1706,6 +1808,7 @@ export function createNewState(options) {
     },
   };
 
+  autoAssignAllDesignations(state);
   makeSchedule(state);
   seedFreeAgents(state);
   ensureDraftPickLedger(state, state.season.year + 1, 3);
@@ -1740,6 +1843,8 @@ export function signFreeAgent(state, playerId, teamId) {
     cap.seniorCount < 20 ? "Senior" :
     cap.supplementalCount < 4 ? "Supplemental" : "Reserve";
   state.freeAgents = state.freeAgents.filter(p => p.id !== playerId);
+  state.players.push(player);
+  autoAssignTeamDesignations(state, team.id);
   addTransaction(state, "Signing", `${team.name} signed free agent ${player.name}.`);
   return { ok: true };
 }
@@ -1783,6 +1888,7 @@ export function callUpAcademyPlayer(state, academyPlayerId, teamId) {
   });
 
   state.players.push(signed);
+  autoAssignTeamDesignations(state, teamId);
   state.academies[teamId] = academy.filter(p => p.id !== academyPlayerId);
   state.academies[teamId].push(makeAcademyPlayer(state.teams.find(t => t.id === teamId)));
   addTransaction(
