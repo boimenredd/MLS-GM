@@ -1627,6 +1627,12 @@ function openPlayerProfile(playerId) {
     ? [["Clean sheets", s.cleanSheets || 0], ["Goals against", s.ga || 0], ["Matches", s.gp || 0], ["Rating", getLivePlayerRating(p, 1).toFixed(2)]]
     : [["Goals", s.goals || 0], ["Assists", s.assists || 0], ["Started", s.gs || 0], ["Matches", s.gp || 0], ["Minutes", formatNumber(s.min || 0)], ["Rating", getLivePlayerRating(p, 1).toFixed(2)], ["Yellow cards", s.yellows || 0], ["Red cards", s.reds || 0]];
   const traits = (p.traits || []).slice(0, 6);
+  const secondaryPosition = p.position === "LB" ? "LM"
+    : p.position === "RB" ? "RM"
+    : p.position === "CB" ? "CDM"
+    : p.position === "ST" ? "CAM"
+    : p.position === "CAM" ? "CM"
+    : "Versatile";
   const html = `<div id="playerProfileOverlay" class="pp-overlay">
     <div class="pp-modal pp-player-shell">
       <button class="pp-close" id="ppClose">×</button>
@@ -1653,7 +1659,7 @@ function openPlayerProfile(playerId) {
             <div class="position-primary">${escapeHtml(p.position)}</div>
             <div class="note">Primary</div>
             <div class="player-pos-chip">${escapeHtml(p.position)}</div>
-            <div class="note">${escapeHtml((p.position === "LB" ? "LM" : p.position === "RB" ? "RM" : p.position === "CB" ? "CDM" : p.position === "ST" ? "CAM" : p.position === "CAM" ? "CM" : "Versatile")).toString())}</div>
+            <div class="note">${escapeHtml(secondaryPosition)}</div>
           </div>
           <div class="player-traits-card">
             <div class="pp-section-title">Player traits</div>
