@@ -418,7 +418,7 @@ function makePlayer(club, idx, forcedPos = null) {
   const preferredFoot = Math.random() < 0.76 ? "Right" : "Left";
   const position = normalizeGeneratedPosition(rawPosition, preferredFoot);
 
-  const ageQualityAdj = age <= 18 ? -9 : age <= 20 ? -6 : age <= 22 ? -3 : age <= 25 ? 0 : age <= 29 ? 2 : age <= 32 ? 0 : -3;
+  const ageQualityAdj = age <= 18 ? -14 : age <= 20 ? -10 : age <= 22 ? -6 : age <= 24 ? -2 : age <= 28 ? 2 : age <= 31 ? 1 : -2;
   let qualityBase = club.marketRating + randInt(-8, 8) + ageQualityAdj;
   if (idx < 2) qualityBase += 9;
   else if (idx < 6) qualityBase += 4;
@@ -550,10 +550,13 @@ export function teamOverall(state, teamId) {
     .slice(0, 11);
 
   if (!roster.length) return 50;
-  return (
+  const base = (
     roster.reduce((sum, p) => sum + p.overall + (p.morale - 60) * 0.03, 0) /
     roster.length
   );
+  const coach = (state.coaches || []).find(c => c.teamId === teamId);
+  const coachBoost = coach ? ((coach.managerStars || 3) - 3) * 0.7 : 0;
+  return base + coachBoost;
 }
 
 export function sortStandingsRows(a, b) {

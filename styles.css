@@ -1976,3 +1976,54 @@ html[data-theme="light"] .setup-modal { border-color: #d7dfe8; }
   .player-profile-grid, .coach-profile-grid, .player-hero-grid, .leaders-grid, .full-leaders-grid, .dashboard-fbgm-tight, .player-season-stat-strip { grid-template-columns: 1fr; }
   .coach-carousel-strip, .trait-grid-mini, .coach-info-grid { grid-template-columns: 1fr; }
 }
+
+
+.weekly-layout-v2 { align-items: start; }
+.weekly-grid-v2 { gap: 14px; }
+.week-game-card-v2 { padding: 0; overflow: hidden; }
+.week-game-main-v2 { display: grid; grid-template-columns: minmax(0,1fr) 84px minmax(0,1fr); gap: 12px; padding: 12px; align-items: stretch; }
+.week-fixture-team { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius: 14px; min-width: 0; background: linear-gradient(135deg, color-mix(in srgb, var(--team-primary) 84%, #fff 16%), var(--team-secondary)); color: var(--team-text, #fff); border: 1px solid rgba(255,255,255,.10); }
+.week-fixture-team.away { justify-content: flex-end; }
+.week-team-copy { min-width:0; }
+.week-team-copy.align-right { text-align:right; }
+.week-team-name-strong { font-size: 16px; font-weight: 800; line-height: 1.2; }
+.week-team-name-strong .team-link { color: inherit; font-weight: 800; }
+.week-team-sub { font-size: 12px; margin-top: 5px; opacity: .95; }
+.week-team-sub .coach-link, .week-team-sub .team-link { color: inherit; }
+.week-team-crest .mini-team-logo { width: 32px; height: 32px; object-fit: contain; }
+.week-versus-v2 { display:grid; place-items:center; min-height: 100%; border:1px solid var(--line); border-radius:12px; background: var(--bg2); font-size: 24px; }
+.week-game-actions-v2 { display:grid; grid-template-columns: 1fr 1fr; gap:0; }
+.week-game-actions-v2 button { padding: 11px 12px; }
+.coach-stars { display:inline-flex; gap:2px; line-height:1; }
+.coach-stars i { font-style: normal; color: rgba(148,163,184,.45); font-size: 13px; }
+.coach-stars i.on { color: #fbbf24; }
+.coach-meta-stars { display:inline-flex; vertical-align: middle; margin-left: 6px; }
+.coach-carousel-strip-rich { grid-template-columns: repeat(2, minmax(0,1fr)); }
+.coach-pill-rich { display:grid; gap:10px; }
+.coach-pill-head { display:flex; gap:10px; align-items:center; }
+.coach-pill-photo { width:44px; height:44px; border-radius:50%; object-fit:cover; background:#0f172a; }
+.coach-pill-foot { display:flex; justify-content:space-between; align-items:center; gap:10px; color:var(--muted); font-size:12px; }
+.coach-photo, .coach-photo-lg { border-radius:50%; object-fit:cover; background:#0f172a; display:block; }
+.coach-photo { width:42px; height:42px; }
+.coach-photo-lg { width:84px; height:84px; border:3px solid rgba(255,255,255,.16); }
+.coach-photo-fallback { display:grid; place-items:center; font-weight:800; background:rgba(255,255,255,.18); color:#fff; }
+.coach-hero-main-fixed { display:grid; grid-template-columns: minmax(0,1fr) 360px; gap:18px; align-items:center; }
+.coach-hero-id { display:flex; gap:16px; align-items:center; min-width:0; }
+.coach-title-stack { min-width:0; }
+.coach-rating-row { display:flex; align-items:center; gap:10px; margin-top:8px; font-size:12px; color:rgba(255,255,255,.82); }
+.coach-hero-stats-fixed { align-self: stretch; }
+.coach-profile-grid-fixed { grid-template-columns: minmax(0,1.2fr) 360px; align-items:start; }
+.coach-info-grid-fixed { margin-bottom: 16px; }
+.coach-split-stats { display:grid; grid-template-columns: minmax(0,1fr) 240px; gap:16px; align-items:start; }
+.coach-stat-table-wrap { padding: 10px; }
+.coach-career-list-fixed { gap:0; }
+.coach-career-list-fixed .coach-career-item { padding: 12px 0; align-items:center; }
+.coach-career-list-fixed .coach-career-item strong { display:block; }
+.coach-career-list-fixed .coach-career-item span { color: var(--muted); font-size: 13px; }
+.pp-coach-modal { width:min(1180px, calc(100vw - 28px)); }
+@media (max-width: 1180px) {
+  .coach-hero-main-fixed, .coach-profile-grid-fixed, .coach-split-stats, .week-game-main-v2 { grid-template-columns: 1fr; }
+  .coach-carousel-strip-rich { grid-template-columns: 1fr; }
+  .week-fixture-team.away { justify-content: flex-start; }
+  .week-team-copy.align-right { text-align:left; }
+}

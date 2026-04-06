@@ -114,13 +114,88 @@ const GLOBAL_FREE_AGENT_COACHES = [
   ["Bruno Génésio","France",59],["Claude Puel","France",64],["Lucien Favre","Switzerland",68],["Peter Bosz","Netherlands",62],
   ["Kasper Hjulmand","Denmark",54],["Ståle Solbakken","Norway",57],["Åge Hareide","Norway",72],["Roberto Donadoni","Italy",62],
   ["Aitor Karanka","Spain",52],["Quique Setién","Spain",67],["Domenico Tedesco","Germany",40],["Gennaro Gattuso","Italy",48],
-  ["Ole Gunnar Solskjær","Norway",53],["Paulo Bento","Portugal",57],["Hervé Renard","France",57],["Siniša Oreščanin","Croatia",53]
+  ["Ole Gunnar Solskjær","Norway",53],["Paulo Bento","Portugal",57],["Hervé Renard","France",57],["Siniša Oreščanin","Croatia",53],
+  ["Rodolfo Arruabarrena","Argentina",49],["Vitor Pereira","Portugal",57],["Albert Celades","Spain",50],["Marcelino","Spain",60],
+  ["Joachim Löw","Germany",66],["Slaven Bilić","Croatia",57],["Chris Wilder","England",58],["Jesualdo Ferreira","Portugal",79],
+  ["Rui Vitória","Portugal",55],["Karel Geraerts","Belgium",43],["Adi Hütter","Austria",55],["Urs Fischer","Switzerland",60],
+  ["Míchel Sánchez","Spain",50],["Sérgio Conceição","Portugal",51],["Paulo Fonseca","Portugal",53],["Roberto Martínez","Spain",52],
+  ["Felix Magath","Germany",72],["Vahid Halilhodžić","Bosnia and Herzegovina",73],["Pizzi","Argentina",57],["Hugo Ibarra","Argentina",51],
+  ["Alexander Blessin","Germany",52],["Paco Jémez","Spain",56],["Giovanni van Bronckhorst","Netherlands",50],["Lee Carsley","England",51],
+  ["Tony Popovic","Australia",52],["Kevin Muscat","Australia",52],["Ange Postecoglou","Australia",60],["John Herdman","Canada",50],
+  ["Jesse Marsch","United States",52],["Tab Ramos","United States",59],["Bob Bradley","United States",67],["Jim Curtin","United States",45],
+  ["Wilfried Nancy","Canada",48],["Robin Dutt","Germany",60],["Gerardo Seoane","Switzerland",47],["Luciano Spalletti","Italy",67]
 ];
 
 const COACH_STAT_DEFS = [
   ["wins", "Wins"], ["draws", "Draws"], ["losses", "Losses"], ["points", "Points"], ["winPct", "Win %"],
   ["gf", "GF"], ["ga", "GA"], ["gd", "GD"]
 ];
+
+const COACH_HEADSHOTS = {
+  "Gerardo Martino": "https://img.a.transfermarkt.technology/portrait/big/5616-1668455123.jpg?lm=1",
+  "Nico Estévez": "https://img.a.transfermarkt.technology/portrait/big/23840-1757577902.jpg?lm=1",
+  "Dean Smith": "https://img.a.transfermarkt.technology/portrait/big/15315-1757753322.jpg?lm=1",
+  "Gregg Berhalter": "https://img.a.transfermarkt.technology/portrait/header/22272-1757579265.jpg?lm=1",
+  "Pat Noonan": "https://img.a.transfermarkt.technology/portrait/big/27429-1757575322.jpg?lm=1",
+  "Matt Wells": "https://i.namu.wiki/i/BSBgc8l5k5121dnVaf3NXvmyM36zWNpSd8rfnJ-X6l2Kf3fIJGUXFHoLtZxNdz3NFcx-xFCfdtqLRGpC9DXMmg.webp",
+  "Henrik Rydström": "https://images.mlssoccer.com/image/private/t_keep-aspect-ratio-e-mobile/f_auto/mls-clb/fwcjvplrtfzk9wk2vnj0.jpg",
+  "Eric Quill": "https://img.a.transfermarkt.technology/portrait/big/66798-1757774436.jpg?lm=1",
+  "René Weiler": "https://img.a.transfermarkt.technology/portrait/big/5311-1774731065.jpg?lm=1",
+  "Ben Olsen": "https://img.a.transfermarkt.technology/portrait/big/15012-1773860816.jpg?lm=1",
+  "Javier Mascherano": "https://img.a.transfermarkt.technology/portrait/big/95593-1775232637.jpg?lm=1",
+  "Greg Vanney": "https://img.a.transfermarkt.technology/portrait/big/17495-1774731449.jpg?lm=1",
+  "Marc Dos Santos": "https://img.a.transfermarkt.technology/portrait/big/13259-1520888646.jpg?lm=1",
+  "Cameron Knowles": "https://img.a.transfermarkt.technology/portrait/big/22827-1583013214.jpg?lm=1",
+  "Marco Donadel": "https://img.a.transfermarkt.technology/portrait/big/84217-1757775447.jpg?lm=1",
+  "B. J. Callaghan": "https://img.a.transfermarkt.technology/portrait/big/116289-1757771791.jpg?lm=1",
+  "Marko Mitrović": "https://img.a.transfermarkt.technology/portrait/big/24972-1722007384.jpg?lm=1",
+  "Pascal Jansen": "https://img.a.transfermarkt.technology/portrait/header/18820-1757579984.jpg?lm=1",
+  "Michael Bradley": "https://img.a.transfermarkt.technology/portrait/header/122177-1775235759.jpg?lm=1",
+  "Óscar Pareja": "https://img.a.transfermarkt.technology/portrait/header/22583-1757584443.jpg?lm=1",
+  "Bradley Carnell": "https://img.a.transfermarkt.technology/portrait/header/44287-1775234589.jpg?lm=1",
+  "Phil Neville": "https://img.a.transfermarkt.technology/portrait/header/29695-1775235674.jpg?lm=1",
+  "Pablo Mastroeni": "https://img.a.transfermarkt.technology/portrait/header/32926-1775235861.jpg?lm=1",
+  "Mikey Varas": "https://img.a.transfermarkt.technology/portrait/header/75877-1775236083.jpg?lm=1",
+  "Bruce Arena": "https://img.a.transfermarkt.technology/portrait/header/2544-1774652508.jpg?lm=1",
+  "Brian Schmetzer": "https://img.a.transfermarkt.technology/portrait/header/8116-1775236368.jpg?lm=1",
+  "Raphaël Wicky": "https://img.a.transfermarkt.technology/portrait/header/23140-1775236944.jpg?lm=1",
+  "Yoann Damet": "https://img.a.transfermarkt.technology/portrait/header/69476-1618656745.jpg?lm=1",
+  "Robin Fraser": "https://img.a.transfermarkt.technology/portrait/header/17473-1775237375.jpg?lm=1",
+  "Jesper Sørensen": "https://img.a.transfermarkt.technology/portrait/header/10705-1757576779.jpg?lm=1"
+};
+
+const COACH_MANAGER_STARS = {
+  "Gerardo Martino": 5,
+  "Nico Estévez": 3,
+  "Dean Smith": 4,
+  "Gregg Berhalter": 4,
+  "Pat Noonan": 4,
+  "Matt Wells": 2,
+  "Henrik Rydström": 4,
+  "Eric Quill": 3,
+  "René Weiler": 4,
+  "Ben Olsen": 4,
+  "Javier Mascherano": 3,
+  "Greg Vanney": 4,
+  "Marc Dos Santos": 3,
+  "Cameron Knowles": 2,
+  "Marco Donadel": 2,
+  "B. J. Callaghan": 3,
+  "Marko Mitrović": 3,
+  "Pascal Jansen": 4,
+  "Michael Bradley": 2,
+  "Óscar Pareja": 5,
+  "Bradley Carnell": 4,
+  "Phil Neville": 3,
+  "Pablo Mastroeni": 4,
+  "Mikey Varas": 3,
+  "Bruce Arena": 5,
+  "Brian Schmetzer": 5,
+  "Raphaël Wicky": 4,
+  "Yoann Damet": 2,
+  "Robin Fraser": 3,
+  "Jesper Sørensen": 4
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -310,6 +385,23 @@ function coachLink(coachId, label) {
   return `<button type="button" class="text-link coach-link" data-id="${coachId}">${escapeHtml(text)}</button>`;
 }
 
+
+function renderCoachStars(value = 3) {
+  const n = Math.max(1, Math.min(5, Number(value) || 3));
+  return `<span class="coach-stars" aria-label="${n} star coach">${Array.from({ length: 5 }, (_, i) => `<i class="${i < n ? 'on' : ''}">★</i>`).join('')}</span>`;
+}
+
+function coachPhoto(coach, cls = "coach-photo") {
+  const src = coach?.headshot;
+  if (src) return `<img src="${src}" alt="${escapeHtml(coach?.name || 'Coach')}" class="${cls}" loading="lazy" referrerpolicy="no-referrer" />`;
+  return `<span class="${cls} coach-photo-fallback">${escapeHtml((coach?.name || 'C').split(' ').map(x => x[0]).slice(0,2).join(''))}</span>`;
+}
+
+function coachMetaLine(coach) {
+  if (!coach) return 'No coach';
+  return `${coachLink(coach.id, coach.name)} <span class="coach-meta-stars">${renderCoachStars(coach.managerStars || 3)}</span>`;
+}
+
 function getTeamCoach(teamId) {
   return (state?.coaches || []).find(c => c.teamId === teamId) || null;
 }
@@ -339,6 +431,7 @@ function ensureCoachState(st) {
   if (!st.coaches.length) {
     st.coaches = INITIAL_MLS_COACHES.map(([name, nationality, age, clubName, appointed, playedInMLS]) => {
       const team = (st.teams || []).find(t => t.name === clubName);
+      const managerStars = COACH_MANAGER_STARS[name] || randInt(2, 4);
       return {
         id: `coach_${Math.random().toString(36).slice(2, 10)}`,
         name, nationality, age, teamId: team?.id || null,
@@ -347,23 +440,46 @@ function ensureCoachState(st) {
         style: pick(["Pressing", "Possession", "Balanced", "Counter", "Direct"]),
         contractThrough: (st.season?.year || 2026) + randInt(2, 4),
         career: [{ club: clubName, start: appointed, end: "now" }],
-        sackShield: randInt(2, 4),
+        sackShield: Math.max(randInt(2, 4), managerStars >= 4 ? 4 : 2),
+        managerStars,
+        headshot: COACH_HEADSHOTS[name] || null,
         careerTotals: { matches: 0, wins: 0, draws: 0, losses: 0, points: 0, gf: 0, ga: 0 },
       };
     });
   }
   if (!st.coachCarousel.freeAgents.length) {
-    st.coachCarousel.freeAgents = GLOBAL_FREE_AGENT_COACHES.map(([name, nationality, age]) => ({
-      id: `fac_${Math.random().toString(36).slice(2, 10)}`,
-      name, nationality, age,
-      teamId: null,
-      appointed: null,
-      playedInMLS: "N/A",
-      style: pick(["Pressing", "Possession", "Balanced", "Counter", "Direct"]),
-      career: [],
-      careerTotals: { matches: randInt(180, 540), wins: randInt(60, 240), draws: randInt(35, 120), losses: randInt(45, 180), points: randInt(220, 760), gf: randInt(180, 680), ga: randInt(140, 520) },
-      reputation: randInt(66, 88),
-    }));
+    st.coachCarousel.freeAgents = GLOBAL_FREE_AGENT_COACHES.map(([name, nationality, age]) => {
+      const reputation = randInt(64, 91);
+      return {
+        id: `fac_${Math.random().toString(36).slice(2, 10)}`,
+        name, nationality, age,
+        teamId: null,
+        appointed: null,
+        playedInMLS: "N/A",
+        style: pick(["Pressing", "Possession", "Balanced", "Counter", "Direct"]),
+        career: [],
+        headshot: COACH_HEADSHOTS[name] || null,
+        managerStars: Math.max(2, Math.min(5, COACH_MANAGER_STARS[name] || Math.round((reputation - 55) / 10))),
+        careerTotals: { matches: randInt(180, 540), wins: randInt(60, 240), draws: randInt(35, 120), losses: randInt(45, 180), points: randInt(220, 760), gf: randInt(180, 680), ga: randInt(140, 520) },
+        reputation,
+        sackShield: randInt(1, 3),
+      };
+    });
+  }
+  for (const coach of st.coaches) {
+    coach.headshot ||= COACH_HEADSHOTS[coach.name] || null;
+    coach.managerStars ||= COACH_MANAGER_STARS[coach.name] || randInt(2, 4);
+    coach.style ||= "Balanced";
+    coach.sackShield ||= Math.max(2, coach.managerStars >= 4 ? 4 : 2);
+    coach.career ||= coach.teamId ? [{ club: byTeamId(coach.teamId, st)?.name || "Unknown Club", start: coach.appointed || `${st.season?.year || 2026}-01-01`, end: "now" }] : [];
+    coach.careerTotals ||= { matches: 0, wins: 0, draws: 0, losses: 0, points: 0, gf: 0, ga: 0 };
+  }
+  for (const coach of st.coachCarousel.freeAgents) {
+    coach.headshot ||= COACH_HEADSHOTS[coach.name] || null;
+    coach.managerStars ||= COACH_MANAGER_STARS[coach.name] || Math.max(2, Math.min(5, Math.round(((coach.reputation || 72) - 55) / 10)));
+    coach.style ||= "Balanced";
+    coach.career ||= [];
+    coach.careerTotals ||= { matches: randInt(180, 540), wins: randInt(60, 240), draws: randInt(35, 120), losses: randInt(45, 180), points: randInt(220, 760), gf: randInt(180, 680), ga: randInt(140, 520) };
   }
   for (const team of st.teams || []) {
     if (!st.coaches.find(c => c.teamId === team.id)) {
@@ -381,48 +497,55 @@ function renderCoachProfile(coachId) {
   const team = coach.teamId ? byTeamId(coach.teamId) : null;
   const rec = getCoachCurrentRecord(coach);
   const winPct = rec.matches ? Math.round((rec.wins / rec.matches) * 100) : 0;
+  const palette = team ? teamColors(team.id) : { primary: '#cf102c', secondary: '#17181d', text: '#ffffff' };
   const html = `<div id="coachProfileOverlay" class="pp-overlay">
     <div class="pp-modal pp-coach-modal">
       <button class="pp-close" id="coachProfileClose">×</button>
-      <div class="coach-hero-card">
-        <div class="coach-hero-main">
-          <div class="coach-avatar">${escapeHtml((coach.name || "C").split(" ").map(x => x[0]).slice(0,2).join(""))}</div>
-          <div>
-            <div class="coach-name">${escapeHtml(coach.name)}</div>
-            <div class="coach-subline">${team ? teamLink(team.id, team.name) : "Free Agent"} · ${escapeHtml(coach.nationality)}</div>
+      <div class="coach-hero-card" style="background:linear-gradient(180deg, ${palette.primary} 0 88px, #17181d 88px 100%); color:${palette.text === '#111111' ? '#f8fafc' : '#ffffff'};">
+        <div class="coach-hero-main coach-hero-main-fixed">
+          <div class="coach-hero-id">
+            ${coachPhoto(coach, 'coach-photo-lg')}
+            <div class="coach-title-stack">
+              <div class="coach-name">${escapeHtml(coach.name)}</div>
+              <div class="coach-subline">${team ? teamLink(team.id, team.name) : "Free Agent"} · ${escapeHtml(coach.nationality)}</div>
+              <div class="coach-rating-row">${renderCoachStars(coach.managerStars || 3)}<span>Manager rating</span></div>
+            </div>
+          </div>
+          <div class="coach-hero-stats coach-hero-stats-fixed">
+            <div><span>Age</span><strong>${coach.age}</strong></div>
+            <div><span>Matches</span><strong>${formatNumber(rec.matches)}</strong></div>
+            <div><span>Points</span><strong>${formatNumber(rec.points)}</strong></div>
+            <div><span>Win %</span><strong>${winPct}%</strong></div>
           </div>
         </div>
-        <div class="coach-hero-stats">
-          <div><span>Age</span><strong>${coach.age}</strong></div>
-          <div><span>Matches</span><strong>${formatNumber(rec.matches)}</strong></div>
-          <div><span>Points</span><strong>${formatNumber(rec.points)}</strong></div>
-          <div><span>Win %</span><strong>${winPct}%</strong></div>
-        </div>
       </div>
-      <div class="coach-profile-grid">
-        <div class="panel">
+      <div class="coach-profile-grid coach-profile-grid-fixed">
+        <div class="panel coach-overview-panel">
           <div class="panel-head"><h3>Overview</h3><span>${team ? "Active MLS coach" : "Free agent coach"}</span></div>
-          <div class="coach-info-grid">
+          <div class="coach-info-grid coach-info-grid-fixed">
             <div class="pp-info-box"><div class="pp-info-lbl">Country</div><div class="pp-info-val">${escapeHtml(coach.nationality)}</div></div>
             <div class="pp-info-box"><div class="pp-info-lbl">Style</div><div class="pp-info-val">${escapeHtml(coach.style || "Balanced")}</div></div>
             <div class="pp-info-box"><div class="pp-info-lbl">Appointed</div><div class="pp-info-val">${escapeHtml(coach.appointed || "Available")}</div></div>
             <div class="pp-info-box"><div class="pp-info-lbl">Played in MLS</div><div class="pp-info-val">${escapeHtml(coach.playedInMLS || "N/A")}</div></div>
           </div>
-          <div class="coach-bars">
-            <div class="coach-bar-row"><span>Won</span><div class="coach-bar"><i style="width:${Math.max(8, Math.min(100, winPct))}%"></i></div><strong>${rec.wins}</strong></div>
-            <div class="coach-bar-row"><span>Drawn</span><div class="coach-bar neutral"><i style="width:${Math.max(8, Math.min(100, rec.matches ? (rec.draws/rec.matches)*100 : 0))}%"></i></div><strong>${rec.draws}</strong></div>
-            <div class="coach-bar-row"><span>Lost</span><div class="coach-bar loss"><i style="width:${Math.max(8, Math.min(100, rec.matches ? (rec.losses/rec.matches)*100 : 0))}%"></i></div><strong>${rec.losses}</strong></div>
+          <div class="coach-split-stats">
+            <div class="coach-bars">
+              <div class="coach-bar-row"><span>Won</span><div class="coach-bar"><i style="width:${Math.max(8, Math.min(100, winPct))}%"></i></div><strong>${rec.wins}</strong></div>
+              <div class="coach-bar-row"><span>Drawn</span><div class="coach-bar neutral"><i style="width:${Math.max(8, Math.min(100, rec.matches ? (rec.draws/rec.matches)*100 : 0))}%"></i></div><strong>${rec.draws}</strong></div>
+              <div class="coach-bar-row"><span>Lost</span><div class="coach-bar loss"><i style="width:${Math.max(8, Math.min(100, rec.matches ? (rec.losses/rec.matches)*100 : 0))}%"></i></div><strong>${rec.losses}</strong></div>
+            </div>
+            <div class="panel-lite coach-stat-table-wrap">
+              <table class="tight-table"><thead><tr><th>Stat</th><th class="num">Value</th></tr></thead><tbody>
+                ${COACH_STAT_DEFS.map(([key,label]) => `<tr><td>${label}</td><td class="num">${key === "winPct" ? `${winPct}%` : formatNumber(rec[key] || 0)}</td></tr>`).join("")}
+              </tbody></table>
+            </div>
           </div>
         </div>
-        <div class="panel">
+        <div class="panel coach-career-panel">
           <div class="panel-head"><h3>Career</h3><span>Sim tracking</span></div>
-          <div class="coach-career-list">
-            ${(coach.career || []).map(job => `<div class="coach-career-item"><strong>${escapeHtml(job.club)}</strong><span>${escapeHtml(job.start || "—")} — ${escapeHtml(job.end || "now")}</span></div>`).join("") || `<div class="note">No career history yet.</div>`}
+          <div class="coach-career-list coach-career-list-fixed">
+            ${(coach.career || []).map(job => `<div class="coach-career-item"><div><strong>${escapeHtml(job.club)}</strong></div><span>${escapeHtml(job.start || "—")} — ${escapeHtml(job.end || "now")}</span></div>`).join("") || `<div class="note">No career history yet.</div>`}
           </div>
-          <div class="subtle-divider"></div>
-          <table><thead><tr><th>Stat</th><th class="num">Value</th></tr></thead><tbody>
-            ${COACH_STAT_DEFS.map(([key,label]) => `<tr><td>${label}</td><td class="num">${key === "winPct" ? `${winPct}%` : formatNumber(rec[key] || 0)}</td></tr>`).join("")}
-          </tbody></table>
         </div>
       </div>
     </div>
@@ -456,34 +579,34 @@ function syncCoachStats(st) {
 }
 
 function renderCoachCarousel() {
-  const free = (state?.coachCarousel?.freeAgents || []).slice().sort((a,b) => (b.reputation || 0) - (a.reputation || 0)).slice(0, 12);
+  const free = (state?.coachCarousel?.freeAgents || []).slice().sort((a,b) => ((b.managerStars || 0) - (a.managerStars || 0)) || ((b.reputation || 0) - (a.reputation || 0))).slice(0, 18);
   return `<div class="panel"><div class="panel-head"><h3>Coaching Carousel</h3><span>Stable by design · openings only after long poor runs</span></div>
-    <div class="coach-carousel-strip">${free.map(c => `<div class="coach-pill"><button type="button" class="coach-link coach-pill-name" data-id="${c.id}">${escapeHtml(c.name)}</button><div class="note">${escapeHtml(c.nationality)} · ${c.age} · ${escapeHtml(c.style || "Balanced")}</div></div>`).join("")}</div>
+    <div class="coach-carousel-strip coach-carousel-strip-rich">${free.map(c => `<div class="coach-pill coach-pill-rich"><div class="coach-pill-head">${coachPhoto(c, 'coach-pill-photo')}<div><button type="button" class="coach-link coach-pill-name" data-id="${c.id}">${escapeHtml(c.name)}</button><div class="note">${escapeHtml(c.nationality)} · ${c.age}</div></div></div><div class="coach-pill-foot">${renderCoachStars(c.managerStars || 3)}<span>${escapeHtml(c.style || 'Balanced')}</span></div></div>`).join("")}</div>
   </div>`;
 }
 
 function rebalanceLiveStateForModernRules(st) {
-  if (!st?.players || st._ratingsBalancedV8) return;
+  if (!st?.players || st._ratingsBalancedV9) return;
   for (const team of st.teams || []) {
     const roster = (st.players || []).filter(p => p.clubId === team.id).sort((a,b) => (b.overall - a.overall) || (a.age - b.age));
     roster.forEach((p, idx) => {
-      const ageCap = p.age <= 18 ? 58 : p.age <= 20 ? 62 : p.age <= 22 ? 67 : p.age <= 24 ? 72 : p.age <= 28 ? 78 : p.age <= 31 ? 76 : 73;
-      const eliteAllowance = idx < 2 ? 5 : idx < 5 ? 2 : 0;
+      const ageCap = p.age <= 18 ? 54 : p.age <= 20 ? 58 : p.age <= 22 ? 63 : p.age <= 24 ? 69 : p.age <= 27 ? 75 : p.age <= 30 ? 77 : p.age <= 33 ? 74 : 70;
+      const eliteAllowance = idx < 2 ? 4 : idx < 5 ? 2 : 0;
       const cap = ageCap + eliteAllowance;
       if (p.overall > cap) {
         const delta = p.overall - cap;
         for (const key of Object.keys(p.attributes || {})) p.attributes[key] = Math.max(28, Math.round(p.attributes[key] - delta * 0.9));
         p.overall = cap;
       }
-      const growthHeadroom = p.age <= 18 ? 18 : p.age <= 20 ? 15 : p.age <= 22 ? 12 : p.age <= 24 ? 8 : p.age <= 28 ? 5 : 2;
+      const growthHeadroom = p.age <= 18 ? 17 : p.age <= 20 ? 14 : p.age <= 22 ? 11 : p.age <= 24 ? 7 : p.age <= 28 ? 4 : 1;
       p.potential = Math.max(p.overall, Math.min(90, Math.max(p.overall + 1, p.overall + growthHeadroom - randInt(0, 4))));
     });
   }
-  st._ratingsBalancedV8 = true;
+  st._ratingsBalancedV9 = true;
 }
 
 function rebalanceTeamBudgetView(st) {
-  if (st._budgetBalancedV8) return;
+  if (st._budgetBalancedV9) return;
   for (const team of st.teams || []) {
     const roster = (st.players || []).filter(p => p.clubId === team.id).sort((a,b) => (b.contract?.salary || 0) - (a.contract?.salary || 0));
     roster.forEach((p, idx) => {
@@ -498,12 +621,12 @@ function rebalanceTeamBudgetView(st) {
       if (player) player.hasGreenCard = true;
     }
   }
-  st._budgetBalancedV8 = true;
+  st._budgetBalancedV9 = true;
 }
 
 function normalizeState(st) {
   if (!st) return st;
-  st.version = Math.max(st.version || 0, 8);
+  st.version = Math.max(st.version || 0, 9);
   st.season ||= { year: 2026, phase: "Regular Season" };
   st.calendar ||= { week: 1, absoluteDay: 0 };
   st.settings ||= {};
@@ -1980,11 +2103,6 @@ function renderWeeklySchedule() {
   const currentWeek = state.calendar.week || 1;
   const weekMatches = state.schedule.filter(m => m.week === weeklyScheduleWeek);
   const lockedFuture = weeklyScheduleWeek > currentWeek;
-  const weekCoachCards = weekMatches.slice(0, 8).map(m => {
-    const home = byTeamId(m.homeTeamId); const away = byTeamId(m.awayTeamId);
-    const homeCoach = getTeamCoach(home.id); const awayCoach = getTeamCoach(away.id);
-    return `<div class="coach-match-card"><div><strong>${homeCoach ? coachLink(homeCoach.id, homeCoach.name) : '—'}</strong><span>${teamLink(home.id, home.shortName || home.name)}</span></div><div class="week-versus">vs</div><div><strong>${awayCoach ? coachLink(awayCoach.id, awayCoach.name) : '—'}</strong><span>${teamLink(away.id, away.shortName || away.name)}</span></div></div>`;
-  }).join("");
   return `${pageHead("Weekly Schedule","Current matchday lock — future weeks stay view-only until the current week is fully completed")}
   <div class="panel weekly-toolbar">
     <div class="weekly-nav">
@@ -1998,27 +2116,34 @@ function renderWeeklySchedule() {
       <button class="primary-btn" id="liveWatchWeekBtn" type="button" ${lockedFuture ? 'disabled' : ''}>Live watch all games</button>
     </div>
   </div>
-  <div class="grid-2 compact-grid">
-    <div>
-      <div class="panel"><div class="panel-head"><h3>Matchday Coaches</h3><span>Click a coach for profile</span></div><div class="coach-match-grid">${weekCoachCards || `<div class="note">No matches.</div>`}</div></div>
-      ${renderCoachCarousel()}
-    </div>
+  <div class="grid-2 compact-grid weekly-layout-v2">
     <div class="panel">
       <div class="panel-head"><h3>Fixtures</h3><span>${lockedFuture ? 'Browse only' : 'Watch or sim'}</span></div>
-      <div class="weekly-grid single-col-grid">
+      <div class="weekly-grid single-col-grid weekly-grid-v2">
         ${weekMatches.map(m => {
           const home = byTeamId(m.homeTeamId); const away = byTeamId(m.awayTeamId);
           const homeCoach = getTeamCoach(home.id); const awayCoach = getTeamCoach(away.id);
+          const homePalette = teamColors(home.id); const awayPalette = teamColors(away.id);
           const playable = !lockedFuture;
-          return `<div class="week-game-card">
-            <div class="week-game-main">
-              <div class="week-teams">
-                <div class="week-team-name">${teamLink(home.id, home.name)}<div class="note">${homeCoach ? coachLink(homeCoach.id, homeCoach.name) : 'No coach'} </div></div>
-                <div class="week-versus">${m.played ? `${m.result.homeGoals} - ${m.result.awayGoals}` : 'vs'}</div>
-                <div class="week-team-name">${teamLink(away.id, away.name)}<div class="note">${awayCoach ? coachLink(awayCoach.id, awayCoach.name) : 'No coach'}</div></div>
+          return `<div class="week-game-card week-game-card-v2">
+            <div class="week-game-main week-game-main-v2">
+              <div class="week-fixture-team home" style="--team-primary:${homePalette.primary};--team-secondary:${homePalette.secondary};--team-text:${homePalette.text};">
+                <div class="week-team-crest">${teamLogoMark(home, 'mini-team-logo')}</div>
+                <div class="week-team-copy">
+                  <div class="week-team-name-strong">${teamLink(home.id, home.name)}</div>
+                  <div class="week-team-sub">${coachMetaLine(homeCoach)}</div>
+                </div>
+              </div>
+              <div class="week-versus week-versus-v2">${m.played ? `${m.result.homeGoals} - ${m.result.awayGoals}` : 'vs'}</div>
+              <div class="week-fixture-team away" style="--team-primary:${awayPalette.primary};--team-secondary:${awayPalette.secondary};--team-text:${awayPalette.text};">
+                <div class="week-team-copy align-right">
+                  <div class="week-team-name-strong">${teamLink(away.id, away.name)}</div>
+                  <div class="week-team-sub">${coachMetaLine(awayCoach)}</div>
+                </div>
+                <div class="week-team-crest">${teamLogoMark(away, 'mini-team-logo')}</div>
               </div>
             </div>
-            <div class="week-game-actions">
+            <div class="week-game-actions week-game-actions-v2">
               <button class="small-btn watch-week-match-btn" data-id="${m.id}" ${!playable ? 'disabled' : ''}>Watch game</button>
               <button class="small-btn sim-week-match-btn" data-id="${m.id}" ${(!playable || m.played) ? 'disabled' : ''}>Sim game</button>
             </div>
@@ -2026,6 +2151,7 @@ function renderWeeklySchedule() {
         }).join('')}
       </div>
     </div>
+    ${renderCoachCarousel()}
   </div>`;
 }
 
