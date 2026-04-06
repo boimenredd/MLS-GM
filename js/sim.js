@@ -39,18 +39,18 @@ function shortName(name) {
 }
 
 function estimateSalaryByProfile(position, ovr, age, rosterRole) {
-  const youthDiscount = age <= 20 ? 0.74 : age <= 23 ? 0.9 : age >= 32 ? 0.86 : 1;
-  const roleMult = rosterRole === "Senior" ? 1 : rosterRole === "Supplemental" ? 0.72 : 0.52;
+  const youthDiscount = age <= 19 ? 0.60 : age <= 21 ? 0.72 : age <= 23 ? 0.86 : age >= 33 ? 0.88 : 1;
+  const roleMult = rosterRole === "Senior" ? 1 : rosterRole === "Supplemental" ? 0.62 : 0.44;
   let base;
-  if (ovr >= 79) base = randInt(3200000, 9200000);
-  else if (ovr >= 76) base = randInt(2000000, 5200000);
-  else if (ovr >= 73) base = randInt(1200000, 2800000);
-  else if (ovr >= 70) base = randInt(600000, 1500000);
-  else if (ovr >= 67) base = randInt(250000, 700000);
-  else if (ovr >= 63) base = randInt(140000, 350000);
-  else if (ovr >= 58) base = randInt(95000, 190000);
-  else base = randInt(88025, 140000);
-  if (position === "GK" && ovr >= 70) base = Math.round(base * 0.88);
+  if (ovr >= 80) base = randInt(4200000, 11000000);
+  else if (ovr >= 77) base = randInt(2600000, 7000000);
+  else if (ovr >= 74) base = randInt(1500000, 4200000);
+  else if (ovr >= 71) base = randInt(750000, 2200000);
+  else if (ovr >= 68) base = randInt(320000, 980000);
+  else if (ovr >= 64) base = randInt(170000, 430000);
+  else if (ovr >= 59) base = randInt(95000, 220000);
+  else base = randInt(88025, 145000);
+  if (position === "GK" && ovr >= 70) base = Math.round(base * 0.86);
   return Math.max(88025, Math.round(base * youthDiscount * roleMult));
 }
 
@@ -357,9 +357,14 @@ export function overall(player) {
 }
 
 function makeAttributes(pos, quality = 60, age = 25) {
-  const spread = randInt(-7, 7);
+  const spread = randInt(-6, 6);
   const ageCurve =
-    age < 22 ? 1 : age <= 28 ? 4 : -Math.floor((age - 28) * 1.15);
+    age <= 18 ? -8 :
+    age <= 20 ? -5 :
+    age <= 22 ? -2 :
+    age <= 27 ? 2 :
+    age <= 30 ? 1 :
+    -Math.floor((age - 30) * 1.4) - 1;
   const base = quality + spread + ageCurve;
 
   const map = {
@@ -413,27 +418,30 @@ function makePlayer(club, idx, forcedPos = null) {
   const preferredFoot = Math.random() < 0.76 ? "Right" : "Left";
   const position = normalizeGeneratedPosition(rawPosition, preferredFoot);
 
-  let qualityBase = club.marketRating + randInt(-9, 9);
-  if (idx < 3) qualityBase += 11;
-  if (idx > 20) qualityBase -= 5;
+  const ageQualityAdj = age <= 18 ? -9 : age <= 20 ? -6 : age <= 22 ? -3 : age <= 25 ? 0 : age <= 29 ? 2 : age <= 32 ? 0 : -3;
+  let qualityBase = club.marketRating + randInt(-8, 8) + ageQualityAdj;
+  if (idx < 2) qualityBase += 9;
+  else if (idx < 6) qualityBase += 4;
+  else if (idx > 20) qualityBase -= 5;
 
-  const homegrown  = age <= 22 && Math.random() < 0.18;
+  const homegrown  = age <= 22 && Math.random() < 0.16;
   const rosterRole = idx < 18 ? "Senior" : idx < 24 ? "Supplemental" : "Reserve";
-  const attributes = makeAttributes(position, clamp(qualityBase, 48, 84), age);
+  const attributes = makeAttributes(position, clamp(qualityBase, 46, 82), age);
   const ovr        = overall({ attributes });
-  const potential  = clamp(ovr + randInt(-2, 12) + (age <= 22 ? 6 : 0), ovr, 91);
+  const growthRoom = age <= 18 ? randInt(10, 18) : age <= 20 ? randInt(8, 14) : age <= 22 ? randInt(5, 10) : age <= 25 ? randInt(2, 7) : age <= 29 ? randInt(0, 4) : randInt(-1, 2);
+  const potential  = clamp(ovr + growthRoom, Math.max(ovr, ovr + (age <= 22 ? 2 : 0)), 89);
 
   const salaryBase = estimateSalaryByProfile(position, ovr, age, rosterRole);
 
   let designation = null;
-  if ((idx < 2 && ovr >= 74) || (ovr >= 77 && Math.random() < 0.42)) designation = "DP";
-  else if (age <= 22 && potential >= 70 && ovr >= 60 && Math.random() < 0.28) designation = "U22";
-  else if ((salaryBase > MLS_RULES.maxBudgetCharge && ovr >= 67) || (ovr >= 70 && Math.random() < 0.35)) designation = "TAM";
+  if ((idx < 2 && Math.max(salaryBase, 0) >= 1800000) || salaryBase >= 2200000 || (ovr >= 76 && age >= 23)) designation = "DP";
+  else if (age <= 22 && potential >= 72 && ovr >= 57 && Math.random() < 0.22) designation = "U22";
+  else if ((salaryBase > MLS_RULES.maxBudgetCharge && salaryBase < 2200000 && ovr >= 65) || (ovr >= 69 && Math.random() < 0.26)) designation = "TAM";
 
   const salary = designation === "DP"
-    ? Math.max(salaryBase, randInt(2200000, 8200000))
+    ? Math.max(salaryBase, randInt(2400000, 9000000))
     : designation === "TAM"
-      ? clamp(Math.max(salaryBase, randInt(900000, 2200000)), 850000, 2200000)
+      ? clamp(Math.max(salaryBase, randInt(900000, 2100000)), 850000, 2100000)
       : salaryBase;
 
   return hydratePlayer({
@@ -477,7 +485,7 @@ function makeAcademyPlayer(team) {
   const quality    = randInt(42, 56);
   const attributes = makeAttributes(position, quality, age);
   const ovr        = overall({ attributes });
-  const potential  = clamp(ovr + randInt(6, 14), ovr + 4, 82);
+  const potential  = clamp(ovr + randInt(5, 11), ovr + 3, 79);
   const nationality =
     team.country === "Canada" ? pick(["Canada", "USA"]) : "USA";
 
@@ -1178,8 +1186,8 @@ function generateDraftPool(state) {
     for (const key of Object.keys(p.attributes)) {
       p.attributes[key] = clamp(Math.round(p.attributes[key] + (targetOverall - p.overall) * 0.75 + randInt(-3, 3)), 22, 82);
     }
-    p.overall         = overall(p);
-    p.potential       = clamp(p.overall + randInt(2, 9), p.overall + 1, 72);
+    p.overall         = Math.max(48, overall(p) - randInt(2, 5));
+    p.potential       = clamp(p.overall + randInt(2, 7), p.overall + 1, 69);
     p.contract.salary = 88025;
     p.detailed        = makeDetailedRatings(p.position, p.attributes);
     p.traits          = deriveTraits(p);
@@ -1903,7 +1911,7 @@ export function createNewState(options) {
   }
 
   const state = {
-    version: 6,
+    version: 8,
     season:  { year: 2026, phase: "Regular Season" },
     calendar: { week: 1, absoluteDay: 0 },
     teams,
@@ -1930,6 +1938,19 @@ export function createNewState(options) {
     },
   };
 
+  autoAssignAllDesignations(state);
+  for (const team of state.teams) {
+    const roster = players.filter(p => p.clubId === team.id).sort((a, b) => (b.contract.salary - a.contract.salary) || (b.overall - a.overall));
+    roster.forEach((p, idx) => {
+      if (idx < 2) p.contract.salary = Math.max(p.contract.salary, randInt(2400000, 7000000));
+      else if (idx === 2 && p.overall >= 70) p.contract.salary = Math.max(p.contract.salary, randInt(1700000, 3600000));
+    });
+    const intl = roster.filter(p => !p.domestic && !p.hasGreenCard);
+    while (intl.length > team.internationalSlots) {
+      const player = intl.pop();
+      if (player) player.hasGreenCard = true;
+    }
+  }
   autoAssignAllDesignations(state);
   makeSchedule(state);
   ensureOpenCupState(state);
