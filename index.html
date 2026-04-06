@@ -12,67 +12,48 @@
     <div class="home-card">
       <div class="eyebrow">MLS FRONT OFFICE SIM</div>
       <h1>Build your club.<br />Run your league.</h1>
-      <p class="home-sub">
-      Browser-based MLS management sim with roster rules, academy development,
-      SuperDraft, playoffs, free agency, and youth progression.
-      </p>
-
+      <p class="home-sub">Browser-based MLS management sim with roster rules, academy development, SuperDraft, playoffs, free agency, youth progression, full tactics editor, and detailed player profiles.</p>
       <div class="home-actions">
         <button id="showCreateLeagueBtn" class="primary-btn big-btn">Create League</button>
         <button id="showLoadLeagueBtn" class="ghost-btn big-btn">Load Save</button>
       </div>
-
       <div class="home-features">
         <div class="feature-pill">30 MLS clubs</div>
-        <div class="feature-pill">Academy & callups</div>
+        <div class="feature-pill">Academy &amp; callups</div>
         <div class="feature-pill">SuperDraft</div>
         <div class="feature-pill">MLS roster rules</div>
-    </div>
+        <div class="feature-pill">Tactics &amp; lineups</div>
+        <div class="feature-pill">Player profiles</div>
+        <div class="feature-pill">Green card system</div>
+      </div>
     </div>
   </div>
 
   <div id="setupOverlay" class="overlay">
     <div class="modal setup-modal">
-      <div class="modal-head">
-        <h2>Create New League</h2>
-        <button id="closeSetupBtn" class="icon-btn" type="button">×</button>
-      </div>
-
+      <div class="modal-head"><h2>Create New League</h2><button id="closeSetupBtn" class="icon-btn" type="button">x</button></div>
       <div class="setup-grid">
         <div class="panel-lite">
-          <label for="saveSlotInput">Save Slot</label>
-          <input id="saveSlotInput" type="text" value="slot1" />
-
-          <label for="userTeamSelect">Your Club</label>
-          <select id="userTeamSelect"></select>
-
-          <label for="salaryCapInput">Salary Cap</label>
-          <input id="salaryCapInput" type="number" value="6425000" />
-
-          <label for="gamInput">Starting GAM</label>
-          <input id="gamInput" type="number" value="3280000" />
-
-          <label for="tamInput">Starting TAM</label>
-          <input id="tamInput" type="number" value="2125000" />
-
-          <label for="academyInput">Academy Prospects Per Team</label>
-          <input id="academyInput" type="number" value="8" min="4" max="14" />
+          <label for="saveSlotInput">Save Slot</label><input id="saveSlotInput" type="text" value="slot1" />
+          <label for="userTeamSelect">Your Club</label><select id="userTeamSelect"></select>
+          <label for="salaryCapInput">Salary Cap</label><input id="salaryCapInput" type="number" value="6425000" />
+          <label for="gamInput">Starting GAM</label><input id="gamInput" type="number" value="3280000" />
+          <label for="tamInput">Starting TAM</label><input id="tamInput" type="number" value="2125000" />
+          <label for="academyInput">Academy Prospects Per Team</label><input id="academyInput" type="number" value="8" min="4" max="14" />
         </div>
-
         <div class="panel-lite">
           <div class="setup-preview-title">League Setup</div>
           <ul class="setup-list">
-            <li>30 clubs</li>
+            <li>30 clubs &mdash; all MLS 2026</li>
             <li>34-match regular season</li>
             <li>Top 9 per conference qualify</li>
             <li>Play-in + best-of-3 Round One</li>
             <li>Free agency + SuperDraft</li>
             <li>Youth academy + senior callups</li>
+            <li>Full tactics &amp; lineup editor</li>
+            <li>Green card / intl slot tracking</li>
           </ul>
-
-          <div class="setup-actions">
-            <button id="createLeagueBtn" class="primary-btn">Start League</button>
-          </div>
+          <div class="setup-actions"><button id="createLeagueBtn" class="primary-btn">Start League</button></div>
         </div>
       </div>
     </div>
@@ -80,11 +61,7 @@
 
   <div id="loadOverlay" class="overlay">
     <div class="modal load-modal">
-      <div class="modal-head">
-        <h2>Load Save</h2>
-        <button id="closeLoadBtn" class="icon-btn" type="button">×</button>
-      </div>
-
+      <div class="modal-head"><h2>Load Save</h2><button id="closeLoadBtn" class="icon-btn" type="button">x</button></div>
       <div id="saveSlotsList" class="save-slots-list"></div>
     </div>
   </div>
@@ -95,33 +72,16 @@
         <div class="brand-title">MLS GM 2026</div>
         <div class="brand-sub">Front office simulator</div>
       </div>
-
       <div class="top-meta">
-        <div class="meta-box">
-          <span>Club</span>
-          <strong id="metaClub">—</strong>
-        </div>
-        <div class="meta-box">
-          <span>Season</span>
-          <strong id="metaSeason">—</strong>
-        </div>
-        <div class="meta-box">
-          <span>Phase</span>
-          <strong id="metaPhase">—</strong>
-        </div>
-        <div class="meta-box">
-          <span>Week</span>
-          <strong id="metaWeek">—</strong>
-        </div>
+        <div class="meta-box"><span>Club</span><strong id="metaClub">&#8212;</strong></div>
+        <div class="meta-box"><span>Season</span><strong id="metaSeason">&#8212;</strong></div>
+        <div class="meta-box"><span>Phase</span><strong id="metaPhase">&#8212;</strong></div>
+        <div class="meta-box"><span>Week</span><strong id="metaWeek">&#8212;</strong></div>
       </div>
-
       <div class="top-actions">
         <button id="saveBtn" class="ghost-btn">Save</button>
         <button id="exportBtn" class="ghost-btn">Export</button>
-        <label class="ghost-btn file-label">
-          Import
-          <input id="importInput" type="file" accept="application/json" hidden />
-        </label>
+        <label class="ghost-btn file-label">Import<input id="importInput" type="file" accept="application/json" hidden /></label>
         <button id="backHomeBtn" class="ghost-btn">Home</button>
       </div>
     </header>
@@ -129,22 +89,23 @@
     <div class="layout">
       <aside class="sidebar">
         <div class="side-section-title">Navigation</div>
-        <button class="nav-btn active" data-page="dashboard">Dashboard</button>
-        <button class="nav-btn" data-page="roster">Roster</button>
-        <button class="nav-btn" data-page="academy">Youth Academy</button>
-        <button class="nav-btn" data-page="standings">Standings</button>
-        <button class="nav-btn" data-page="schedule">Schedule</button>
-        <button class="nav-btn" data-page="stats">Player Stats</button>
-        <button class="nav-btn" data-page="transactions">Transactions</button>
-        <button class="nav-btn" data-page="draft">SuperDraft</button>
-        <button class="nav-btn" data-page="playoffs">Playoffs</button>
-        <button class="nav-btn" data-page="saves">Saves</button>
+        <button class="nav-btn active" data-page="dashboard">&#128202; Dashboard</button>
+        <button class="nav-btn" data-page="roster">&#128101; Roster</button>
+        <button class="nav-btn" data-page="tactics">&#127919; Tactics</button>
+        <button class="nav-btn" data-page="academy">&#127979; Youth Academy</button>
+        <button class="nav-btn" data-page="standings">&#127942; Standings</button>
+        <button class="nav-btn" data-page="schedule">&#128197; Schedule</button>
+        <button class="nav-btn" data-page="stats">&#128200; Player Stats</button>
+        <button class="nav-btn" data-page="transactions">&#128203; Transactions</button>
+        <button class="nav-btn" data-page="draft">&#127891; SuperDraft</button>
+        <button class="nav-btn" data-page="playoffs">&#129351; Playoffs</button>
+        <button class="nav-btn" data-page="saves">&#128190; Saves</button>
 
         <div class="side-section-title spaced">Simulation</div>
-        <button id="simOneBtn" class="action-btn">Sim Next Match</button>
-        <button id="simWeekBtn" class="action-btn">Sim 1 Week</button>
-        <button id="simSeasonBtn" class="action-btn">Sim To Season End</button>
-        <button id="simYearBtn" class="action-btn">Sim Offseason + Next Year</button>
+        <button id="simOneBtn" class="action-btn">&#9654; Sim Next Match</button>
+        <button id="simWeekBtn" class="action-btn">&#128198; Sim 1 Week</button>
+        <button id="simSeasonBtn" class="action-btn">&#9193; Sim To Season End</button>
+        <button id="simYearBtn" class="action-btn">&#128260; Sim Offseason + Next Year</button>
       </aside>
 
       <main id="pageRoot" class="page-root"></main>
@@ -153,102 +114,79 @@
 
   <div id="toastWrap" class="toast-wrap"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Live match overlay -->
   <div id="match-sim-overlay">
-  <div id="match-sim-box">
-    <div id="msim-header">
-      <div id="msim-comp-badge">MLS</div>
-      <div id="sim-minute">0'</div>
-      <div id="msim-weather-badge">☀️ Clear</div>
-    </div>
-
-    <div class="match-scoreboard">
-      <div class="match-teams">
-        <div class="match-team" id="sim-home-name">Home</div>
-        <div class="match-score" id="sim-score">0 – 0</div>
-        <div class="match-team away" id="sim-away-name">Away</div>
+    <div id="match-sim-box">
+      <div id="msim-header">
+        <div id="msim-comp-badge">MLS</div>
+        <div id="sim-minute">0'</div>
+        <div id="msim-weather-badge">&#9728;&#65039; Clear</div>
       </div>
-
-      <div class="flex" style="justify-content:center; margin-bottom:12px;">
-        <button class="small-btn sim-speed-opt active" data-speed="normal">Normal</button>
-        <button class="small-btn sim-speed-opt" data-speed="fast">Fast</button>
-        <button class="small-btn" id="sim-pause-btn">⏸ Pause</button>
-        <button class="small-btn" id="sim-skip-btn">Skip</button>
-      </div>
-
-      <div class="match-progress">
-        <div class="match-progress-fill" id="sim-progress-fill" style="width:0%"></div>
-      </div>
-    </div>
-
-    <div id="msim-body-grid">
-      <div>
-        <div class="msim-section-title">Live Stats</div>
-        <div id="msim-live-stats"></div>
-      </div>
-
-      <div id="msim-col-commentary">
-        <div class="msim-section-title">Commentary</div>
-        <div class="match-events" id="sim-events"></div>
-      </div>
-
-      <div id="msim-col-lineups">
-        <div class="msim-section-title" id="msim-home-lineup-title">HOME</div>
-        <div id="msim-home-lineup"></div>
-        <div class="msim-section-title" id="msim-away-lineup-title" style="margin-top:12px;">AWAY</div>
-        <div id="msim-away-lineup"></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="goal-replay-overlay">
-  <div id="goal-replay-inner">
-    <div id="goal-replay-header">
-      <div>
-        <div id="goal-replay-title">GOAL REPLAY</div>
-        <div id="goal-replay-scorer"></div>
-      </div>
-      <div id="goal-replay-badge">REPLAY</div>
-    </div>
-    <div id="goal-replay-body">
-      <div id="goal-replay-pitch-wrap">
-        <canvas id="goal-replay-canvas" width="820" height="460"></canvas>
-      </div>
-      <div id="goal-replay-side">
-        <div class="goal-replay-stat-box">
-          <div class="goal-replay-stat-label">Minute</div>
-          <div class="goal-replay-stat-val" id="goal-replay-minute">0'</div>
+      <div class="match-scoreboard">
+        <div class="match-teams">
+          <div class="match-team" id="sim-home-name">Home</div>
+          <div class="match-score" id="sim-score">0 &#8211; 0</div>
+          <div class="match-team away" id="sim-away-name">Away</div>
         </div>
-        <div class="goal-replay-stat-box">
-          <div class="goal-replay-stat-label">Assist</div>
-          <div class="goal-replay-stat-val" id="goal-replay-assist">—</div>
+        <div class="flex" style="justify-content:center;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
+          <button class="small-btn sim-speed-opt" data-speed="slow">&#128034; Slow</button>
+          <button class="small-btn sim-speed-opt active" data-speed="normal">&#9654; Normal</button>
+          <button class="small-btn sim-speed-opt" data-speed="fast">&#9889; Fast</button>
+          <button class="small-btn sim-speed-opt" data-speed="turbo">&#128640; Turbo</button>
+          <button class="small-btn" id="sim-pause-btn">&#9208;&#65039; Pause</button>
+          <button class="small-btn" id="sim-skip-btn">&#9197;&#65039; Skip</button>
+        </div>
+        <div class="match-progress">
+          <div class="match-progress-fill" id="sim-progress-fill" style="width:0%"></div>
+        </div>
+      </div>
+      <div id="msim-body-grid">
+        <div>
+          <div class="msim-section-title">Live Stats</div>
+          <div id="msim-live-stats"></div>
+        </div>
+        <div id="msim-col-commentary">
+          <div class="msim-section-title">Commentary</div>
+          <div class="match-events" id="sim-events"></div>
+        </div>
+        <div id="msim-col-lineups">
+          <div class="msim-section-title" id="msim-home-lineup-title">HOME</div>
+          <div id="msim-home-lineup"></div>
+          <div class="msim-section-title" id="msim-away-lineup-title" style="margin-top:10px;">AWAY</div>
+          <div id="msim-away-lineup"></div>
         </div>
       </div>
     </div>
-    <button id="goal-replay-close">Continue</button>
   </div>
-</div>
 
-<div id="var-overlay">
-  <div id="var-broadcast">
-    <div id="var-main-panel">
-      <div id="var-main-label">VAR REVIEW</div>
-      <div id="var-screen"></div>
-    </div>
-    <div id="var-right-col">
-      <div id="var-brand-block">
-        <div id="var-brand-text">VAR</div>
-        <div id="var-brand-sub">Video Review</div>
+  <div id="goal-replay-overlay">
+    <div id="goal-replay-inner">
+      <div id="goal-replay-header">
+        <div><div id="goal-replay-title">GOAL REPLAY</div><div id="goal-replay-scorer"></div></div>
+        <div id="goal-replay-badge">REPLAY</div>
       </div>
-      <div id="var-footer">
-        <div id="var-decision-badge"></div>
-        <div id="var-desc"></div>
-        <div id="var-scanning-text"></div>
+      <div id="goal-replay-body">
+        <div id="goal-replay-pitch-wrap"><canvas id="goal-replay-canvas" width="820" height="460"></canvas></div>
+        <div id="goal-replay-side">
+          <div class="goal-replay-stat-box"><div class="goal-replay-stat-label">Minute</div><div class="goal-replay-stat-val" id="goal-replay-minute">0'</div></div>
+          <div class="goal-replay-stat-box"><div class="goal-replay-stat-label">Assist</div><div class="goal-replay-stat-val" id="goal-replay-assist">&#8212;</div></div>
+        </div>
+      </div>
+      <button id="goal-replay-close">Continue</button>
+    </div>
+  </div>
+
+  <div id="var-overlay">
+    <div id="var-broadcast">
+      <div id="var-main-panel"><div id="var-main-label">VAR REVIEW</div><div id="var-screen"></div></div>
+      <div id="var-right-col">
+        <div id="var-brand-block"><div id="var-brand-text">VAR</div><div id="var-brand-sub">Video Review</div></div>
+        <div id="var-footer"><div id="var-decision-badge"></div><div id="var-desc"></div><div id="var-scanning-text"></div></div>
       </div>
     </div>
   </div>
-</div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
