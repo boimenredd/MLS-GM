@@ -38,14 +38,99 @@ function shortName(name) {
 
 function posBucket(pos) {
   if (pos === "GK") return "GK";
-  if (pos === "CB" || pos === "FB") return "DEF";
-  if (pos === "CDM" || pos === "CM" || pos === "CAM") return "MID";
+  if (["LB", "CB", "RB"].includes(pos)) return "DEF";
+  if (["LM", "RM", "CDM", "CM", "CAM"].includes(pos)) return "MID";
   return "ATT";
 }
 
 function domesticForTeam(playerNation, country) {
   if (country === "Canada") return playerNation === "Canada" || playerNation === "USA";
   return playerNation === "USA";
+}
+
+function sideForWidePosition(pos, preferredFoot = "Right") {
+  if (pos === "LB" || pos === "LM" || pos === "LW") return "Left";
+  if (pos === "RB" || pos === "RM" || pos === "RW") return "Right";
+  if (pos === "CB") return Math.random() < 0.5 ? "Left" : "Right";
+  return preferredFoot;
+}
+
+function normalizeGeneratedPosition(pos, preferredFoot = "Right") {
+  if (pos === "FB") return preferredFoot === "Left" ? "LB" : "RB";
+  if (pos === "Winger") return preferredFoot === "Left" ? "LW" : "RW";
+  return pos;
+}
+
+function makeDetailedRatings(position, a) {
+  const sideBias = (position === "LB" || position === "LM" || position === "LW") ? 2 : (position === "RB" || position === "RM" || position === "RW" ? -2 : 0);
+  return {
+    physical: {
+      acceleration: clamp(Math.round(a.pace + randInt(-6, 6)), 25, 98),
+      sprintSpeed: clamp(Math.round(a.pace + randInt(-5, 5)), 25, 98),
+      agility: clamp(Math.round((a.pace + a.dribbling) / 2 + randInt(-7, 7)), 25, 98),
+      stamina: clamp(Math.round((a.physical + a.pace) / 2 + randInt(-8, 8)), 25, 98),
+      strength: clamp(Math.round(a.physical + randInt(-8, 8)), 25, 98),
+      jumping: clamp(Math.round((a.physical + a.defense) / 2 + randInt(-7, 7)), 25, 98),
+    },
+    technical: {
+      finishing: clamp(Math.round((a.shooting * 1.08) + randInt(-7, 7)), 20, 98),
+      longShots: clamp(Math.round((a.shooting * 0.94) + randInt(-7, 7)), 20, 98),
+      crossing: clamp(Math.round((a.passing + a.dribbling) / 2 + (["LB","RB","LM","RM","LW","RW"].includes(position) ? 6 : -2) + sideBias + randInt(-7, 7)), 20, 98),
+      shortPassing: clamp(Math.round(a.passing + randInt(-6, 6)), 20, 98),
+      vision: clamp(Math.round((a.passing + a.dribbling) / 2 + (position === "CAM" ? 8 : 0) + randInt(-7, 7)), 20, 98),
+      dribbling: clamp(Math.round(a.dribbling + randInt(-6, 6)), 20, 98),
+      firstTouch: clamp(Math.round((a.dribbling + a.passing) / 2 + randInt(-6, 6)), 20, 98),
+      setPieces: clamp(Math.round((a.passing + a.shooting) / 2 + randInt(-10, 8)), 20, 98),
+    },
+    defending: {
+      marking: clamp(Math.round(a.defense + (["CB","LB","RB","CDM"].includes(position) ? 5 : -8) + randInt(-7, 7)), 20, 98),
+      tackling: clamp(Math.round(a.defense + (["CB","LB","RB","CDM"].includes(position) ? 6 : -10) + randInt(-7, 7)), 20, 98),
+      interceptions: clamp(Math.round(a.defense + (["CDM","CM","CAM"].includes(position) ? 2 : 0) + randInt(-7, 7)), 20, 98),
+      heading: clamp(Math.round((a.defense + a.physical) / 2 + (position === "ST" ? 4 : 0) + randInt(-8, 8)), 20, 98),
+      positioning: clamp(Math.round((a.defense + a.passing) / 2 + randInt(-8, 8)), 20, 98),
+    },
+    goalkeeping: {
+      handling: clamp(Math.round((position === "GK" ? a.defense + 10 : 8) + randInt(-8, 8)), 1, 98),
+      reflexes: clamp(Math.round((position === "GK" ? a.defense + 12 : 8) + randInt(-8, 8)), 1, 98),
+      oneOnOnes: clamp(Math.round((position === "GK" ? a.defense + 8 : 6) + randInt(-8, 8)), 1, 98),
+      kicking: clamp(Math.round((position === "GK" ? a.passing : 8) + randInt(-8, 8)), 1, 98),
+      command: clamp(Math.round((position === "GK" ? a.physical + 6 : 6) + randInt(-8, 8)), 1, 98),
+    },
+  };
+}
+
+function deriveTraits(player) {
+  const a = player.attributes;
+  const t = [];
+  if (player.position === "GK") {
+    if (a.defense >= 76) t.push("Shot Stopper");
+    if (a.passing >= 67) t.push("Sweeper Keeper");
+    if (a.physical >= 72) t.push("Claims Crosses");
+  } else {
+    if (a.pace >= 77) t.push("Quick Burst");
+    if (a.shooting >= 76) t.push(player.position === "ST" ? "Poacher" : "Goal Threat");
+    if (a.passing >= 75) t.push(player.position === "CAM" ? "Playmaker" : "Progressive Passer");
+    if (a.dribbling >= 76) t.push("Press Resistant");
+    if (a.defense >= 75) t.push(["CB","LB","RB","CDM"].includes(player.position) ? "Ball Winner" : "Two-Way Workrate");
+    if (a.physical >= 78) t.push(player.position === "ST" ? "Target Forward" : "Strong Dueler");
+    if (["LB","RB","LM","RM","LW","RW"].includes(player.position) && a.passing >= 70) t.push("Delivery");
+  }
+  if (player.homegrown) t.push("Homegrown Upside");
+  if (player.designation === "DP") t.push("Star Player");
+  return [...new Set(t)].slice(0, 4);
+}
+
+export function hydratePlayer(player, seasonYear = 2026) {
+  if (!player || !player.attributes) return player;
+  if (player.position === "FB" || player.position === "Winger") {
+    player.position = normalizeGeneratedPosition(player.position, player.preferredFoot || "Right");
+  }
+  player.side ||= sideForWidePosition(player.position, player.preferredFoot || "Right");
+  player.detailed ||= makeDetailedRatings(player.position, player.attributes);
+  player.traits ||= deriveTraits(player);
+  player.contract ||= { yearsLeft: 1, salary: 113400, status: "Active" };
+  player.contract.expiresYear ??= seasonYear + Math.max(0, Number(player.contract.yearsLeft || 0));
+  return player;
 }
 
 // ─── Player stats/ratings ────────────────────────────────────────────────────
@@ -60,22 +145,26 @@ export function overall(player) {
 function makeAttributes(pos, quality = 60, age = 25) {
   const spread = randInt(-7, 7);
   const ageCurve =
-    age < 22 ? 2 : age <= 29 ? 4 : -Math.floor((age - 29) * 1.1);
+    age < 22 ? 1 : age <= 28 ? 4 : -Math.floor((age - 28) * 1.15);
   const base = quality + spread + ageCurve;
 
   const map = {
-    GK:     [48, 32, 58, 36, 73, 64],
-    CB:     [59, 35, 58, 50, 74, 74],
-    FB:     [74, 42, 62, 60, 68, 66],
-    CDM:    [58, 45, 69, 58, 74, 72],
-    CM:     [62, 51, 74, 67, 62, 67],
-    CAM:    [67, 70, 78, 78, 44, 58],
-    Winger: [80, 71, 68, 79, 40, 58],
-    ST:     [73, 79, 58, 68, 35, 73],
-  }[pos];
+    GK: [46, 24, 61, 32, 77, 69],
+    LB: [77, 43, 67, 68, 73, 67],
+    CB: [58, 34, 58, 49, 79, 77],
+    RB: [77, 43, 67, 68, 73, 67],
+    LM: [76, 57, 72, 73, 49, 63],
+    RM: [76, 57, 72, 73, 49, 63],
+    CDM:[59, 43, 71, 58, 78, 74],
+    CM: [63, 51, 76, 67, 64, 69],
+    CAM:[67, 70, 80, 79, 43, 58],
+    LW: [81, 69, 68, 81, 38, 56],
+    RW: [81, 69, 68, 81, 38, 56],
+    ST: [72, 79, 56, 66, 31, 75],
+  }[pos] || [62, 52, 67, 63, 58, 64];
 
   const [pace, shooting, passing, dribbling, defense, physical] = map.map(v =>
-    clamp(Math.round(v + (base - 60) * 0.65 + randInt(-8, 8)), 30, 95)
+    clamp(Math.round(v + (base - 60) * 0.62 + randInt(-8, 8)), 24, 94)
   );
 
   return { pace, shooting, passing, dribbling, defense, physical };
@@ -85,17 +174,21 @@ function makeAttributes(pos, quality = 60, age = 25) {
 
 function makePlayer(club, idx, forcedPos = null) {
   const positionWeights = [
-    { value: "GK",     weight: 2 },
-    { value: "CB",     weight: 4 },
-    { value: "FB",     weight: 4 },
-    { value: "CDM",    weight: 2 },
-    { value: "CM",     weight: 5 },
-    { value: "CAM",    weight: 2 },
-    { value: "Winger", weight: 4 },
-    { value: "ST",     weight: 3 },
+    { value: "GK",  weight: 2 },
+    { value: "LB",  weight: 2 },
+    { value: "CB",  weight: 5 },
+    { value: "RB",  weight: 2 },
+    { value: "LM",  weight: 1 },
+    { value: "RM",  weight: 1 },
+    { value: "CDM", weight: 2 },
+    { value: "CM",  weight: 4 },
+    { value: "CAM", weight: 2 },
+    { value: "LW",  weight: 2 },
+    { value: "RW",  weight: 2 },
+    { value: "ST",  weight: 3 },
   ];
 
-  const position   = forcedPos || weightedRandom(positionWeights);
+  const rawPosition = forcedPos || weightedRandom(positionWeights);
   const age        = randInt(17, 34);
   const nationality = pick(
     club.country === "Canada"
@@ -104,6 +197,7 @@ function makePlayer(club, idx, forcedPos = null) {
   );
   const domestic      = domesticForTeam(nationality, club.country);
   const preferredFoot = Math.random() < 0.76 ? "Right" : "Left";
+  const position = normalizeGeneratedPosition(rawPosition, preferredFoot);
 
   let qualityBase = club.marketRating + randInt(-10, 10);
   if (idx < 3)  qualityBase += 10;
@@ -133,7 +227,7 @@ function makePlayer(club, idx, forcedPos = null) {
 
   const rosterRole = idx < 18 ? "Senior" : idx < 24 ? "Supplemental" : "Reserve";
 
-  return {
+  return hydratePlayer({
     id:           uuid("p"),
     name:         generateNameForCountry(nationality),
     age,
@@ -165,7 +259,7 @@ function makePlayer(club, idx, forcedPos = null) {
       cleanSheets: 0, ga: 0,
       motm: 0,
     },
-  };
+  });
 }
 
 function makeAcademyPlayer(team) {
@@ -178,7 +272,7 @@ function makeAcademyPlayer(team) {
   const nationality =
     team.country === "Canada" ? pick(["Canada", "USA"]) : "USA";
 
-  return {
+  return hydratePlayer({
     id:               uuid("a"),
     name:             generateNameForCountry(nationality),
     age,
@@ -193,7 +287,7 @@ function makeAcademyPlayer(team) {
     overall:          ovr,
     potential,
     notes:            `${pick(COLLEGES)} local product`,
-  };
+  });
 }
 
 // ─── Standings helpers ────────────────────────────────────────────────────────
@@ -343,165 +437,57 @@ function seedFreeAgents(state) {
 // ─── Schedule builder (guaranteed 34 per team) ───────────────────────────────
 
 function makeSchedule(state) {
-  const teams      = state.teams;
-  const eastIds    = teams.filter(t => t.conference === "East").map(t => t.id);
-  const westIds    = teams.filter(t => t.conference === "West").map(t => t.id);
-  const targetGames = 34;
+  const teams = [...state.teams];
 
-  const perTeamCount = Object.fromEntries(teams.map(t => [t.id, 0]));
-  const homeCount    = Object.fromEntries(teams.map(t => [t.id, 0]));
-  const awayCount    = Object.fromEntries(teams.map(t => [t.id, 0]));
-  const matches      = [];
-  const pairSeen     = new Set();
+  function buildRoundRobinRounds(teamList) {
+    const ids = teamList.map(t => t.id);
+    const n = ids.length;
+    let arr = [...ids];
+    const rounds = [];
 
-  function matchKey(a, b) {
-    return `${a}_${b}`;
-  }
-
-  function addMatch(homeTeamId, awayTeamId) {
-    if (homeTeamId === awayTeamId) return false;
-    if (perTeamCount[homeTeamId] >= targetGames || perTeamCount[awayTeamId] >= targetGames)
-      return false;
-
-    const key = matchKey(homeTeamId, awayTeamId);
-    if (pairSeen.has(key)) return false;
-
-    const homeTeam = teams.find(t => t.id === homeTeamId);
-    const awayTeam = teams.find(t => t.id === awayTeamId);
-
-    matches.push({
-      id:          uuid("m"),
-      type:        "Regular Season",
-      week:        null,
-      played:      false,
-      homeTeamId,
-      awayTeamId,
-      homeConf:    homeTeam.conference,
-      awayConf:    awayTeam.conference,
-      result:      null,
-    });
-
-    pairSeen.add(key);
-    perTeamCount[homeTeamId] += 1;
-    perTeamCount[awayTeamId] += 1;
-    homeCount[homeTeamId]    += 1;
-    awayCount[awayTeamId]    += 1;
-    return true;
-  }
-
-  // Each conference: home-and-away round-robin = 28 conference games
-  function addRoundRobin(ids) {
-    for (let i = 0; i < ids.length; i++) {
-      for (let j = i + 1; j < ids.length; j++) {
-        addMatch(ids[i], ids[j]);
-        addMatch(ids[j], ids[i]);
+    for (let round = 0; round < n - 1; round++) {
+      const pairings = [];
+      for (let i = 0; i < n / 2; i++) {
+        const a = arr[i];
+        const b = arr[n - 1 - i];
+        const flip = round % 2 === 0;
+        pairings.push(flip ? [a, b] : [b, a]);
       }
+      rounds.push(pairings);
+
+      arr = [arr[0], arr[n - 1], ...arr.slice(1, n - 1)];
     }
+    return rounds;
   }
 
-  // Fill remaining slots (up to 34) with extra conference games
-  function addConferenceExtras(ids, extrasNeeded) {
-    let guard = 0;
-    const remaining = Object.fromEntries(ids.map(id => [id, extrasNeeded]));
+  const baseRounds = buildRoundRobinRounds(teams); // 29 weeks, everyone plays once
+  const extraRounds = baseRounds.slice(0, 5).map(round =>
+    round.map(([home, away]) => [away, home])
+  ); // 5 more weeks = 34 total
 
-    while (
-      Object.values(remaining).some(v => v > 0) &&
-      guard < 20000
-    ) {
-      guard++;
-      const candidates = ids
-        .filter(id => remaining[id] > 0 && perTeamCount[id] < targetGames)
-        .sort((a, b) => remaining[b] - remaining[a]);
+  const allRounds = [...baseRounds, ...extraRounds];
+  const matches = [];
 
-      if (candidates.length < 2) break;
-
-      const a = candidates[0];
-      let bestB   = null;
-      let bestScore = -Infinity;
-
-      for (const b of candidates.slice(1)) {
-        if (
-          perTeamCount[b] >= targetGames ||
-          pairSeen.has(matchKey(a, b)) ||
-          pairSeen.has(matchKey(b, a))
-        ) continue;
-
-        const score =
-          remaining[a] +
-          remaining[b] +
-          (homeCount[a] <= awayCount[a] ? 1 : 0) +
-          (homeCount[b] <= awayCount[b] ? 1 : 0);
-
-        if (score > bestScore) {
-          bestScore = score;
-          bestB = b;
-        }
-      }
-
-      if (!bestB) { remaining[a] = 0; continue; }
-
-      const aNeedsHome = homeCount[a] <= awayCount[a];
-      const bNeedsHome = homeCount[bestB] <= awayCount[bestB];
-      let home = a, away = bestB;
-      if (bNeedsHome && !aNeedsHome) { home = bestB; away = a; }
-
-      const added = addMatch(home, away);
-      if (added) {
-        remaining[a]     = Math.max(0, remaining[a] - 1);
-        remaining[bestB] = Math.max(0, remaining[bestB] - 1);
-      } else {
-        remaining[a] = 0;
-      }
+  allRounds.forEach((pairings, idx) => {
+    const week = idx + 1;
+    for (const [homeTeamId, awayTeamId] of pairings) {
+      const homeTeam = teams.find(t => t.id === homeTeamId);
+      const awayTeam = teams.find(t => t.id === awayTeamId);
+      matches.push({
+        id: uuid("m"),
+        type: "Regular Season",
+        week,
+        played: false,
+        homeTeamId,
+        awayTeamId,
+        homeConf: homeTeam.conference,
+        awayConf: awayTeam.conference,
+        result: null,
+      });
     }
-  }
+  });
 
-  // Interconference singles to top off any short teams
-  function addInterSingles(aIds, bIds) {
-    const pairs = [];
-    for (const a of aIds) for (const b of bIds) pairs.push([a, b]);
-    // shuffle
-    for (let i = pairs.length - 1; i > 0; i--) {
-      const j = randInt(0, i);
-      [pairs[i], pairs[j]] = [pairs[j], pairs[i]];
-    }
-    for (const [a, b] of pairs) {
-      if (
-        perTeamCount[a] >= targetGames ||
-        perTeamCount[b] >= targetGames
-      ) continue;
-      const aNeedsHome = homeCount[a] <= awayCount[a];
-      const bNeedsHome = homeCount[b] <= awayCount[b];
-      let home = a, away = b;
-      if (bNeedsHome && !aNeedsHome) { home = b; away = a; }
-      addMatch(home, away);
-    }
-  }
-
-  addRoundRobin(eastIds); // 28 east conf games each
-  addRoundRobin(westIds); // 28 west conf games each
-  addConferenceExtras(eastIds, 6); // top up to 34
-  addConferenceExtras(westIds, 6);
-  addInterSingles(eastIds, westIds); // any remaining gaps
-
-  // Assign weeks (no double-bookings)
-  const weeks       = Array.from({ length: 34 }, () => []);
-  const weekUse     = Object.fromEntries(teams.map(t => [t.id, new Set()]));
-
-  for (const match of matches) {
-    let placed = false;
-    for (let tries = 0; tries < 500 && !placed; tries++) {
-      const week = randInt(1, 34);
-      if (weekUse[match.homeTeamId].has(week)) continue;
-      if (weekUse[match.awayTeamId].has(week)) continue;
-      match.week = week;
-      weeks[week - 1].push(match);
-      weekUse[match.homeTeamId].add(week);
-      weekUse[match.awayTeamId].add(week);
-      placed = true;
-    }
-  }
-
-  state.schedule = weeks.flat().filter(Boolean).sort((a, b) => a.week - b.week);
+  state.schedule = matches.sort((a, b) => a.week - b.week);
 }
 
 // ─── Goal scoring helpers ─────────────────────────────────────────────────────
@@ -967,20 +953,31 @@ function awardSeason(state) {
 function generateDraftPool(state) {
   const pool = [];
   for (let i = 0; i < 120; i++) {
-    const fakeClub = { id: null, marketRating: randInt(51, 73), country: "USA" };
+    const fakeClub = { id: null, marketRating: randInt(42, 59), country: "USA" };
     const pos = pick(POSITIONS);
-    const p   = makePlayer(fakeClub, i, pos);
-    p.age                  = randInt(18, 22);
-    p.name                 = generateNameForCountry("USA");
-    p.college              = pick(COLLEGES);
-    p.homegrown            = false;
-    p.clubId               = null;
-    p.contract.status      = "Draft Eligible";
-    p.potential            = clamp(p.overall + randInt(4, 16), p.overall, 92);
+    const p   = makePlayer(fakeClub, i + 20, pos);
+    p.age             = randInt(18, 23);
+    p.name            = generateNameForCountry("USA");
+    p.college         = pick(COLLEGES);
+    p.homegrown       = false;
+    p.clubId          = null;
+    p.designation     = null;
+    p.rosterRole      = "Supplemental";
+    p.contract.status = "Draft Eligible";
+    // Bring SuperDraft talent closer to real MLS depth: mostly low-to-mid 50s, rare 60+ upside.
+    const targetOverall = clamp(randInt(47, 63) + (i < 6 ? randInt(1, 4) : 0), 45, 67);
+    for (const key of Object.keys(p.attributes)) {
+      p.attributes[key] = clamp(Math.round(p.attributes[key] + (targetOverall - p.overall) * 0.75 + randInt(-3, 3)), 22, 82);
+    }
+    p.overall         = overall(p);
+    p.potential       = clamp(p.overall + randInt(3, 11), p.overall + 1, 76);
+    p.contract.salary = 88025;
+    p.detailed        = makeDetailedRatings(p.position, p.attributes);
+    p.traits          = deriveTraits(p);
     pool.push(p);
   }
   state.draft.pool = pool.sort(
-    (a, b) => (b.potential + b.overall * 0.5) - (a.potential + a.overall * 0.5)
+    (a, b) => (b.potential + b.overall * 0.55) - (a.potential + a.overall * 0.55)
   );
 }
 
@@ -1073,7 +1070,8 @@ function createDraftSelectionRecord(state, pickObj, player, teamId) {
   player.clubId             = teamId;
   player.contract.status    = "Active";
   player.contract.yearsLeft = randInt(2, 4);
-  player.contract.salary    = pickObj.round === 1 ? 113400 : 88025;
+  player.contract.salary    = pickObj.round === 1 ? 125000 : 90000;
+  player.contract.expiresYear = state.season.year + player.contract.yearsLeft;
   player.rosterRole         = pickObj.round === 1 ? "Supplemental" : "Reserve";
   player.designation        = pickObj.round === 1 && player.age <= 22 && Math.random() < 0.35 ? "U22" : null;
   player.domestic           = true;
@@ -1102,7 +1100,7 @@ function createDraftSelectionRecord(state, pickObj, player, teamId) {
   if (state.draft.currentPickIndex >= state.draft.order.length || !state.draft.pool.length) {
     state.draft.completed = true;
     state.draft.started = false;
-    state.season.phase = "Offseason";
+    state.season.phase = "Contract Extensions";
     addTransaction(state, "Draft", `${state.draft.year} MLS SuperDraft completed.`);
     ensureDraftPickLedger(state, state.season.year + 2, 3);
   }
@@ -1221,7 +1219,7 @@ export function simulateNextDraftPick(state, forceUserAuto = false) {
   const pickObj = getCurrentDraftPick(state);
   if (!pickObj) {
     state.draft.completed = true;
-    state.season.phase = "Offseason";
+    state.season.phase = "Contract Extensions";
     return { ok: true, completed: true };
   }
 
@@ -1235,7 +1233,7 @@ export function simulateNextDraftPick(state, forceUserAuto = false) {
   const player = board[Math.min(randInt(0, 4), Math.max(0, board.length - 1))];
   if (!player) {
     state.draft.completed = true;
-    state.season.phase = "Offseason";
+    state.season.phase = "Contract Extensions";
     return { ok: true, completed: true };
   }
 
@@ -1268,6 +1266,125 @@ export function makeUserDraftPick(state, playerId) {
 
   const historyItem = createDraftSelectionRecord(state, pickObj, player, state.userTeamId);
   return { ok: true, completed: !!state.draft.completed, historyItem };
+}
+
+export function getContractDemand(state, player) {
+  if (player.contract?.demandYear === state.season.year && player.contract?.demandCache) {
+    return player.contract.demandCache;
+  }
+  const leverage = player.potential > player.overall ? (player.potential - player.overall) * 0.025 : 0;
+  const ageFactor = player.age <= 23 ? 1.12 : player.age <= 28 ? 1 : player.age <= 31 ? 0.94 : 0.82;
+  const statusFactor = player.designation === "DP" ? 1.24 : player.designation === "U22" ? 1.12 : player.designation === "TAM" ? 1.08 : 1;
+  const askSalary = Math.max(88025, Math.round(player.contract.salary * (0.92 + leverage + randFloat(0.06, 0.22)) * ageFactor * statusFactor));
+  const askYears = player.age <= 22 ? randInt(3, 5) : player.age <= 28 ? randInt(2, 4) : randInt(1, 3);
+  const demand = {
+    askSalary,
+    askYears,
+    minSalary: Math.round(askSalary * 0.9),
+    maxSalary: Math.round(askSalary * 1.18),
+  };
+  player.contract.demandYear = state.season.year;
+  player.contract.demandCache = demand;
+  return demand;
+}
+
+export function getExpiringPlayers(state, teamId) {
+  return getTeamPlayers(state, teamId)
+    .filter(p => p.contract?.yearsLeft <= 1)
+    .sort((a, b) => b.overall - a.overall || a.age - b.age);
+}
+
+export function renegotiateContract(state, playerId, years, salary) {
+  const player = state.players.find(p => p.id === playerId);
+  if (!player) return { ok: false, reason: "Player not found." };
+  if (player.clubId !== state.userTeamId) return { ok: false, reason: "You can only negotiate with your own players." };
+  const team = getUserTeam(state);
+  const offerYears = Math.max(1, Math.min(5, Number(years) || 0));
+  const offerSalary = Math.max(88025, Number(salary) || 0);
+  const demand = getContractDemand(state, player);
+
+  if (offerYears < Math.max(1, demand.askYears - 1)) return { ok: false, reason: `${player.name} wants a longer deal.` };
+  if (offerSalary < demand.minSalary) return { ok: false, reason: `${player.name} rejected the salary offer.` };
+  if (player.designation !== "DP" && team.salaryBudget < offerSalary * 0.55 && player.rosterRole === "Senior") {
+    return { ok: false, reason: "Budget structure makes that extension unrealistic." };
+  }
+
+  player.contract.salary = Math.round(offerSalary);
+  player.contract.yearsLeft = offerYears;
+  player.contract.expiresYear = state.season.year + offerYears;
+  player.contract.status = "Active";
+  delete player.contract.demandYear;
+  delete player.contract.demandCache;
+  addTransaction(state, "Extension", `${team.name} extended ${player.name} for ${offerYears} year${offerYears === 1 ? "" : "s"} at ${offerSalary.toLocaleString()}.`);
+  return { ok: true };
+}
+
+function resolveAiContractExtensions(state) {
+  for (const team of state.teams) {
+    const expiring = getTeamPlayers(state, team.id).filter(p => p.contract?.yearsLeft <= 1).sort((a, b) => b.overall - a.overall);
+    for (const player of expiring) {
+      const demand = getContractDemand(state, player);
+      const keepChance = player.overall >= 73 ? 0.86 : player.overall >= 67 ? 0.63 : 0.28;
+      if (Math.random() < keepChance) {
+        player.contract.salary = demand.askSalary;
+        player.contract.yearsLeft = demand.askYears;
+        player.contract.expiresYear = state.season.year + demand.askYears;
+        addTransaction(state, "Extension", `${team.name} extended ${player.name}.`);
+      }
+    }
+  }
+}
+
+function expireRemainingContracts(state) {
+  for (const p of [...state.players]) {
+    if (p.clubId && p.contract.yearsLeft <= 0) {
+      p.clubId = null;
+      p.contract.status = "Free Agent";
+      p.contract.yearsLeft = randInt(1, 3);
+      p.contract.expiresYear = state.season.year + p.contract.yearsLeft;
+      p.designation = null;
+      state.freeAgents.push(p);
+      addTransaction(state, "Free Agency", `${p.name} entered free agency.`);
+    }
+  }
+  state.players = state.players.filter(p => p.clubId || p.contract.status !== "Free Agent");
+}
+
+function runFreeAgencyWindow(state) {
+  expireRemainingContracts(state);
+  aiFillRosters(state);
+  addTransaction(state, "Free Agency", `Free agency activity processed for ${state.season.year}.`);
+}
+
+function finalizeOffseason(state) {
+  ageAndDevelop(state);
+  resetStandingsAndSchedule(state);
+
+  state.season.year += 1;
+  state.season.phase = "Regular Season";
+  state.calendar.week = 1;
+  state.calendar.absoluteDay += 28;
+
+  for (const team of state.teams) {
+    team.gam = state.settings.gamAnnual + randInt(-350000, 2600000);
+    team.tam = state.settings.tamAnnual;
+    team.finances.cash += randInt(-2000000, 8000000);
+  }
+
+  ensureDraftPickLedger(state, state.season.year + 1, 3);
+  state.draft = {
+    pool: [],
+    picks: state.draft?.picks || [],
+    order: [],
+    history: [],
+    started: false,
+    completed: false,
+    year: state.season.year + 1,
+    currentPickIndex: 0,
+    currentRound: 1,
+  };
+
+  addTransaction(state, "Season", `Opened ${state.season.year} season.`);
 }
 
 export function updateTeamBudget(state, teamId, updates = {}) {
@@ -1312,6 +1429,9 @@ export function proposeTrade(state, proposal) {
   const outgoingPicks = (proposal.outgoingPickIds || []).map(id => state.draft?.picks?.find(p => p.id === id)).filter(Boolean);
   const incomingPicks = (proposal.incomingPickIds || []).map(id => state.draft?.picks?.find(p => p.id === id)).filter(Boolean);
 
+  if (!outgoingPlayers.length && !incomingPlayers.length && !outgoingPicks.length && !incomingPicks.length && !proposal.outgoingGAM && !proposal.incomingGAM && !proposal.outgoingTAM && !proposal.incomingTAM && !proposal.outgoingIntlSlots && !proposal.incomingIntlSlots) {
+    return { ok: false, reason: "Build a real offer first." };
+  }
   if (outgoingPlayers.some(p => p.clubId !== userTeam.id)) return { ok: false, reason: "One of your outgoing players is no longer on your roster." };
   if (incomingPlayers.some(p => p.clubId !== partner.id)) return { ok: false, reason: "One of the requested players is no longer on that roster." };
   if (outgoingPicks.some(p => p.ownerTeamId !== userTeam.id)) return { ok: false, reason: "One of your draft picks is not available." };
@@ -1336,20 +1456,58 @@ export function proposeTrade(state, proposal) {
   if (userRosterCount - outgoingPlayers.length + incomingPlayers.length > 30) return { ok: false, reason: "Your roster would exceed 30 players." };
   if (partnerRosterCount - incomingPlayers.length + outgoingPlayers.length > 30) return { ok: false, reason: `${partner.name}'s roster would exceed 30 players.` };
 
-  const userOutgoingValue = outgoingPlayers.reduce((sum, p) => sum + playerTradeValue(p), 0) + outgoingPicks.reduce((sum, p) => sum + draftPickValue(p, state.season.year), 0) + outgoingGAM + outgoingTAM + outgoingIntlSlots * 225000;
-  const userIncomingValue = incomingPlayers.reduce((sum, p) => sum + playerTradeValue(p), 0) + incomingPicks.reduce((sum, p) => sum + draftPickValue(p, state.season.year), 0) + incomingGAM + incomingTAM + incomingIntlSlots * 225000;
-
-  const partnerPlayers = getTeamPlayers(state, partner.id);
-  const counts = pos => partnerPlayers.filter(p => p.position === pos).length;
-  const needBoost = incomingPlayers.reduce((boost, p) => {
-    if ((p.position === "GK" && counts("GK") < 2) || (p.position === "ST" && counts("ST") < 2)) return boost + 160000;
-    if ((p.position === "CB" || p.position === "FB") && counts(p.position) < 3) return boost + 100000;
-    return boost;
+  const valueOfPlayers = players => players.reduce((sum, p) => {
+    const contractBonus = Math.max(-220000, ((p.contract?.yearsLeft || 1) - 1) * 75000);
+    const ageCurve = p.age <= 23 ? 160000 : p.age <= 28 ? 90000 : p.age <= 31 ? 0 : -150000;
+    return sum + playerTradeValue(p) + contractBonus + ageCurve;
   }, 0);
 
-  const acceptanceThreshold = userOutgoingValue * randFloat(0.88, 1.06);
-  if (userIncomingValue + needBoost < acceptanceThreshold) {
-    return { ok: false, reason: `${partner.name} rejected the offer.`, evaluation: { userOutgoingValue, userIncomingValue, partnerNeedsBoost: needBoost } };
+  const userOutgoingValue = valueOfPlayers(outgoingPlayers) + outgoingPicks.reduce((sum, p) => sum + draftPickValue(p, state.season.year), 0) + outgoingGAM + outgoingTAM * 0.92 + outgoingIntlSlots * 260000;
+  const userIncomingValue = valueOfPlayers(incomingPlayers) + incomingPicks.reduce((sum, p) => sum + draftPickValue(p, state.season.year), 0) + incomingGAM + incomingTAM * 0.92 + incomingIntlSlots * 260000;
+
+  const partnerPlayers = getTeamPlayers(state, partner.id);
+  const posCount = pos => partnerPlayers.filter(p => p.position === pos).length;
+  const partnerStandings = state.standings[partner.conference]?.find(r => r.teamId === partner.id);
+  const contending = partnerStandings ? partnerStandings.points / Math.max(1, partnerStandings.played) > 1.55 : false;
+
+  let fitBonus = 0;
+  for (const p of incomingPlayers) {
+    if (p.position === "GK" && posCount("GK") < 2) fitBonus += 260000;
+    if (["CB"].includes(p.position) && posCount("CB") < 3) fitBonus += 220000;
+    if (["LB","RB"].includes(p.position) && posCount(p.position) < 2) fitBonus += 180000;
+    if (["CDM","CM","CAM"].includes(p.position) && posCount(p.position) < 2) fitBonus += 130000;
+    if (["LW","RW","ST"].includes(p.position) && posCount(p.position) < 2) fitBonus += 175000;
+    if (contending && p.overall >= 72) fitBonus += 120000;
+    if (!contending && p.age <= 23 && p.potential >= p.overall + 6) fitBonus += 90000;
+  }
+
+  let outgoingPenalty = 0;
+  for (const p of outgoingPlayers) {
+    if (contending && p.overall >= 71) outgoingPenalty += 180000;
+    if (!contending && p.age <= 24 && p.potential >= p.overall + 7) outgoingPenalty += 160000;
+    if (p.position === "GK" && posCount("GK") <= 2) outgoingPenalty += 240000;
+    if (["CB"].includes(p.position) && posCount("CB") <= 3) outgoingPenalty += 200000;
+  }
+
+  const salarySwing = incomingPlayers.reduce((sum, p) => sum + (p.contract?.salary || 0), 0) - outgoingPlayers.reduce((sum, p) => sum + (p.contract?.salary || 0), 0);
+  const salaryPenalty = contending && salarySwing > 650000 ? salarySwing * 0.28 : salarySwing > 1100000 ? salarySwing * 0.2 : 0;
+
+  const demandedReturn = userOutgoingValue + outgoingPenalty + salaryPenalty;
+  const offeredReturn = userIncomingValue + fitBonus;
+  const strictness = contending ? randFloat(1.04, 1.16) : randFloat(0.98, 1.10);
+
+  if (offeredReturn < demandedReturn * strictness) {
+    return {
+      ok: false,
+      reason: `${partner.name} rejected the offer.`,
+      evaluation: {
+        demandedReturn: Math.round(demandedReturn * strictness),
+        offeredReturn: Math.round(offeredReturn),
+        fitBonus,
+        outgoingPenalty: Math.round(outgoingPenalty),
+        salaryPenalty: Math.round(salaryPenalty),
+      },
+    };
   }
 
   outgoingPlayers.forEach(p => { p.clubId = partner.id; });
@@ -1377,7 +1535,7 @@ export function proposeTrade(state, proposal) {
   if (incomingIntlSlots) recvBits.push(`${incomingIntlSlots} INTL slot${incomingIntlSlots === 1 ? "" : "s"}`);
   const text = `${userTeam.name} traded ${sentBits.join(" + ") || "nothing"} to ${partner.name} for ${recvBits.join(" + ") || "nothing"}.`;
   addTransaction(state, "Trade", text);
-  return { ok: true, text, evaluation: { userOutgoingValue, userIncomingValue, partnerNeedsBoost: needBoost } };
+  return { ok: true, text, evaluation: { demandedReturn: Math.round(demandedReturn * strictness), offeredReturn: Math.round(offeredReturn), fitBonus } };
 }
 
 // ─── Offseason ────────────────────────────────────────────────────────────────
@@ -1400,6 +1558,7 @@ function ageAndDevelop(state) {
     p.overall = overall(p);
     p.morale  = clamp(p.morale + randInt(-8, 8), 10, 100);
     if (p.contract.yearsLeft > 0) p.contract.yearsLeft -= 1;
+    p.contract.expiresYear = state.season.year + Math.max(0, p.contract.yearsLeft);
     p.stats = {
       gp: 0, gs: 0, min: 0,
       goals: 0, assists: 0,
@@ -1451,6 +1610,7 @@ function aiFillRosters(state) {
       player.clubId           = team.id;
       player.contract.status  = "Active";
       player.contract.yearsLeft = randInt(1, 3);
+      player.contract.expiresYear = state.season.year + player.contract.yearsLeft;
       player.rosterRole =
         squad.length < 20 ? "Senior" :
         squad.length < 24 ? "Supplemental" : "Reserve";
@@ -1504,8 +1664,8 @@ export function createNewState(options) {
   const players = [];
   for (const team of teams) {
     const rolePlan = [
-      "GK","GK","CB","CB","CB","FB","FB","FB","CDM","CM","CM","CAM",
-      "Winger","Winger","ST","ST","CM","CB","FB","GK","Winger","ST","CDM","CM","CB","FB",
+      "GK","GK","CB","CB","CB","LB","RB","LB","RB","CDM","CDM","CM",
+      "CM","CAM","LM","RM","LW","RW","ST","ST","CB","CM","GK","LW","RW","ST",
     ];
     rolePlan.forEach((pos, idx) => players.push(makePlayer(team, idx, pos)));
   }
@@ -1575,6 +1735,7 @@ export function signFreeAgent(state, playerId, teamId) {
   player.clubId           = teamId;
   player.contract.status  = "Active";
   player.contract.yearsLeft = randInt(1, 3);
+  player.contract.expiresYear = state.season.year + player.contract.yearsLeft;
   player.rosterRole =
     cap.seniorCount < 20 ? "Senior" :
     cap.supplementalCount < 4 ? "Supplemental" : "Reserve";
@@ -1591,7 +1752,7 @@ export function callUpAcademyPlayer(state, academyPlayerId, teamId) {
   const teamPlayers = getTeamPlayers(state, teamId);
   if (teamPlayers.length >= 30) return { ok: false, reason: "Roster full" };
 
-  const signed = {
+  const signed = hydratePlayer({
     id:           uuid("p"),
     name:         prospect.name,
     age:          prospect.age,
@@ -1619,7 +1780,7 @@ export function callUpAcademyPlayer(state, academyPlayerId, teamId) {
       cleanSheets: 0, ga: 0,
       motm: 0,
     },
-  };
+  });
 
   state.players.push(signed);
   state.academies[teamId] = academy.filter(p => p.id !== academyPlayerId);
@@ -1642,6 +1803,7 @@ export function acceptPendingOffer(state) {
   player.clubId           = null;
   player.contract.status  = "Free Agent";
   player.contract.yearsLeft = randInt(1, 3);
+  player.contract.expiresYear = state.season.year + player.contract.yearsLeft;
   state.freeAgents.push(player);
   team.finances.cash += offer.amount;
   team.gam           += Math.min(400000, Math.round(offer.amount * 0.06));
@@ -1669,12 +1831,12 @@ export function advanceOneWeek(state) {
     maybeInjurePlayers(state);
     maybeExternalOffer(state);
 
-    state.calendar.week       += 1;
+    state.calendar.week += 1;
     state.calendar.absoluteDay += 7;
 
     if (state.calendar.week > 34) {
       state.season.phase = "Playoffs";
-      state.playoffs     = buildPlayoffs(state);
+      state.playoffs = buildPlayoffs(state);
       addTransaction(
         state,
         "Playoffs",
@@ -1694,8 +1856,21 @@ export function advanceOneWeek(state) {
     return;
   }
 
+  if (state.season.phase === "Contract Extensions") {
+    resolveAiContractExtensions(state);
+    state.season.phase = "Free Agency";
+    addTransaction(state, "Extensions", `Contract extension window closed for ${state.season.year}.`);
+    return;
+  }
+
+  if (state.season.phase === "Free Agency") {
+    runFreeAgencyWindow(state);
+    state.season.phase = "Offseason";
+    return;
+  }
+
   if (state.season.phase === "Offseason") {
-    runOffseason(state);
+    finalizeOffseason(state);
   }
 }
 
@@ -1709,34 +1884,5 @@ export function simulateToSeasonEnd(state) {
 }
 
 export function runOffseason(state) {
-  expireContracts(state);
-  ageAndDevelop(state);
-  aiFillRosters(state);
-  resetStandingsAndSchedule(state);
-
-  state.season.year       += 1;
-  state.season.phase       = "Regular Season";
-  state.calendar.week      = 1;
-  state.calendar.absoluteDay += 28;
-
-  for (const team of state.teams) {
-    team.gam            = state.settings.gamAnnual + randInt(-350000, 2600000);
-    team.tam            = state.settings.tamAnnual;
-    team.finances.cash += randInt(-2000000, 8000000);
-  }
-
-  ensureDraftPickLedger(state, state.season.year + 1, 3);
-  state.draft = {
-    pool: [],
-    picks: state.draft?.picks || [],
-    order: [],
-    history: [],
-    started: false,
-    completed: false,
-    year: state.season.year + 1,
-    currentPickIndex: 0,
-    currentRound: 1,
-  };
-
-  addTransaction(state, "Season", `Opened ${state.season.year} season.`);
+  finalizeOffseason(state);
 }

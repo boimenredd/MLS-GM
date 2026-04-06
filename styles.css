@@ -851,3 +851,233 @@ input, select {
   }
   .match-team.away { text-align: center; }
 }
+
+
+html[data-theme="light"] {
+  --bg: #eef2f6;
+  --bg2: #ffffff;
+  --bg3: #f5f7fb;
+  --panel: rgba(255,255,255,0.96);
+  --line: #d8e0ea;
+  --text: #152235;
+  --muted: #5f7087;
+  --accent: #1d5fbf;
+  --accent2: #174da0;
+  --green: #1f9b5f;
+  --yellow: #b98a10;
+  --red: #c43a52;
+  --shadow: 0 14px 32px rgba(24, 39, 75, 0.08);
+}
+
+.text-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.text-link:hover { text-decoration: underline; }
+
+.club-hero-simple {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+.club-hero-left { display: flex; align-items: center; gap: 14px; }
+.club-hero-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 14px;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--line);
+  padding: 8px;
+}
+.club-hero-name { font-size: 26px; font-weight: 800; }
+.club-hero-sub { color: var(--muted); font-size: 13px; }
+.club-hero-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.info-stack { display: grid; gap: 10px; }
+.info-row {
+  display: flex; justify-content: space-between; gap: 10px; align-items: center;
+  padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line);
+  background: rgba(255,255,255,.03);
+}
+.roster-group-row {
+  background: var(--bg3);
+  color: var(--muted);
+  font-size: 10px;
+  font-family: var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 6px 8px;
+}
+
+.trade-header-simple {
+  display: flex; justify-content: space-between; gap: 14px; align-items: end;
+  margin-bottom: 16px;
+}
+.trade-meta-box {
+  display: flex; gap: 10px; align-items: center;
+  padding: 10px 12px; border-radius: 14px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow);
+}
+.mini-team-logo {
+  width: 36px; height: 36px; object-fit: contain;
+}
+.trade-tips {
+  display: grid; gap: 8px; color: var(--muted); margin-bottom: 12px;
+}
+
+.roster-sheet {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+.roster-sheet-brand {
+  background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.02));
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+.roster-sheet-logo {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto 16px;
+}
+.roster-sheet-club { font-size: 22px; font-weight: 800; line-height: 1.05; }
+.roster-sheet-league {
+  margin-top: 6px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+}
+.roster-sheet-summary { display: grid; gap: 10px; margin-top: 18px; }
+.roster-sheet-summary div,
+.sheet-summary-card div {
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.03);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.roster-sheet-summary span,
+.sheet-summary-card span {
+  display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-family: var(--mono);
+}
+.roster-sheet-summary strong,
+.sheet-summary-card strong { display: block; margin-top: 4px; font-size: 16px; }
+
+.roster-sheet-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 16px;
+}
+.tight-panel { padding: 12px 12px 14px; }
+.sheet-side { display: grid; gap: 12px; }
+.sheet-section-title {
+  background: var(--bg2);
+  color: var(--text);
+  border-radius: 10px 10px 0 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.sheet-table, .sheet-mini-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.sheet-table th, .sheet-table td, .sheet-mini-table th, .sheet-mini-table td {
+  border: 1px solid var(--line);
+  padding: 7px 8px;
+  font-size: 12px;
+}
+.sheet-table th, .sheet-mini-table th {
+  background: var(--bg3);
+  text-align: left;
+}
+.sheet-dp td { background: rgba(241, 199, 91, 0.24); }
+.sheet-u22 td { background: rgba(46, 214, 128, 0.22); }
+.sheet-tam td { background: rgba(255, 115, 115, 0.18); }
+.contract-offer-inline {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 8px;
+}
+.contract-offer-inline input { margin: 0; }
+
+.pp-modal-wide { width: min(1080px, calc(100vw - 30px)); }
+.pp-simple-head {
+  display: flex; justify-content: space-between; gap: 14px; align-items: center;
+  margin-bottom: 12px;
+}
+.pp-simple-left { display: flex; gap: 14px; align-items: center; }
+.profile-team-logo {
+  width: 54px; height: 54px; object-fit: contain; border-radius: 12px;
+  border: 1px solid var(--line); padding: 6px; background: rgba(255,255,255,.04);
+}
+.pp-simple-right { display: flex; gap: 10px; flex-wrap: wrap; }
+.rating-chip {
+  min-width: 88px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255,255,255,.03);
+}
+.rating-chip span {
+  display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; font-family: var(--mono);
+}
+.rating-chip strong { display: block; margin-top: 4px; font-size: 22px; }
+.pp-grid-3 {
+  display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px;
+}
+.pp-rating-col {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255,255,255,.03);
+}
+.pp-rating-row {
+  display: flex; justify-content: space-between; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px;
+}
+.pp-rating-row:last-child { border-bottom: 0; }
+.var-frame {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  letter-spacing: .3em;
+  color: rgba(255,255,255,.75);
+}
+
+@media (max-width: 1100px) {
+  .roster-sheet,
+  .roster-sheet-main,
+  .pp-grid-3,
+  .trade-header-simple {
+    grid-template-columns: 1fr;
+  }
+  .trade-header-simple { display: grid; }
+}
+@media (max-width: 760px) {
+  .club-hero-simple,
+  .pp-simple-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .contract-offer-inline {
+    grid-template-columns: 1fr;
+  }
+}
