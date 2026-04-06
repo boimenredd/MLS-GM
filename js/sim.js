@@ -301,7 +301,7 @@ export function getCapSummary(state, teamId) {
   const supplemental = players.filter(p => p.rosterRole === "Supplemental");
   const reserve      = players.filter(p => p.rosterRole === "Reserve");
   const budgetUsed   = senior.reduce((sum, p) => sum + getBudgetCharge(p), 0);
-  const intlUsed     = players.filter(p => !p.domestic).length;
+  const intlUsed     = players.filter(p => !p.domestic && !p.hasGreenCard).length;
   const team         = state.teams.find(t => t.id === teamId);
 
   return {
@@ -313,6 +313,11 @@ export function getCapSummary(state, teamId) {
     intlUsed,
     intlTotal:   team.internationalSlots,
     dpCount:     players.filter(p => p.designation === "DP").length,
+    dpSlots:     team.dpSlots ?? 3,
+    u22Count:    players.filter(p => p.designation === "U22").length,
+    u22Slots:    team.u22Slots ?? 3,
+    gam:         team.gam ?? 0,
+    tam:         team.tam ?? 0,
   };
 }
 
@@ -918,11 +923,17 @@ export function advancePlayoffs(state) {
     p.rounds.cup.push(cup);
     p.championTeamId = winnerOf(cup);
     awardSeason(state);
-    state.season.phase = "Offseason";
+    state.season.phase = "Draft";
+    initializeDraft(state);
     addTransaction(
       state,
       "Champion",
       `${state.teams.find(t => t.id === p.championTeamId).name} won MLS Cup ${state.season.year}.`
+    );
+    addTransaction(
+      state,
+      "Draft",
+      `The ${state.season.year + 1} MLS SuperDraft order is set.`
     );
   }
 }
@@ -1008,6 +1019,365 @@ function runDraft(state) {
       );
     }
   }
+}
+
+
+function ensureDraftPickLedger(state, startYear = (state.season?.year || MLS_RULES.seasonStartYear) + 1, yearsAhead = 2) {
+  if (!state.draft) state.draft = {};
+  if (!Array.isArray(state.draft.picks)) state.draft.picks = [];
+  for (let year = startYear; year < startYear + yearsAhead; year++) {
+    for (const team of state.teams) {
+      for (let round = 1; round <= 3; round++) {
+        const exists = state.draft.picks.find(
+          p => p.year === year && p.round === round && p.originalTeamId === team.id
+        );
+        if (!exists) {
+          state.draft.picks.push({
+            id: uuid("pick"),
+            year,
+            round,
+            originalTeamId: team.id,
+            ownerTeamId: team.id,
+          });
+        }
+      }
+    }
+  }
+}
+
+function draftPickValue(pickObj, currentSeasonYear) {
+  const base = { 1: 850000, 2: 420000, 3: 210000 }[pickObj.round] || 150000;
+  const yearsOut = Math.max(0, pickObj.year - (currentSeasonYear + 1));
+  return Math.round(base * Math.max(0.55, 1 - yearsOut * 0.18));
+}
+
+function playerTradeValue(player) {
+  return Math.round(
+    player.overall * 18000 +
+    player.potential * 9000 +
+    Math.max(0, 24 - player.age) * 12000 -
+    Math.min(player.contract?.salary || 0, 4000000) * 0.18 +
+    (player.designation === "DP" ? 280000 : 0) +
+    (player.designation === "U22" ? 220000 : 0) +
+    (player.homegrown ? 90000 : 0)
+  );
+}
+
+function describeDraftPick(state, pickObj) {
+  const owner = state.teams.find(t => t.id === pickObj.ownerTeamId);
+  return `${pickObj.year} Round ${pickObj.round} (${owner?.shortName || owner?.name || "Unknown"})`;
+}
+
+function createDraftSelectionRecord(state, pickObj, player, teamId) {
+  const team = state.teams.find(t => t.id === teamId);
+  player.clubId             = teamId;
+  player.contract.status    = "Active";
+  player.contract.yearsLeft = randInt(2, 4);
+  player.contract.salary    = pickObj.round === 1 ? 113400 : 88025;
+  player.rosterRole         = pickObj.round === 1 ? "Supplemental" : "Reserve";
+  player.designation        = pickObj.round === 1 && player.age <= 22 && Math.random() < 0.35 ? "U22" : null;
+  player.domestic           = true;
+  state.players.push(player);
+  state.draft.pool = state.draft.pool.filter(p => p.id !== player.id);
+  const historyItem = {
+    id: uuid("draftsel"),
+    kind: "pick",
+    year: pickObj.year,
+    round: pickObj.round,
+    teamId,
+    pickId: pickObj.id,
+    playerId: player.id,
+    playerName: player.name,
+    teamName: team.name,
+    overall: player.overall,
+    potential: player.potential,
+    text: `${team.name} selected ${player.name} in Round ${pickObj.round}.`,
+  };
+  state.draft.history.unshift(historyItem);
+  addTransaction(state, "Draft", historyItem.text);
+  state.draft.currentPickIndex += 1;
+  state.draft.currentRound = state.draft.order[state.draft.currentPickIndex]
+    ? state.draft.picks.find(p => p.id === state.draft.order[state.draft.currentPickIndex])?.round || pickObj.round
+    : pickObj.round;
+  if (state.draft.currentPickIndex >= state.draft.order.length || !state.draft.pool.length) {
+    state.draft.completed = true;
+    state.draft.started = false;
+    state.season.phase = "Offseason";
+    addTransaction(state, "Draft", `${state.draft.year} MLS SuperDraft completed.`);
+    ensureDraftPickLedger(state, state.season.year + 2, 3);
+  }
+  return historyItem;
+}
+
+export function initializeDraft(state) {
+  ensureDraftPickLedger(state, state.season.year + 1, 3);
+  if (!state.draft) state.draft = {};
+  const draftYear = state.season.year + 1;
+
+  if (
+    state.draft.year === draftYear &&
+    Array.isArray(state.draft.order) &&
+    state.draft.order.length &&
+    !state.draft.completed &&
+    Array.isArray(state.draft.pool) &&
+    state.draft.pool.length
+  ) {
+    return state.draft;
+  }
+
+  generateDraftPool(state);
+  const orderTeams = draftOrder(state);
+  const order = [];
+
+  for (let round = 1; round <= 3; round++) {
+    for (const originalTeamId of orderTeams) {
+      let pickObj = state.draft.picks.find(
+        p => p.year === draftYear && p.round === round && p.originalTeamId === originalTeamId
+      );
+      if (!pickObj) {
+        pickObj = {
+          id: uuid("pick"),
+          year: draftYear,
+          round,
+          originalTeamId,
+          ownerTeamId: originalTeamId,
+        };
+        state.draft.picks.push(pickObj);
+      }
+      order.push(pickObj.id);
+    }
+  }
+
+  state.draft.year = draftYear;
+  state.draft.order = order;
+  state.draft.history = [];
+  state.draft.started = false;
+  state.draft.completed = false;
+  state.draft.currentPickIndex = 0;
+  state.draft.currentRound = 1;
+  return state.draft;
+}
+
+export function startDraft(state) {
+  initializeDraft(state);
+  state.draft.started = true;
+  state.season.phase = "Draft";
+  return { ok: true };
+}
+
+export function getCurrentDraftPick(state) {
+  if (!state.draft?.order?.length) return null;
+  const pickId = state.draft.order[state.draft.currentPickIndex];
+  if (!pickId) return null;
+  return state.draft.picks.find(p => p.id === pickId) || null;
+}
+
+function maybeRunDraftTrade(state) {
+  if (!state.draft?.started || state.draft.completed) return false;
+  if (Math.random() > 0.11) return false;
+  const currentIndex = state.draft.currentPickIndex;
+  if (currentIndex >= state.draft.order.length - 2) return false;
+
+  const currentPick = getCurrentDraftPick(state);
+  if (!currentPick) return false;
+
+  const maxIndex = Math.min(state.draft.order.length - 1, currentIndex + 10);
+  const laterCandidates = [];
+  for (let i = currentIndex + 1; i <= maxIndex; i++) {
+    const p = state.draft.picks.find(x => x.id === state.draft.order[i]);
+    if (p && p.ownerTeamId !== currentPick.ownerTeamId) laterCandidates.push(p);
+  }
+  if (!laterCandidates.length) return false;
+
+  const laterPick = pick(laterCandidates);
+  const teamUp = state.teams.find(t => t.id === laterPick.ownerTeamId);
+  const teamDown = state.teams.find(t => t.id === currentPick.ownerTeamId);
+  const gamBonus = randInt(0, 1) ? randInt(50000, 180000) : 0;
+
+  if (gamBonus > 0 && teamUp.gam >= gamBonus) {
+    teamUp.gam -= gamBonus;
+    teamDown.gam += gamBonus;
+  }
+
+  const oldCurrentOwner = currentPick.ownerTeamId;
+  currentPick.ownerTeamId = laterPick.ownerTeamId;
+  laterPick.ownerTeamId = oldCurrentOwner;
+
+  const text = `${teamUp.name} traded up for ${describeDraftPick(state, currentPick)} with ${teamDown.name} for ${describeDraftPick(state, laterPick)}${gamBonus ? ` and ${gamBonus.toLocaleString()} GAM` : ""}.`;
+  state.draft.history.unshift({ id: uuid("drafttrade"), kind: "trade", text });
+  addTransaction(state, "Draft Trade", text);
+  return true;
+}
+
+export function simulateNextDraftPick(state, forceUserAuto = false) {
+  initializeDraft(state);
+  state.draft.started = true;
+  state.season.phase = "Draft";
+
+  if (state.draft.completed) return { ok: true, completed: true };
+
+  maybeRunDraftTrade(state);
+
+  const pickObj = getCurrentDraftPick(state);
+  if (!pickObj) {
+    state.draft.completed = true;
+    state.season.phase = "Offseason";
+    return { ok: true, completed: true };
+  }
+
+  if (pickObj.ownerTeamId === state.userTeamId && !forceUserAuto) {
+    return { ok: false, waitingOnUser: true, pick: pickObj };
+  }
+
+  const board = state.draft.pool
+    .slice()
+    .sort((a, b) => (b.potential + b.overall * 0.55) - (a.potential + a.overall * 0.55));
+  const player = board[Math.min(randInt(0, 4), Math.max(0, board.length - 1))];
+  if (!player) {
+    state.draft.completed = true;
+    state.season.phase = "Offseason";
+    return { ok: true, completed: true };
+  }
+
+  const historyItem = createDraftSelectionRecord(state, pickObj, player, pickObj.ownerTeamId);
+  return { ok: true, completed: !!state.draft.completed, waitingOnUser: false, pick: pickObj, player, historyItem };
+}
+
+export function advanceDraftUntilUserOrEnd(state, forceUserAuto = false) {
+  initializeDraft(state);
+  state.draft.started = true;
+  state.season.phase = "Draft";
+
+  while (!state.draft.completed) {
+    const result = simulateNextDraftPick(state, forceUserAuto);
+    if (result.waitingOnUser || result.completed) return result;
+  }
+  return { ok: true, completed: true };
+}
+
+export function makeUserDraftPick(state, playerId) {
+  initializeDraft(state);
+  state.draft.started = true;
+  state.season.phase = "Draft";
+
+  const pickObj = getCurrentDraftPick(state);
+  if (!pickObj) return { ok: false, reason: "No active pick." };
+  if (pickObj.ownerTeamId !== state.userTeamId) return { ok: false, reason: "Your club is not on the clock." };
+  const player = state.draft.pool.find(p => p.id === playerId);
+  if (!player) return { ok: false, reason: "Prospect not found." };
+
+  const historyItem = createDraftSelectionRecord(state, pickObj, player, state.userTeamId);
+  return { ok: true, completed: !!state.draft.completed, historyItem };
+}
+
+export function updateTeamBudget(state, teamId, updates = {}) {
+  const team = state.teams.find(t => t.id === teamId);
+  if (!team) return { ok: false, reason: "Team not found." };
+  const asNum = (value, fallback) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  team.salaryBudget = Math.max(0, asNum(updates.salaryBudget, team.salaryBudget));
+  team.gam = Math.max(0, asNum(updates.gam, team.gam));
+  team.tam = Math.max(0, asNum(updates.tam, team.tam));
+  team.internationalSlots = Math.max(0, asNum(updates.internationalSlots, team.internationalSlots));
+  team.dpSlots = Math.max(0, asNum(updates.dpSlots, team.dpSlots ?? 3));
+  team.u22Slots = Math.max(0, asNum(updates.u22Slots, team.u22Slots ?? 3));
+  return { ok: true };
+}
+
+export function setPlayerDesignation(state, playerId, designation) {
+  const player = state.players.find(p => p.id === playerId);
+  if (!player) return { ok: false, reason: "Player not found." };
+  const team = state.teams.find(t => t.id === player.clubId);
+  if (!team) return { ok: false, reason: "Team not found." };
+  const nextValue = designation === "None" || designation === "" ? null : designation;
+  if (nextValue === "U22" && player.age > 23) return { ok: false, reason: "U22 Initiative players must be 23 or younger." };
+  const teamPlayers = getTeamPlayers(state, team.id);
+  const otherDp = teamPlayers.filter(p => p.id !== player.id && p.designation === "DP").length;
+  const otherU22 = teamPlayers.filter(p => p.id !== player.id && p.designation === "U22").length;
+  if (nextValue === "DP" && otherDp >= (team.dpSlots ?? 3)) return { ok: false, reason: "No DP slots available." };
+  if (nextValue === "U22" && otherU22 >= (team.u22Slots ?? 3)) return { ok: false, reason: "No U22 slots available." };
+  player.designation = nextValue;
+  return { ok: true };
+}
+
+export function proposeTrade(state, proposal) {
+  const userTeam = state.teams.find(t => t.id === state.userTeamId);
+  const partner = state.teams.find(t => t.id === proposal.partnerTeamId);
+  if (!userTeam || !partner) return { ok: false, reason: "Trade partner not found." };
+
+  const outgoingPlayers = (proposal.outgoingPlayerIds || []).map(id => state.players.find(p => p.id === id)).filter(Boolean);
+  const incomingPlayers = (proposal.incomingPlayerIds || []).map(id => state.players.find(p => p.id === id)).filter(Boolean);
+  const outgoingPicks = (proposal.outgoingPickIds || []).map(id => state.draft?.picks?.find(p => p.id === id)).filter(Boolean);
+  const incomingPicks = (proposal.incomingPickIds || []).map(id => state.draft?.picks?.find(p => p.id === id)).filter(Boolean);
+
+  if (outgoingPlayers.some(p => p.clubId !== userTeam.id)) return { ok: false, reason: "One of your outgoing players is no longer on your roster." };
+  if (incomingPlayers.some(p => p.clubId !== partner.id)) return { ok: false, reason: "One of the requested players is no longer on that roster." };
+  if (outgoingPicks.some(p => p.ownerTeamId !== userTeam.id)) return { ok: false, reason: "One of your draft picks is not available." };
+  if (incomingPicks.some(p => p.ownerTeamId !== partner.id)) return { ok: false, reason: "One requested draft pick is not available." };
+
+  const outgoingGAM = Math.max(0, Number(proposal.outgoingGAM) || 0);
+  const incomingGAM = Math.max(0, Number(proposal.incomingGAM) || 0);
+  const outgoingTAM = Math.max(0, Number(proposal.outgoingTAM) || 0);
+  const incomingTAM = Math.max(0, Number(proposal.incomingTAM) || 0);
+  const outgoingIntlSlots = Math.max(0, Number(proposal.outgoingIntlSlots) || 0);
+  const incomingIntlSlots = Math.max(0, Number(proposal.incomingIntlSlots) || 0);
+
+  if (userTeam.gam < outgoingGAM) return { ok: false, reason: "Not enough GAM available." };
+  if (userTeam.tam < outgoingTAM) return { ok: false, reason: "Not enough TAM available." };
+  if (partner.gam < incomingGAM) return { ok: false, reason: `${partner.name} does not have that much GAM.` };
+  if (partner.tam < incomingTAM) return { ok: false, reason: `${partner.name} does not have that much TAM.` };
+  if (userTeam.internationalSlots < outgoingIntlSlots) return { ok: false, reason: "Not enough international slots to send." };
+  if (partner.internationalSlots < incomingIntlSlots) return { ok: false, reason: `${partner.name} does not have that many international slots.` };
+
+  const userRosterCount = getTeamPlayers(state, userTeam.id).length;
+  const partnerRosterCount = getTeamPlayers(state, partner.id).length;
+  if (userRosterCount - outgoingPlayers.length + incomingPlayers.length > 30) return { ok: false, reason: "Your roster would exceed 30 players." };
+  if (partnerRosterCount - incomingPlayers.length + outgoingPlayers.length > 30) return { ok: false, reason: `${partner.name}'s roster would exceed 30 players.` };
+
+  const userOutgoingValue = outgoingPlayers.reduce((sum, p) => sum + playerTradeValue(p), 0) + outgoingPicks.reduce((sum, p) => sum + draftPickValue(p, state.season.year), 0) + outgoingGAM + outgoingTAM + outgoingIntlSlots * 225000;
+  const userIncomingValue = incomingPlayers.reduce((sum, p) => sum + playerTradeValue(p), 0) + incomingPicks.reduce((sum, p) => sum + draftPickValue(p, state.season.year), 0) + incomingGAM + incomingTAM + incomingIntlSlots * 225000;
+
+  const partnerPlayers = getTeamPlayers(state, partner.id);
+  const counts = pos => partnerPlayers.filter(p => p.position === pos).length;
+  const needBoost = incomingPlayers.reduce((boost, p) => {
+    if ((p.position === "GK" && counts("GK") < 2) || (p.position === "ST" && counts("ST") < 2)) return boost + 160000;
+    if ((p.position === "CB" || p.position === "FB") && counts(p.position) < 3) return boost + 100000;
+    return boost;
+  }, 0);
+
+  const acceptanceThreshold = userOutgoingValue * randFloat(0.88, 1.06);
+  if (userIncomingValue + needBoost < acceptanceThreshold) {
+    return { ok: false, reason: `${partner.name} rejected the offer.`, evaluation: { userOutgoingValue, userIncomingValue, partnerNeedsBoost: needBoost } };
+  }
+
+  outgoingPlayers.forEach(p => { p.clubId = partner.id; });
+  incomingPlayers.forEach(p => { p.clubId = userTeam.id; });
+  userTeam.gam += incomingGAM - outgoingGAM;
+  partner.gam += outgoingGAM - incomingGAM;
+  userTeam.tam += incomingTAM - outgoingTAM;
+  partner.tam += outgoingTAM - incomingTAM;
+  userTeam.internationalSlots += incomingIntlSlots - outgoingIntlSlots;
+  partner.internationalSlots += outgoingIntlSlots - incomingIntlSlots;
+  outgoingPicks.forEach(p => { p.ownerTeamId = partner.id; });
+  incomingPicks.forEach(p => { p.ownerTeamId = userTeam.id; });
+
+  const sentBits = [];
+  const recvBits = [];
+  if (outgoingPlayers.length) sentBits.push(outgoingPlayers.map(p => p.name).join(", "));
+  if (outgoingPicks.length) sentBits.push(outgoingPicks.map(p => describeDraftPick(state, p)).join(", "));
+  if (outgoingGAM) sentBits.push(`${outgoingGAM.toLocaleString()} GAM`);
+  if (outgoingTAM) sentBits.push(`${outgoingTAM.toLocaleString()} TAM`);
+  if (outgoingIntlSlots) sentBits.push(`${outgoingIntlSlots} INTL slot${outgoingIntlSlots === 1 ? "" : "s"}`);
+  if (incomingPlayers.length) recvBits.push(incomingPlayers.map(p => p.name).join(", "));
+  if (incomingPicks.length) recvBits.push(incomingPicks.map(p => describeDraftPick(state, p)).join(", "));
+  if (incomingGAM) recvBits.push(`${incomingGAM.toLocaleString()} GAM`);
+  if (incomingTAM) recvBits.push(`${incomingTAM.toLocaleString()} TAM`);
+  if (incomingIntlSlots) recvBits.push(`${incomingIntlSlots} INTL slot${incomingIntlSlots === 1 ? "" : "s"}`);
+  const text = `${userTeam.name} traded ${sentBits.join(" + ") || "nothing"} to ${partner.name} for ${recvBits.join(" + ") || "nothing"}.`;
+  addTransaction(state, "Trade", text);
+  return { ok: true, text, evaluation: { userOutgoingValue, userIncomingValue, partnerNeedsBoost: needBoost } };
 }
 
 // ─── Offseason ────────────────────────────────────────────────────────────────
@@ -1120,6 +1490,8 @@ export function createNewState(options) {
         tam:               Number(options.tamAnnual),
         salaryBudget:      Number(options.salaryBudget),
         internationalSlots: MLS_RULES.intlSlotsDefault,
+        dpSlots:           3,
+        u22Slots:          3,
         finances: {
           cash:       randInt(5000000, 26000000),
           ticketBase: randInt(17000, 42000),
@@ -1147,7 +1519,7 @@ export function createNewState(options) {
   }
 
   const state = {
-    version: 2,
+    version: 3,
     season:  { year: 2026, phase: "Regular Season" },
     calendar: { week: 1, absoluteDay: 0 },
     teams,
@@ -1159,7 +1531,7 @@ export function createNewState(options) {
     },
     schedule:      [],
     playoffs:      null,
-    draft:         { pool: [] },
+    draft:         { pool: [], picks: [], order: [], history: [], started: false, completed: false, year: 2027, currentPickIndex: 0, currentRound: 1 },
     freeAgents:    [],
     transactions:  [],
     awardsHistory: [],
@@ -1176,6 +1548,7 @@ export function createNewState(options) {
 
   makeSchedule(state);
   seedFreeAgents(state);
+  ensureDraftPickLedger(state, state.season.year + 1, 3);
   addTransaction(state, "League", `League initialized for ${state.season.year}.`);
   return state;
 }
@@ -1316,6 +1689,11 @@ export function advanceOneWeek(state) {
     return;
   }
 
+  if (state.season.phase === "Draft") {
+    advanceDraftUntilUserOrEnd(state, true);
+    return;
+  }
+
   if (state.season.phase === "Offseason") {
     runOffseason(state);
   }
@@ -1333,7 +1711,6 @@ export function simulateToSeasonEnd(state) {
 export function runOffseason(state) {
   expireContracts(state);
   ageAndDevelop(state);
-  runDraft(state);
   aiFillRosters(state);
   resetStandingsAndSchedule(state);
 
@@ -1347,6 +1724,19 @@ export function runOffseason(state) {
     team.tam            = state.settings.tamAnnual;
     team.finances.cash += randInt(-2000000, 8000000);
   }
+
+  ensureDraftPickLedger(state, state.season.year + 1, 3);
+  state.draft = {
+    pool: [],
+    picks: state.draft?.picks || [],
+    order: [],
+    history: [],
+    started: false,
+    completed: false,
+    year: state.season.year + 1,
+    currentPickIndex: 0,
+    currentRound: 1,
+  };
 
   addTransaction(state, "Season", `Opened ${state.season.year} season.`);
 }

@@ -15,6 +15,14 @@ import {
   advanceOneWeek,
   simulateToSeasonEnd,
   simulateMatch,
+  initializeDraft,
+  startDraft,
+  getCurrentDraftPick,
+  advanceDraftUntilUserOrEnd,
+  makeUserDraftPick,
+  proposeTrade,
+  updateTeamBudget,
+  setPlayerDesignation,
 } from "./sim.js";
 import { CONFERENCES } from "./data.js";
 
@@ -38,6 +46,8 @@ let tactics = {
   lineup: [],
 };
 
+let tradePartnerTeamId = "";
+
 const tableSortState = {
   roster:        { key: "positionOrder", dir: "asc" },
   standingsEast: { key: "points",        dir: "desc" },
@@ -51,6 +61,72 @@ function byTeamId(id)   { return state.teams.find(t => t.id === id); }
 function byPlayerId(id) {
   return state.players.find(p => p.id === id)
       || state.freeAgents?.find(p => p.id === id);
+}
+
+function byDraftPickId(id) {
+  return state?.draft?.picks?.find(p => p.id === id) || null;
+}
+
+function normalizeState(st) {
+  if (!st) return st;
+  st.version = Math.max(st.version || 0, 3);
+  st.season ||= { year: 2026, phase: "Regular Season" };
+  st.calendar ||= { week: 1, absoluteDay: 0 };
+  st.settings ||= {};
+  st.settings.salaryBudget ||= 6425000;
+  st.settings.gamAnnual ||= 3280000;
+  st.settings.tamAnnual ||= 2125000;
+  st.settings.academyPerTeam ||= 8;
+
+  for (const team of st.teams || []) {
+    team.salaryBudget ??= st.settings.salaryBudget;
+    team.gam ??= st.settings.gamAnnual;
+    team.tam ??= st.settings.tamAnnual;
+    team.internationalSlots ??= 8;
+    team.dpSlots ??= 3;
+    team.u22Slots ??= 3;
+    team.finances ||= { cash: 10000000, ticketBase: 22000, sponsor: 12000000 };
+  }
+
+  st.draft ||= {};
+  st.draft.pool ||= [];
+  st.draft.picks ||= [];
+  st.draft.order ||= [];
+  st.draft.history ||= [];
+  st.draft.started ||= false;
+  st.draft.completed ||= false;
+  st.draft.year ||= (st.season.year || 2026) + 1;
+  st.draft.currentPickIndex ||= 0;
+  st.draft.currentRound ||= 1;
+
+  const startYear = (st.season.year || 2026) + 1;
+  for (let year = startYear; year < startYear + 3; year++) {
+    for (const team of st.teams || []) {
+      for (let round = 1; round <= 3; round++) {
+        const exists = st.draft.picks.find(
+          p => p.year === year && p.round === round && p.originalTeamId === team.id
+        );
+        if (!exists) {
+          st.draft.picks.push({
+            id: `pick_${Math.random().toString(36).slice(2, 10)}_${Date.now().toString(36)}`,
+            year,
+            round,
+            originalTeamId: team.id,
+            ownerTeamId: team.id,
+          });
+        }
+      }
+    }
+  }
+
+  return st;
+}
+
+function getUserDraftPicks(years = [state?.season?.year + 1, state?.season?.year + 2]) {
+  const set = new Set(years.filter(Boolean));
+  return (state?.draft?.picks || [])
+    .filter(p => p.ownerTeamId === state.userTeamId && set.has(p.year))
+    .sort((a, b) => a.year - b.year || a.round - b.round || byTeamId(a.originalTeamId).name.localeCompare(byTeamId(b.originalTeamId).name));
 }
 
 function escapeHtml(v) {
@@ -298,7 +374,7 @@ async function playLiveMatch(match) {
     while (simPaused) await sleep(100);
     if (simSkipped) break;
 
-    if (el("sim-minute")) el("sim-minute").textContent = `${minute}''`;
+    if (el("sim-minute")) el("sim-minute").textContent = `${minute}'`;
     if (el("sim-progress-fill")) el("sim-progress-fill").style.width = `${(minute/90)*100}%`;
 
     if (Math.random() < 0.18)
@@ -777,7 +853,7 @@ function renderStats() {
 }
 
 function renderTransactions() {
-  return `${pageHead("Transactions Log","Signings, offers, injuries, academy, awards")}
+  return `${pageHead("Transactions Log","Signings, trades, offers, injuries, academy, awards")}
   <div class="panel"><table>
     <thead><tr><th>Type</th><th>Season</th><th>Text</th></tr></thead><tbody>
       ${state.transactions.map(tx => `<tr><td><span class="badge">${escapeHtml(tx.type)}</span></td><td>${tx.season}</td><td>${escapeHtml(tx.text)}</td></tr>`).join("")}
@@ -785,14 +861,144 @@ function renderTransactions() {
   </div>`;
 }
 
-function renderDraft() {
-  const rows = state.draft.pool || [];
-  return `${pageHead("MLS SuperDraft","Pool appears in the offseason")}
+function renderTrade() {
+  const userTeam = getUserTeam(state);
+  const partnerId = tradePartnerTeamId && tradePartnerTeamId !== userTeam.id
+    ? tradePartnerTeamId
+    : state.teams.find(t => t.id !== userTeam.id)?.id;
+  tradePartnerTeamId = partnerId;
+  const partner = byTeamId(partnerId);
+  const myPlayers = getTeamPlayers(state, userTeam.id);
+  const theirPlayers = partner ? getTeamPlayers(state, partner.id) : [];
+  const years = [state.season.year + 1, state.season.year + 2];
+  const myPicks = getUserDraftPicks(years);
+  const theirPicks = (state.draft?.picks || [])
+    .filter(p => partner && p.ownerTeamId === partner.id && years.includes(p.year))
+    .sort((a, b) => a.year - b.year || a.round - b.round);
+
+  const pickLabel = p => `${p.year} R${p.round} · ${escapeHtml(byTeamId(p.originalTeamId)?.shortName || byTeamId(p.originalTeamId)?.name || "Unknown")}`;
+
+  return `${pageHead("Trade Center","Propose deals with players, allocation money, slots, and draft picks")}
   <div class="panel">
-    <div class="panel-head"><h3>Draft Pool</h3><span>${rows.length}</span></div>
-    <table><thead><tr><th>Name</th><th>College</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th class="num">POT</th></tr></thead><tbody>
-      ${rows.slice(0,40).map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.college||"—")}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td></tr>`).join("") || `<tr><td colspan="6">Draft pool generates in offseason.</td></tr>`}
+    <div class="panel-head"><h3>Trade Partner</h3><span>Direct proposals only</span></div>
+    <div class="grid-2">
+      <div>
+        <label for="tradePartnerSelect">Other Club</label>
+        <select id="tradePartnerSelect">${state.teams.filter(t => t.id !== userTeam.id).map(t => `<option value="${t.id}" ${t.id===partnerId?"selected":""}>${escapeHtml(t.name)}</option>`).join("")}</select>
+      </div>
+      <div class="note" style="padding-top:22px;">AI evaluates overall value, position need, GAM/TAM, international slots, and draft capital.</div>
+    </div>
+  </div>
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-head"><h3>You Send</h3><span>${escapeHtml(userTeam.name)}</span></div>
+      <div class="grid-3">
+        <div><label>GAM</label><input id="tradeOutgoingGAM" type="number" min="0" value="0" /></div>
+        <div><label>TAM</label><input id="tradeOutgoingTAM" type="number" min="0" value="0" /></div>
+        <div><label>Intl Slots</label><input id="tradeOutgoingIntl" type="number" min="0" value="0" /></div>
+      </div>
+      <div class="trade-check-grid">${myPlayers.map(p => `<label class="trade-check"><input type="checkbox" data-trade-kind="out-player" value="${p.id}" /> <span>${escapeHtml(p.name)} <strong>${p.overall}</strong> · ${escapeHtml(p.position)}</span></label>`).join("")}</div>
+      <div class="subtle-divider"></div>
+      <div class="trade-check-grid">${myPicks.map(p => `<label class="trade-check"><input type="checkbox" data-trade-kind="out-pick" value="${p.id}" /> <span>${pickLabel(p)}</span></label>`).join("") || `<div class="note">No tradable picks in the next two drafts.</div>`}</div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h3>You Receive</h3><span>${escapeHtml(partner?.name || "Choose a club")}</span></div>
+      <div class="grid-3">
+        <div><label>GAM</label><input id="tradeIncomingGAM" type="number" min="0" value="0" /></div>
+        <div><label>TAM</label><input id="tradeIncomingTAM" type="number" min="0" value="0" /></div>
+        <div><label>Intl Slots</label><input id="tradeIncomingIntl" type="number" min="0" value="0" /></div>
+      </div>
+      <div class="trade-check-grid">${theirPlayers.map(p => `<label class="trade-check"><input type="checkbox" data-trade-kind="in-player" value="${p.id}" /> <span>${escapeHtml(p.name)} <strong>${p.overall}</strong> · ${escapeHtml(p.position)}</span></label>`).join("") || `<div class="note">No roster data.</div>`}</div>
+      <div class="subtle-divider"></div>
+      <div class="trade-check-grid">${theirPicks.map(p => `<label class="trade-check"><input type="checkbox" data-trade-kind="in-pick" value="${p.id}" /> <span>${pickLabel(p)}</span></label>`).join("") || `<div class="note">No tradable picks in the next two drafts.</div>`}</div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="flex"><button id="proposeTradeBtn" class="primary-btn" type="button">Send Trade Proposal</button></div>
+  </div>`;
+}
+
+function renderBudget() {
+  const team = getUserTeam(state);
+  const cap = getCapSummary(state, team.id);
+  const players = getTeamPlayers(state, team.id);
+  return `${pageHead("Budget & Roster Rules","Control allocation money, slots, and designations")}
+  <div class="cards">
+    <div class="card"><div class="card-label">GAM</div><div class="card-value">${formatMoney(team.gam)}</div><div class="card-note">General Allocation Money</div></div>
+    <div class="card"><div class="card-label">TAM</div><div class="card-value">${formatMoney(team.tam)}</div><div class="card-note">Targeted Allocation Money</div></div>
+    <div class="card"><div class="card-label">DP Slots</div><div class="card-value">${cap.dpCount}/${cap.dpSlots}</div><div class="card-note">Designated Players</div></div>
+    <div class="card"><div class="card-label">U22 Slots</div><div class="card-value">${cap.u22Count}/${cap.u22Slots}</div><div class="card-note">Initiative slots</div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><h3>Club Controls</h3><span>Editable budget sheet</span></div>
+    <div class="grid-3">
+      <div><label for="budgetSalaryInput">Salary Budget</label><input id="budgetSalaryInput" type="number" value="${team.salaryBudget}" /></div>
+      <div><label for="budgetGAMInput">GAM</label><input id="budgetGAMInput" type="number" value="${team.gam}" /></div>
+      <div><label for="budgetTAMInput">TAM</label><input id="budgetTAMInput" type="number" value="${team.tam}" /></div>
+      <div><label for="budgetIntlInput">Intl Slots</label><input id="budgetIntlInput" type="number" value="${team.internationalSlots}" /></div>
+      <div><label for="budgetDpInput">DP Slots</label><input id="budgetDpInput" type="number" value="${team.dpSlots ?? 3}" /></div>
+      <div><label for="budgetU22Input">U22 Slots</label><input id="budgetU22Input" type="number" value="${team.u22Slots ?? 3}" /></div>
+    </div>
+    <div class="flex" style="margin-top:12px;"><button id="saveBudgetBtn" class="primary-btn" type="button">Save Budget Settings</button></div>
+  </div>
+  <div class="panel">
+    <div class="panel-head"><h3>Designation Manager</h3><span>DP / U22 / TAM tags</span></div>
+    <table><thead><tr><th>Name</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th>Role</th><th>Designation</th></tr></thead><tbody>
+      ${players.map(p => `<tr>
+        <td>${escapeHtml(p.name)}</td>
+        <td>${escapeHtml(p.position)}</td>
+        <td class="num">${p.age}</td>
+        <td class="num">${p.overall}</td>
+        <td>${escapeHtml(p.rosterRole)}</td>
+        <td>
+          <select class="budget-designation-select" data-id="${p.id}">
+            ${["None","DP","U22","TAM"].map(opt => `<option value="${opt}" ${(p.designation || "None")===opt?"selected":""}>${opt}</option>`).join("")}
+          </select>
+        </td>
+      </tr>`).join("")}
     </tbody></table>
+  </div>`;
+}
+
+function renderDraft() {
+  const phaseIsDraft = state.season.phase === "Draft";
+  const draft = state.draft || {};
+  const currentPick = phaseIsDraft && draft.order?.length ? getCurrentDraftPick(state) : null;
+  const onClockTeam = currentPick ? byTeamId(currentPick.ownerTeamId) : null;
+  const board = (draft.pool || []).slice().sort((a, b) => (b.potential + b.overall * 0.5) - (a.potential + a.overall * 0.5));
+  const ownedPicks = getUserDraftPicks([state.season.year + 1, state.season.year + 2]);
+
+  return `${pageHead("MLS SuperDraft", phaseIsDraft ? "Live draft room with AI picks and draft-day trades" : "Draft board and pick capital")}
+  ${phaseIsDraft ? `<div class="cards">
+    <div class="card"><div class="card-label">On The Clock</div><div class="card-value">${escapeHtml(onClockTeam?.shortName || onClockTeam?.name || "—")}</div><div class="card-note">${currentPick ? `Round ${currentPick.round}` : "Waiting"}</div></div>
+    <div class="card"><div class="card-label">Pick #</div><div class="card-value">${(draft.currentPickIndex || 0) + 1}</div><div class="card-note">of ${draft.order?.length || 0}</div></div>
+    <div class="card"><div class="card-label">Prospects Left</div><div class="card-value">${board.length}</div><div class="card-note">Board still available</div></div>
+    <div class="card"><div class="card-label">Your Status</div><div class="card-value">${currentPick?.ownerTeamId === state.userTeamId ? "ON CLOCK" : "WAITING"}</div><div class="card-note">${escapeHtml(getUserTeam(state).shortName || getUserTeam(state).name)}</div></div>
+  </div>` : ""}
+  <div class="panel">
+    <div class="flex">${phaseIsDraft ? `<button id="draftStartBtn" class="primary-btn" type="button">${draft.started ? "Advance To Next User Pick" : "Start Live Draft"}</button>` : `<div class="note">The live draft starts automatically after MLS Cup.</div>`}</div>
+  </div>
+  <div class="grid-2">
+    <div class="panel">
+      <div class="panel-head"><h3>Draft Board</h3><span>${board.length}</span></div>
+      <table><thead><tr><th>Name</th><th>College</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th class="num">POT</th>${phaseIsDraft && currentPick?.ownerTeamId===state.userTeamId ? `<th></th>` : ``}</tr></thead><tbody>
+        ${board.slice(0, 45).map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.college || "—")}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td>${phaseIsDraft && currentPick?.ownerTeamId===state.userTeamId ? `<td><button class="small-btn draft-pick-btn" data-id="${p.id}">Draft</button></td>` : ``}</tr>`).join("") || `<tr><td colspan="7">Board not available yet.</td></tr>`}
+      </tbody></table>
+    </div>
+    <div>
+      <div class="panel">
+        <div class="panel-head"><h3>Your Draft Picks</h3><span>Next 2 drafts</span></div>
+        <table><thead><tr><th>Year</th><th>Round</th><th>Original Club</th></tr></thead><tbody>
+          ${ownedPicks.map(p => `<tr><td>${p.year}</td><td>${p.round}</td><td>${escapeHtml(byTeamId(p.originalTeamId)?.name || "—")}</td></tr>`).join("") || `<tr><td colspan="3">No picks tracked yet.</td></tr>`}
+        </tbody></table>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Recent Draft Activity</h3><span>Live log</span></div>
+        <table><thead><tr><th>Type</th><th>Detail</th></tr></thead><tbody>
+          ${(draft.history || []).slice(0, 18).map(item => `<tr><td><span class="badge ${item.kind==="trade"?"yellow":""}">${item.kind === "trade" ? "Trade" : "Pick"}</span></td><td>${escapeHtml(item.text)}</td></tr>`).join("") || `<tr><td colspan="2">No draft activity yet.</td></tr>`}
+        </tbody></table>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -966,6 +1172,8 @@ async function renderPage() {
   else if (currentPage==="schedule")     html = renderSchedule();
   else if (currentPage==="stats")        html = renderStats();
   else if (currentPage==="transactions") html = renderTransactions();
+  else if (currentPage==="trade")        html = renderTrade();
+  else if (currentPage==="budget")       html = renderBudget();
   else if (currentPage==="draft")        html = renderDraft();
   else if (currentPage==="playoffs")     html = renderPlayoffs();
   else if (currentPage==="tactics")      html = renderTactics();
@@ -999,6 +1207,73 @@ function bindPageEvents() {
     await persist(); await renderPage();
   });
 
+
+  $("#tradePartnerSelect")?.addEventListener("change", async e => {
+    tradePartnerTeamId = e.target.value;
+    await renderPage();
+  });
+
+  $("#proposeTradeBtn")?.addEventListener("click", async () => {
+    const proposal = {
+      partnerTeamId: document.getElementById("tradePartnerSelect")?.value,
+      outgoingPlayerIds: $$('[data-trade-kind="out-player"]:checked').map(el => el.value),
+      incomingPlayerIds: $$('[data-trade-kind="in-player"]:checked').map(el => el.value),
+      outgoingPickIds: $$('[data-trade-kind="out-pick"]:checked').map(el => el.value),
+      incomingPickIds: $$('[data-trade-kind="in-pick"]:checked').map(el => el.value),
+      outgoingGAM: Number(document.getElementById("tradeOutgoingGAM")?.value || 0),
+      incomingGAM: Number(document.getElementById("tradeIncomingGAM")?.value || 0),
+      outgoingTAM: Number(document.getElementById("tradeOutgoingTAM")?.value || 0),
+      incomingTAM: Number(document.getElementById("tradeIncomingTAM")?.value || 0),
+      outgoingIntlSlots: Number(document.getElementById("tradeOutgoingIntl")?.value || 0),
+      incomingIntlSlots: Number(document.getElementById("tradeIncomingIntl")?.value || 0),
+    };
+    const result = proposeTrade(state, proposal);
+    if (!result.ok) return toast(result.reason || "Trade rejected.", "warn");
+    await persist();
+    toast("Trade accepted.", "success");
+    await renderPage();
+  });
+
+  $("#saveBudgetBtn")?.addEventListener("click", async () => {
+    const budgetResult = updateTeamBudget(state, state.userTeamId, {
+      salaryBudget: document.getElementById("budgetSalaryInput")?.value,
+      gam: document.getElementById("budgetGAMInput")?.value,
+      tam: document.getElementById("budgetTAMInput")?.value,
+      internationalSlots: document.getElementById("budgetIntlInput")?.value,
+      dpSlots: document.getElementById("budgetDpInput")?.value,
+      u22Slots: document.getElementById("budgetU22Input")?.value,
+    });
+    if (!budgetResult.ok) return toast(budgetResult.reason || "Could not save budget.", "warn");
+
+    let error = "";
+    $$(".budget-designation-select").forEach(sel => {
+      const result = setPlayerDesignation(state, sel.dataset.id, sel.value);
+      if (!result.ok && !error) error = result.reason || "Could not update designation.";
+    });
+    if (error) return toast(error, "warn");
+
+    await persist();
+    toast("Budget settings saved.", "success");
+    await renderPage();
+  });
+
+  $("#draftStartBtn")?.addEventListener("click", async () => {
+    startDraft(state);
+    const result = advanceDraftUntilUserOrEnd(state, false);
+    await persist();
+    toast(result.waitingOnUser ? "You are on the clock." : "Draft advanced.", result.waitingOnUser ? "warn" : "success");
+    await renderPage();
+  });
+
+  $$(".draft-pick-btn").forEach(btn => btn.addEventListener("click", async () => {
+    const result = makeUserDraftPick(state, btn.dataset.id);
+    if (!result.ok) return toast(result.reason || "Could not make pick.", "warn");
+    advanceDraftUntilUserOrEnd(state, false);
+    await persist();
+    toast("Pick submitted.", "success");
+    await renderPage();
+  }));
+
   $("#acceptOfferBtn")?.addEventListener("click", async () => {
     acceptPendingOffer(state); await persist(); toast("Accepted.","success"); renderPage();
   });
@@ -1009,7 +1284,7 @@ function bindPageEvents() {
   $$(".load-slot-btn").forEach(btn => btn.addEventListener("click", async () => {
     const loaded = await loadSlot(btn.dataset.slot);
     if (!loaded) return;
-    state = loaded; initGreenCards(state);
+    state = normalizeState(loaded); initGreenCards(state);
     setAppVisible(true); closeOverlay($("#loadOverlay"));
     await renderPage(); toast(`Loaded ${btn.dataset.slot}.`,"success");
   }));
@@ -1077,7 +1352,7 @@ async function createLeagueFromForm() {
     tamAnnual:      Number($("#tamInput").value)||2125000,
     academyPerTeam: Number($("#academyInput").value)||8,
   };
-  state = createNewState(opts);
+  state = normalizeState(createNewState(opts));
   initGreenCards(state);
   await persist();
   closeOverlay($("#setupOverlay"));
@@ -1097,7 +1372,7 @@ async function openLoadModal() {
   $$(".quick-load-btn").forEach(btn => btn.addEventListener("click", async () => {
     const loaded = await loadSlot(btn.dataset.slot);
     if (!loaded) return toast("Not found.","error");
-    state = loaded; initGreenCards(state);
+    state = normalizeState(loaded); initGreenCards(state);
     closeOverlay($("#loadOverlay")); setAppVisible(true);
     await renderPage(); toast(`Loaded ${btn.dataset.slot}.`,"success");
   }));
@@ -1121,7 +1396,7 @@ function bindTopLevel() {
   $("#exportBtn").addEventListener("click", () => { if (state) downloadJSON(`mls-gm-${state.saveSlot}.json`, state); });
   $("#importInput").addEventListener("change", async e => {
     const f = e.target.files?.[0]; if (!f) return;
-    state = await readJSONFile(f); initGreenCards(state);
+    state = normalizeState(await readJSONFile(f)); initGreenCards(state);
     await persist(); setAppVisible(true); await renderPage(); toast("Imported.","success");
   });
   $("#backHomeBtn").addEventListener("click", () => setAppVisible(false));
