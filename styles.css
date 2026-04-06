@@ -805,6 +805,13 @@ input, select {
   min-height: 240px;
   border-radius: 16px;
   background: linear-gradient(135deg, rgba(77,163,255,.14), rgba(255,255,255,.04));
+  overflow: hidden;
+}
+#var-screen canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 14px;
 }
 
 /* ── Trade / budget helpers ──────────────────────────────────────────────── */
@@ -842,7 +849,8 @@ input, select {
   #msim-body-grid,
   #goal-replay-body,
   #var-broadcast,
-  .trade-check-grid {
+  .trade-check-grid,
+  .playoff-bracket-grid {
     grid-template-columns: 1fr;
   }
   .match-teams {
@@ -880,6 +888,79 @@ html[data-theme="light"] {
   text-align: left;
 }
 .text-link:hover { text-decoration: underline; }
+.open-in-new-tab-armed {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  border-radius: 8px;
+}
+.player-link.open-in-new-tab-armed,
+.team-link.open-in-new-tab-armed {
+  background: rgba(77,163,255,.12);
+  padding: 2px 4px;
+}
+
+.playoff-bracket-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(180px, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.playoff-round-col {
+  display: grid;
+  gap: 10px;
+}
+.playoff-round-title {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  font-family: var(--mono);
+}
+.bracket-match {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255,255,255,.03);
+  padding: 10px;
+  min-height: 96px;
+  display: grid;
+  gap: 6px;
+}
+.bracket-team {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,.04);
+}
+.bracket-team strong {
+  min-width: 20px;
+  text-align: right;
+}
+.bracket-meta {
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.playoff-cup-center {
+  display: flex;
+  justify-content: center;
+}
+.playoff-cup-center .bracket-match {
+  width: min(480px, 100%);
+}
+.playoff-champion-banner {
+  margin-top: 14px;
+  border: 1px solid rgba(241,199,91,.35);
+  background: rgba(241,199,91,.08);
+  color: var(--yellow);
+  font-weight: 800;
+  border-radius: 14px;
+  padding: 12px 14px;
+  text-align: center;
+}
 
 .club-hero-simple {
   display: flex;

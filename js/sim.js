@@ -952,7 +952,7 @@ function awardSeason(state) {
 
 function generateDraftPool(state) {
   const pool = [];
-  for (let i = 0; i < 120; i++) {
+  for (let i = 0; i < 180; i++) {
     const fakeClub = { id: null, marketRating: randInt(42, 59), country: "USA" };
     const pos = pick(POSITIONS);
     const p   = makePlayer(fakeClub, i + 20, pos);
@@ -964,13 +964,13 @@ function generateDraftPool(state) {
     p.designation     = null;
     p.rosterRole      = "Supplemental";
     p.contract.status = "Draft Eligible";
-    // Bring SuperDraft talent closer to real MLS depth: mostly low-to-mid 50s, rare 60+ upside.
-    const targetOverall = clamp(randInt(47, 63) + (i < 6 ? randInt(1, 4) : 0), 45, 67);
+    // Bring SuperDraft talent closer to real MLS depth: mostly low 40s to upper 50s, with only a few 60 OVR types.
+    const targetOverall = clamp(randInt(42, 58) + (i < 10 ? randInt(0, 4) : 0), 40, 62);
     for (const key of Object.keys(p.attributes)) {
       p.attributes[key] = clamp(Math.round(p.attributes[key] + (targetOverall - p.overall) * 0.75 + randInt(-3, 3)), 22, 82);
     }
     p.overall         = overall(p);
-    p.potential       = clamp(p.overall + randInt(3, 11), p.overall + 1, 76);
+    p.potential       = clamp(p.overall + randInt(2, 9), p.overall + 1, 72);
     p.contract.salary = 88025;
     p.detailed        = makeDetailedRatings(p.position, p.attributes);
     p.traits          = deriveTraits(p);
@@ -998,7 +998,7 @@ function runDraft(state) {
 
   for (let round = 1; round <= 3; round++) {
     for (const teamId of order) {
-      const choiceIndex = Math.min(randInt(0, 4), state.draft.pool.length - 1);
+      const choiceIndex = Math.min(randInt(0, 7), state.draft.pool.length - 1);
       const player = state.draft.pool.splice(choiceIndex, 1)[0];
       if (!player) continue;
       player.clubId           = teamId;
@@ -1070,7 +1070,7 @@ function createDraftSelectionRecord(state, pickObj, player, teamId) {
   player.clubId             = teamId;
   player.contract.status    = "Active";
   player.contract.yearsLeft = randInt(2, 4);
-  player.contract.salary    = pickObj.round === 1 ? 125000 : 90000;
+  player.contract.salary    = pickObj.round === 1 ? 113400 : 88025;
   player.contract.expiresYear = state.season.year + player.contract.yearsLeft;
   player.rosterRole         = pickObj.round === 1 ? "Supplemental" : "Reserve";
   player.designation        = pickObj.round === 1 && player.age <= 22 && Math.random() < 0.35 ? "U22" : null;
