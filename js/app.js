@@ -30,6 +30,7 @@ import {
   autoAssignAllDesignations,
   ensureOpenCupState,
   getRealMlsDatasetStatus,
+  findRealMlsDatasetPlayer,
 } from "./sim.js";
 import { CONFERENCES, TEAM_LOGOS, TEAM_COLORS } from "./data.js";
 
@@ -641,8 +642,11 @@ function renderPlayerStatCard(title, rating, statMap) {
 function playerPhoto(player, cls = "player-photo-inline") {
   const initials = escapeHtml((player?.name || "P").split(" ").map(x => x[0]).slice(0,2).join(""));
   const src = player?.photoUrl;
-  if (src) return `<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls}" loading="lazy" referrerpolicy="no-referrer" />`;
-  return `<span class="${cls} player-photo-fallback">${initials}</span>`;
+  const fallback = `<span class="${cls} player-photo-fallback">${initials}</span>`;
+  if (src) {
+    return `<span class="player-photo-shell ${cls}">${fallback}<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" /></span>`;
+  }
+  return fallback;
 }
 
 function playerLink(id, label) {
@@ -926,6 +930,18 @@ function normalizeState(st) {
   for (const player of [...(st.players || []), ...(st.freeAgents || [])]) {
     normalizeLegacyPosition(player);
     hydratePlayer(player, seasonYear);
+    if (player.realPlayer && player.source === "real-mls-csv") {
+      const sourceRow = findRealMlsDatasetPlayer(player, st.teams || []);
+      const importedOverall = Number(player.importedOverall || sourceRow?.overallRating || sourceRow?.overall || player.overall || 0);
+      const importedPotential = Number(player.importedPotential || sourceRow?.potential || importedOverall || player.potential || 0);
+      if (sourceRow?.photoUrl && !player.photoUrl) player.photoUrl = sourceRow.photoUrl;
+      if (sourceRow?.sourcePlayerId && !player.sourcePlayerId) player.sourcePlayerId = sourceRow.sourcePlayerId;
+      if (importedOverall > 0) player.overall = importedOverall;
+      player.importedOverall = importedOverall > 0 ? importedOverall : (player.importedOverall || null);
+      player.importedPotential = importedPotential > 0 ? importedPotential : (player.importedPotential || player.importedOverall || null);
+      player.potential = Math.max(player.overall || 0, Number(player.importedPotential || player.potential || player.overall || 0));
+      continue;
+    }
     const prof = getPlayerStatProfile(player);
     player.overall = prof.positionRating;
     player.potential = Math.max(player.overall, Number(player.potential || player.overall));

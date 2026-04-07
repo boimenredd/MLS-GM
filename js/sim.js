@@ -40,6 +40,25 @@ export function getRealMlsDatasetStatus() {
   };
 }
 
+
+export function findRealMlsDatasetPlayer(player, teams = []) {
+  if (!player) return null;
+  const playerName = String(player.name || '').trim().toLowerCase();
+  const teamName = player.clubId ? String((teams || []).find(t => t.id === player.clubId)?.name || '').trim().toLowerCase() : '';
+  const position = normalizeGeneratedPosition(player.position || 'CM', player.preferredFoot || 'Right');
+  const sourceId = String(player.sourcePlayerId || '').trim();
+  return REAL_MLS_PLAYERS.find(row => {
+    if (!row) return false;
+    if (sourceId && String(row.sourcePlayerId || '').trim() === sourceId) return true;
+    const rowName = String(row.name || '').trim().toLowerCase();
+    const rowTeam = String(row.team || '').trim().toLowerCase();
+    const rowPos = normalizeGeneratedPosition(row.position || 'CM', row.preferredFoot || 'Right');
+    if (rowName !== playerName) return false;
+    if (teamName && rowTeam && rowTeam !== teamName) return false;
+    return rowPos === position;
+  }) || null;
+}
+
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 function clubCountry(name) {
@@ -667,6 +686,9 @@ function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
     weight: row.weight || null,
     photoUrl: row.photoUrl || null,
     sourceProfileUrl: row.profileUrl || null,
+    sourcePlayerId: row.sourcePlayerId || null,
+    importedOverall: Number(profile.overallRating || row.overallRating || row.overall || 0) || null,
+    importedPotential: Number(row.potential || profile.overallRating || row.overallRating || row.overall || 0) || null,
     clubId: team.id,
     position,
     rosterRole,

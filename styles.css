@@ -2971,3 +2971,19 @@ html[data-theme="light"] .player-photo-inline,
 html[data-theme="light"] .player-photo-hero {
   border-color: rgba(20,30,50,.12);
 }
+
+
+.player-photo-shell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.player-photo-shell .player-photo-fallback {
+  position: absolute;
+  inset: 0;
+}
+.player-photo-shell .player-photo-img {
+  position: relative;
+  z-index: 1;
+}
