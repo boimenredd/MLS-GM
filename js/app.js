@@ -224,7 +224,7 @@ function teamLogoMark(team, cls = "team-logo") {
 
 function teamLink(teamId, label) {
   const text = label || byTeamId(teamId)?.name || "Unknown";
-  return `<button type="button" class="text-link team-link" data-id="${teamId}">${escapeHtml(text)}</button>`;
+  return `<a href="${escapeAttr(buildRouteHref('team', teamId))}" class="text-link team-link" data-id="${teamId}">${escapeHtml(text)}</a>`;
 }
 
 function teamColors(teamOrId) {
@@ -330,11 +330,7 @@ function shouldOpenInNewTab(type, id) {
 async function openInNewTab(type, id) {
   if (!state) return;
   await persist();
-  const params = new URLSearchParams();
-  params.set("slot", state.saveSlot);
-  params.set("route", type);
-  params.set("id", id);
-  const targetUrl = `${location.pathname}${location.search}#${params.toString()}`;
+  const targetUrl = buildRouteHref(type, id);
   window.open(targetUrl, "_blank", "noopener,noreferrer");
   clearPendingNewTabTarget();
 }
@@ -378,11 +374,23 @@ function getTeamRecord(teamId) {
   return rows.find(r => r.teamId === teamId) || null;
 }
 
+function buildRouteHref(type, id) {
+  const params = new URLSearchParams();
+  params.set("slot", state?.saveSlot || parseHashLaunch()?.slot || "slot1");
+  params.set("route", type);
+  if (id != null) params.set("id", id);
+  return `${location.pathname}${location.search}#${params.toString()}`;
+}
+
+function playerLink(id, label) {
+  const text = label || byPlayerId(id)?.name || "Unknown Player";
+  return `<a href="${escapeAttr(buildRouteHref('player', id))}" class="text-link player-link" data-id="${id}">${escapeHtml(text)}</a>`;
+}
 
 function coachLink(coachId, label) {
-  const coach = state?.coaches?.find(c => c.id === coachId);
+  const coach = state?.coaches?.find(c => c.id === coachId) || state?.coachCarousel?.freeAgents?.find(c => c.id === coachId);
   const text = label || coach?.name || "Unknown Coach";
-  return `<button type="button" class="text-link coach-link" data-id="${coachId}">${escapeHtml(text)}</button>`;
+  return `<a href="${escapeAttr(buildRouteHref('coach', coachId))}" class="text-link coach-link" data-id="${coachId}">${escapeHtml(text)}</a>`;
 }
 
 
@@ -397,9 +405,9 @@ function coachPhoto(coach, cls = "coach-photo") {
   return `<span class="${cls} coach-photo-fallback">${escapeHtml((coach?.name || 'C').split(' ').map(x => x[0]).slice(0,2).join(''))}</span>`;
 }
 
-function coachMetaLine(coach) {
+function coachMetaLine(coach, showStars = true) {
   if (!coach) return 'No coach';
-  return `${coachLink(coach.id, coach.name)} <span class="coach-meta-stars">${renderCoachStars(coach.managerStars || 3)}</span>`;
+  return `${coachLink(coach.id, coach.name)}${showStars ? ` <span class="coach-meta-stars">${renderCoachStars(coach.managerStars || 3)}</span>` : ``}`;
 }
 
 function getTeamCoach(teamId) {
@@ -496,66 +504,69 @@ function renderCoachProfile(coachId) {
   if (!coach) return;
   const team = coach.teamId ? byTeamId(coach.teamId) : null;
   const rec = getCoachCurrentRecord(coach);
-  const winPct = rec.matches ? Math.round((rec.wins / rec.matches) * 100) : 0;
-  const palette = team ? teamColors(team.id) : { primary: '#cf102c', secondary: '#17181d', text: '#ffffff' };
+  const palette = team ? teamColors(team.id) : { primary: "#b59b62", secondary: "#131722", text: "#ffffff" };
+  const jobs = (coach.career || []).map(job => `<div class="coach-career-row"><div><strong>${escapeHtml(job.club)}</strong><span>${escapeHtml(job.start || "—")} — ${escapeHtml(job.end || "now")}</span></div><em>${job.end === 'now' ? 'Active' : 'Past'}</em></div>`).join("") || `<div class="note">No career history yet.</div>`;
   const html = `<div id="coachProfileOverlay" class="pp-overlay">
-    <div class="pp-modal pp-coach-modal">
+    <div class="pp-modal coach-profile-shell">
       <button class="pp-close" id="coachProfileClose">×</button>
-      <div class="coach-hero-card" style="background:linear-gradient(180deg, ${palette.primary} 0 88px, #17181d 88px 100%); color:${palette.text === '#111111' ? '#f8fafc' : '#ffffff'};">
-        <div class="coach-hero-main coach-hero-main-fixed">
+      <div class="coach-hero-card coach-hero-card-clean" style="background:linear-gradient(180deg, ${palette.primary} 0 92px, #141820 92px 100%); color:${palette.text === '#111111' ? '#ffffff' : palette.text};">
+        <div class="coach-hero-main coach-hero-main-clean">
           <div class="coach-hero-id">
-            ${coachPhoto(coach, 'coach-photo-lg')}
+            ${coachPhoto(coach, 'coach-photo-xl')}
             <div class="coach-title-stack">
               <div class="coach-name">${escapeHtml(coach.name)}</div>
-              <div class="coach-subline">${team ? teamLink(team.id, team.name) : "Free Agent"} · ${escapeHtml(coach.nationality)}</div>
+              <div class="coach-subline">${team ? teamLink(team.id, team.name) : 'Free Agent'} · ${escapeHtml(coach.nationality)}</div>
               <div class="coach-rating-row">${renderCoachStars(coach.managerStars || 3)}<span>Manager rating</span></div>
             </div>
           </div>
-          <div class="coach-hero-stats coach-hero-stats-fixed">
+          <div class="coach-hero-metrics">
             <div><span>Age</span><strong>${coach.age}</strong></div>
-            <div><span>Matches</span><strong>${formatNumber(rec.matches)}</strong></div>
-            <div><span>Points</span><strong>${formatNumber(rec.points)}</strong></div>
-            <div><span>Win %</span><strong>${winPct}%</strong></div>
+            <div><span>Matches</span><strong>${rec.matches}</strong></div>
+            <div><span>Points</span><strong>${rec.points}</strong></div>
+            <div><span>Win %</span><strong>${rec.winPct}%</strong></div>
           </div>
         </div>
       </div>
-      <div class="coach-profile-grid coach-profile-grid-fixed">
-        <div class="panel coach-overview-panel">
-          <div class="panel-head"><h3>Overview</h3><span>${team ? "Active MLS coach" : "Free agent coach"}</span></div>
-          <div class="coach-info-grid coach-info-grid-fixed">
+      <div class="coach-profile-grid coach-profile-grid-clean">
+        <section class="panel coach-overview-panel-clean">
+          <div class="panel-head"><h3>Overview</h3><span>${team ? 'Active MLS coach' : 'Free agent coach'}</span></div>
+          <div class="coach-overview-topgrid">
             <div class="pp-info-box"><div class="pp-info-lbl">Country</div><div class="pp-info-val">${escapeHtml(coach.nationality)}</div></div>
-            <div class="pp-info-box"><div class="pp-info-lbl">Style</div><div class="pp-info-val">${escapeHtml(coach.style || "Balanced")}</div></div>
-            <div class="pp-info-box"><div class="pp-info-lbl">Appointed</div><div class="pp-info-val">${escapeHtml(coach.appointed || "Available")}</div></div>
-            <div class="pp-info-box"><div class="pp-info-lbl">Played in MLS</div><div class="pp-info-val">${escapeHtml(coach.playedInMLS || "N/A")}</div></div>
+            <div class="pp-info-box"><div class="pp-info-lbl">Style</div><div class="pp-info-val">${escapeHtml(coach.style || 'Balanced')}</div></div>
+            <div class="pp-info-box"><div class="pp-info-lbl">Appointed</div><div class="pp-info-val">${escapeHtml(coach.appointed || 'Available')}</div></div>
+            <div class="pp-info-box"><div class="pp-info-lbl">Played in MLS</div><div class="pp-info-val">${escapeHtml(coach.playedInMLS || 'N/A')}</div></div>
           </div>
-          <div class="coach-split-stats">
-            <div class="coach-bars">
-              <div class="coach-bar-row"><span>Won</span><div class="coach-bar"><i style="width:${Math.max(8, Math.min(100, winPct))}%"></i></div><strong>${rec.wins}</strong></div>
+          <div class="coach-overview-bottom">
+            <div class="coach-bars coach-bars-clean">
+              <div class="coach-bar-row"><span>Won</span><div class="coach-bar"><i style="width:${Math.max(8, Math.min(100, rec.matches ? (rec.wins/rec.matches)*100 : 0))}%"></i></div><strong>${rec.wins}</strong></div>
               <div class="coach-bar-row"><span>Drawn</span><div class="coach-bar neutral"><i style="width:${Math.max(8, Math.min(100, rec.matches ? (rec.draws/rec.matches)*100 : 0))}%"></i></div><strong>${rec.draws}</strong></div>
               <div class="coach-bar-row"><span>Lost</span><div class="coach-bar loss"><i style="width:${Math.max(8, Math.min(100, rec.matches ? (rec.losses/rec.matches)*100 : 0))}%"></i></div><strong>${rec.losses}</strong></div>
             </div>
-            <div class="panel-lite coach-stat-table-wrap">
+            <div class="panel-lite coach-stat-table-wrap coach-stat-table-wrap-clean">
               <table class="tight-table"><thead><tr><th>Stat</th><th class="num">Value</th></tr></thead><tbody>
-                ${COACH_STAT_DEFS.map(([key,label]) => `<tr><td>${label}</td><td class="num">${key === "winPct" ? `${winPct}%` : formatNumber(rec[key] || 0)}</td></tr>`).join("")}
+                ${COACH_STAT_DEFS.map(([key,label]) => `<tr><td>${label}</td><td class="num">${key === 'winPct' ? `${rec[key]}%` : formatNumber(rec[key] || 0)}</td></tr>`).join('')}
               </tbody></table>
             </div>
           </div>
-        </div>
-        <div class="panel coach-career-panel">
+        </section>
+        <aside class="panel coach-career-panel-clean">
           <div class="panel-head"><h3>Career</h3><span>Sim tracking</span></div>
-          <div class="coach-career-list coach-career-list-fixed">
-            ${(coach.career || []).map(job => `<div class="coach-career-item"><div><strong>${escapeHtml(job.club)}</strong></div><span>${escapeHtml(job.start || "—")} — ${escapeHtml(job.end || "now")}</span></div>`).join("") || `<div class="note">No career history yet.</div>`}
-          </div>
-        </div>
+          <div class="coach-career-list coach-career-list-clean">${jobs}</div>
+        </aside>
       </div>
     </div>
   </div>`;
+
   document.getElementById("coachProfileOverlay")?.remove();
   document.body.insertAdjacentHTML("beforeend", html);
   document.getElementById("coachProfileClose")?.addEventListener("click", () => document.getElementById("coachProfileOverlay")?.remove());
   document.getElementById("coachProfileOverlay")?.addEventListener("click", e => { if (e.target.id === "coachProfileOverlay") document.getElementById("coachProfileOverlay")?.remove(); });
   document.querySelectorAll("#coachProfileOverlay .team-link").forEach(el => {
-    el.onclick = async e => { e.preventDefault(); document.getElementById("coachProfileOverlay")?.remove(); setSelectedTeam(el.dataset.id); };
+    el.addEventListener("click", async e => {
+      e.preventDefault();
+      document.getElementById("coachProfileOverlay")?.remove();
+      setSelectedTeam(el.dataset.id);
+    });
   });
 }
 
@@ -1866,177 +1877,86 @@ function renderDashboard() {
   const cap = getCapSummary(state, team.id);
   const confRows = state.standings[team.conference] || [];
   const rank = confRows.findIndex(r => r.teamId === team.id) + 1;
-  const record = getTeamRecord(team.id) || { wins: 0, draws: 0, losses: 0, points: 0, gf: 0, ga: 0 };
+  const record = getTeamRecord(team.id) || { wins: 0, draws: 0, losses: 0, points: 0, gf: 0, ga: 0, gd: 0, played: 0 };
   const coach = getTeamCoach(team.id);
   const roster = getTeamPlayers(state, team.id);
   const goalLeader = [...roster].sort((a, b) => (b.stats.goals - a.stats.goals) || (b.overall - a.overall))[0];
   const assistLeader = [...roster].sort((a, b) => (b.stats.assists - a.stats.assists) || (b.overall - a.overall))[0];
   const ratingLeader = [...roster].sort((a, b) => b.overall - a.overall)[0];
-  const headlines = (state.transactions || []).slice(0, 6);
-  const schedule = state.schedule.filter(m => !m.played && (m.homeTeamId === team.id || m.awayTeamId === team.id)).slice(0, 6);
+  const headlines = (state.transactions || []).slice(0, 6).reverse();
+  const schedule = state.schedule.filter(m => !m.played && (m.homeTeamId === team.id || m.awayTeamId === team.id)).slice(0, 5);
   const confTable = confRows.slice(0, 16).map((r, i) => `<tr class="${r.teamId === team.id ? 'highlight-row' : ''}"><td>${i + 1}</td><td>${teamLink(r.teamId, byTeamId(r.teamId)?.name || '—')}</td><td class="num">${r.points}</td><td class="num">${r.gd > 0 ? '+' : ''}${r.gd}</td></tr>`).join("");
-  const newsCards = headlines.map(tx => `<div class="headline-card"><div class="headline-top"><span>${escapeHtml(tx.type)}</span><span>${state.season.year}</span></div><div>${escapeHtml(tx.text)}</div></div>`).join("") || `<div class="note">No headlines yet.</div>`;
+  const nextGames = schedule.map(m => {
+    const opp = byTeamId(m.homeTeamId === team.id ? m.awayTeamId : m.homeTeamId);
+    const venue = m.homeTeamId === team.id ? 'Home' : 'Away';
+    return `<tr><td class="num">${m.week}</td><td>${teamLink(opp.id, opp.name)}</td><td>${venue}</td></tr>`;
+  }).join("") || `<tr><td colspan="3">No upcoming matches.</td></tr>`;
+  const newsCards = headlines.map(tx => `<div class="news-card-fbgm"><div class="news-card-type">${escapeHtml(tx.type)}</div><div class="news-card-copy">${escapeHtml(tx.text)}</div></div>`).join("") || `<div class="note">No headlines yet.</div>`;
   return `${pageHead(`${team.name} Dashboard`, `${state.season.year} ${state.season.phase.toLowerCase()}`)}
   <div class="score-ticker">${state.schedule.filter(m => m.played).slice(-8).reverse().map(m => {
     const h = byTeamId(m.homeTeamId), a = byTeamId(m.awayTeamId);
     return `<div class="ticker-item">${teamLogoMark(h, 'mini-team-logo')}<span>${escapeHtml(h.shortName || h.name)}</span><strong>${m.result.homeGoals}</strong><span>${escapeHtml(a.shortName || a.name)}</span><strong>${m.result.awayGoals}</strong></div>`;
   }).join("") || `<div class="ticker-item"><span>No results yet</span></div>`}</div>
-  <div class="dashboard-fbgm dashboard-fbgm-tight">
-    <div class="dashboard-left panel">
-      <div class="panel-head"><h3>${team.conference}</h3><span>Conference</span></div>
-      <table class="tight-table"><thead><tr><th>#</th><th>Club</th><th class="num">Pts</th><th class="num">GD</th></tr></thead><tbody>${confTable}</tbody></table>
+  <div class="dashboard-shell-v2">
+    <section class="panel dashboard-standings-col">
+      <div class="panel-head"><h3>${team.conference}</h3><span>GB</span></div>
+      <table class="tight-table dashboard-standings-table"><tbody>${confTable}</tbody></table>
       <div class="panel-link-row"><button class="text-link nav-jump-btn" data-target-page="standings">» League Standings</button></div>
-    </div>
+    </section>
 
-    <div class="dashboard-center panel dashboard-center-clean">
-      <div class="dashboard-team-head">
-        <div class="dashboard-title-row"><div class="dashboard-title">${escapeHtml(team.name)} Dashboard</div></div>
-        <div class="dashboard-record">${record.wins}-${record.draws}-${record.losses}</div>
-        <div class="dashboard-rank">${ordinalSuffix(rank)} in ${team.conference.toLowerCase()}</div>
+    <section class="panel dashboard-main-v2">
+      <div class="dashboard-main-top">
+        <div class="dashboard-record-block">
+          <div class="dashboard-record-big">${record.wins}-${record.draws}-${record.losses}</div>
+          <div class="dashboard-record-sub">${ordinalSuffix(rank)} in conference</div>
+        </div>
+        <div class="dashboard-summary-grid">
+          <div class="dashboard-summary-item"><span>Coach</span><strong>${coach ? coachLink(coach.id, coach.name) : '—'}</strong></div>
+          <div class="dashboard-summary-item"><span>Budget room</span><strong>${formatMoney(cap.budgetRoom)}</strong></div>
+          <div class="dashboard-summary-item"><span>Intl slots</span><strong>${cap.intlUsed}/${cap.intlTotal}</strong></div>
+          <div class="dashboard-summary-item"><span>Upcoming</span><strong>${schedule.length} matches</strong></div>
+        </div>
       </div>
-      <div class="dashboard-columns">
+      <div class="dashboard-mid-grid">
         <div>
           <h4>Team Leaders</h4>
-          <div class="dash-list-row"><span>Goals</span><strong class="player-link" data-id="${goalLeader?.id || ''}">${escapeHtml(goalLeader?.name || '—')}</strong><span>${goalLeader?.stats.goals || 0}</span></div>
-          <div class="dash-list-row"><span>Assists</span><strong class="player-link" data-id="${assistLeader?.id || ''}">${escapeHtml(assistLeader?.name || '—')}</strong><span>${assistLeader?.stats.assists || 0}</span></div>
-          <div class="dash-list-row"><span>Best player</span><strong class="player-link" data-id="${ratingLeader?.id || ''}">${escapeHtml(ratingLeader?.name || '—')}</strong><span>${ratingLeader?.overall || 0}</span></div>
-          <div class="panel-link-row"><button class="text-link nav-jump-btn" data-target-page="roster">» Full roster</button></div>
+          <div class="dash-list-row"><span>Goals</span><strong>${goalLeader ? playerLink(goalLeader.id, goalLeader.name) : '—'}</strong><span>${goalLeader?.stats.goals || 0}</span></div>
+          <div class="dash-list-row"><span>Assists</span><strong>${assistLeader ? playerLink(assistLeader.id, assistLeader.name) : '—'}</strong><span>${assistLeader?.stats.assists || 0}</span></div>
+          <div class="dash-list-row"><span>Best player</span><strong>${ratingLeader ? playerLink(ratingLeader.id, ratingLeader.name) : '—'}</strong><span>${ratingLeader?.overall || 0}</span></div>
+          <div class="panel-link-row"><button class="text-link nav-jump-btn" data-target-page="roster">» Full Roster</button></div>
         </div>
         <div>
           <h4>Team Stats</h4>
-          <div class="dash-list-row"><span>Points</span><strong>${record.points}</strong><span>${record.gf}-${record.ga}</span></div>
-          <div class="dash-list-row"><span>Budget room</span><strong>${formatMoney(cap.budgetRoom)}</strong><span>${formatMoney(cap.budgetUsed)} used</span></div>
-          <div class="dash-list-row"><span>Intl slots</span><strong>${cap.intlUsed}/${cap.intlTotal}</strong><span>${cap.dpCount} DP · ${cap.u22Count} U22</span></div>
-          <div class="dash-list-row"><span>Coach</span><strong>${coach ? coachLink(coach.id, coach.name) : '—'}</strong><span>${escapeHtml(coach?.nationality || '—')}</span></div>
+          <div class="dash-list-row"><span>Points</span><strong>${record.points}</strong><span>${record.played} GP</span></div>
+          <div class="dash-list-row"><span>Goals</span><strong>${record.gf}</strong><span>${record.ga} allowed</span></div>
+          <div class="dash-list-row"><span>Payroll</span><strong>${formatMoney(cap.budgetUsed)}</strong><span>DP ${cap.dpCount} · U22 ${cap.u22Count}</span></div>
+          <div class="panel-link-row"><button class="text-link nav-jump-btn" data-target-page="budget">» Team Finances</button></div>
         </div>
         <div>
           <h4>Finances</h4>
           <div class="dash-list-row"><span>Cash</span><strong>${formatMoney(team.finances.cash)}</strong><span>club balance</span></div>
           <div class="dash-list-row"><span>GAM</span><strong>${formatMoney(team.gam)}</strong><span>TAM ${formatMoney(team.tam)}</span></div>
           <div class="dash-list-row"><span>Inbox</span><strong>${state.pendingOffer ? '1 offer' : 'No messages'}</strong><span>${state.pendingOffer ? escapeHtml(state.pendingOffer.bidClub) : 'Clear'}</span></div>
-          <div class="panel-link-row"><button class="text-link nav-jump-btn" data-target-page="budget">» Team finances</button></div>
         </div>
       </div>
-      ${state.pendingOffer ? `<div class="offer-box"><strong>${escapeHtml(state.pendingOffer.bidClub)}</strong> offered ${formatMoney(state.pendingOffer.amount)} for ${escapeHtml(byPlayerId(state.pendingOffer.playerId)?.name || 'your player')}.</div>` : ''}
-    </div>
-
-    <div class="dashboard-right">
-      <div class="panel">
-        <div class="panel-head"><h3>League Headlines</h3><span>Latest</span></div>
-        <div class="headline-grid">${newsCards}</div>
+      <div class="dashboard-bottom-grid">
+        <div class="panel-lite">
+          <div class="panel-head"><h3>Upcoming Games</h3><span>Next ${schedule.length}</span></div>
+          <table class="tight-table"><thead><tr><th>Week</th><th>Opponent</th><th>Venue</th></tr></thead><tbody>${nextGames}</tbody></table>
+        </div>
+        <div class="panel-lite">
+          <div class="panel-head"><h3>Front Office Notes</h3><span>Live</span></div>
+          <div class="dash-list-row"><span>Next sim targets</span><strong>Match · Week · Draft · Free Agency</strong><span></span></div>
+          <div class="dash-list-row"><span>Schedule</span><strong>34 regular season matches per club</strong><span></span></div>
+          <div class="dash-list-row"><span>Incoming offer</span><strong>${state.pendingOffer ? 'Yes' : 'None'}</strong><span></span></div>
+        </div>
       </div>
-      <div class="panel">
-        <div class="panel-head"><h3>Weekly Schedule</h3><span>Upcoming</span></div>
-        <table class="tight-table"><thead><tr><th>Week</th><th>Opponent</th><th>Venue</th></tr></thead><tbody>
-          ${schedule.map(m => { const home = m.homeTeamId === team.id; const opp = byTeamId(home ? m.awayTeamId : m.homeTeamId); return `<tr><td>${m.week}</td><td>${teamLink(opp.id, opp.name)}</td><td>${home ? 'Home' : 'Away'}</td></tr>`; }).join('') || `<tr><td colspan="3">No upcoming matches.</td></tr>`}
-        </tbody></table>
-        <div class="panel-link-row flex" style="margin-top:8px;"><button id="playMyMatchBtn" class="primary-btn" type="button">Play Next Match</button><button class="ghost-btn nav-jump-btn" data-target-page="weekly">Weekly schedule</button></div>
-      </div>
-    </div>
-  </div>`;
-}
+    </section>
 
-function renderRoster() {
-  const team = getUserTeam(state);
-  const players = getTeamPlayers(state, team.id);
-  const cap = getCapSummary(state, team.id);
-  const intlUsed = players.filter(p => takesIntlSlot(p)).length;
-  const expiring = getExpiringPlayers(state, team.id);
-
-  const rows = players.map(p => ({
-    id: p.id, name: p.name, position: p.position,
-    positionOrder: getPositionOrder(p.position),
-    age: p.age, overall: p.overall, potential: p.potential,
-    salary: p.contract.salary, yearsLeft: p.contract.yearsLeft,
-    morale: p.morale, role: p.rosterRole,
-    tag: getPlayerTag(p), intl: takesIntlSlot(p),
-    injury: p.injuryMeta?.type || (p.injuredUntil ? "Inj" : ""),
-    traits: (p.traits || []).join(", "),
-  }));
-
-  const sorted = sortRows(rows, tableSortState.roster);
-  const groups = [
-    ["Goalkeepers", sorted.filter(p => p.position==="GK")],
-    ["Back Line", sorted.filter(p => ["LB","CB","RB"].includes(p.position))],
-    ["Wide Midfield", sorted.filter(p => ["LM","RM"].includes(p.position))],
-    ["Central Midfield", sorted.filter(p => ["CDM","CM","CAM"].includes(p.position))],
-    ["Attackers", sorted.filter(p => ["LW","RW","ST"].includes(p.position))],
-  ];
-
-  const grp = (label, group) => !group.length ? "" : `<tr><td colspan="12" class="roster-group-row">${label}</td></tr>
-    ${group.map(p => `<tr>
-      <td><strong class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</strong>${p.injury?` <span class="badge red">${escapeHtml(p.injury)}</span>`:""}</td>
-      <td><span class="badge">${escapeHtml(p.position)}</span></td>
-      <td class="num">${p.age}</td>
-      <td class="num">${p.overall}</td>
-      <td class="num">${p.potential}</td>
-      <td class="num">${formatMoney(p.salary)}</td>
-      <td class="num">${p.yearsLeft}yr</td>
-      <td>${escapeHtml(p.role)}</td>
-      <td>${escapeHtml((p.traits || "").slice(0, 26) || "—")}</td>
-      <td><span class="badge ${p.tag==="DP"?"blue":p.tag==="HG"||p.tag==="DOM"||p.tag==="GC"?"green":p.tag==="INTL"?"yellow":""}">${escapeHtml(p.tag)}</span></td>
-      <td class="num">${p.intl?"<span class='badge yellow'>INTL</span>":"<span class='badge green'>✓</span>"}</td>
-      <td class="num">${p.yearsLeft <= 1 ? `<button class="small-btn contract-row-btn" data-id="${p.id}">Extend</button>` : ""}</td>
-    </tr>`).join("")}`;
-
-  return `${pageHead("Roster", "Specific positions, simpler tables, click player names for full profile")}
-  <div class="cards">
-    <div class="card"><div class="card-label">Senior</div><div class="card-value">${cap.seniorCount}</div><div class="card-note">Max 20</div></div>
-    <div class="card"><div class="card-label">Supplemental</div><div class="card-value">${cap.supplementalCount}</div><div class="card-note">Cap exempt</div></div>
-    <div class="card"><div class="card-label">Reserve</div><div class="card-value">${cap.reserveCount}</div><div class="card-note">Depth</div></div>
-    <div class="card"><div class="card-label">Expiring</div><div class="card-value">${expiring.length}</div><div class="card-note">${intlUsed}/${cap.intlTotal} intl slots used</div></div>
-  </div>
-
-  <div class="panel">
-    <div class="panel-head"><h3>Squad List</h3><span>${players.length} players</span></div>
-    <table><thead><tr>
-      ${makeSortableTh("Name","roster","name")}
-      ${makeSortableTh("Pos","roster","positionOrder")}
-      ${makeSortableTh("Age","roster","age","num")}
-      ${makeSortableTh("OVR","roster","overall","num")}
-      ${makeSortableTh("POT","roster","potential","num")}
-      ${makeSortableTh("Salary","roster","salary","num")}
-      ${makeSortableTh("Contract","roster","yearsLeft","num")}
-      ${makeSortableTh("Role","roster","role")}
-      <th>Traits</th>
-      ${makeSortableTh("Tag","roster","tag")}
-      <th class="num">Intl</th>
-      <th class="num"></th>
-    </tr></thead><tbody>
-      ${groups.map(([label, group]) => grp(label, group)).join("")}
-    </tbody></table>
-  </div>
-
-  <div class="two-col">
-    <div class="panel">
-      <div class="panel-head"><h3>Free Agency</h3><span>Best available</span></div>
-      <table><thead><tr><th>Name</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th class="num">Salary</th><th></th></tr></thead><tbody>
-        ${state.freeAgents.slice().sort((a,b)=>b.overall-a.overall).slice(0,24).map(p => `<tr>
-          <td><span class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</span></td>
-          <td>${escapeHtml(p.position)}</td>
-          <td class="num">${p.age}</td>
-          <td class="num">${p.overall}</td>
-          <td class="num">${formatMoney(p.contract.salary)}</td>
-          <td class="num"><button class="small-btn sign-fa-btn" data-id="${p.id}">Sign</button></td>
-        </tr>`).join("")}
-      </tbody></table>
-    </div>
-
-    <div class="panel">
-      <div class="panel-head"><h3>Contract Watch</h3><span>One year or less</span></div>
-      <table><thead><tr><th>Name</th><th>Pos</th><th class="num">OVR</th><th>Demand</th><th></th></tr></thead><tbody>
-        ${expiring.map(p => {
-          const demand = getContractDemand(state, p);
-          return `<tr>
-            <td>${escapeHtml(p.name)}</td>
-            <td>${escapeHtml(p.position)}</td>
-            <td class="num">${p.overall}</td>
-            <td>${formatMoney(demand.askSalary)} · ${demand.askYears}yr</td>
-            <td class="num"><button class="small-btn contract-row-btn" data-id="${p.id}">Negotiate</button></td>
-          </tr>`;
-        }).join("") || `<tr><td colspan="5">No urgent renewals.</td></tr>`}
-      </tbody></table>
-    </div>
+    <section class="panel dashboard-news-col">
+      <div class="panel-head"><h3>League Headlines</h3><span>News Feed</span></div>
+      <div class="headline-grid news-grid-v2">${newsCards}</div>
+    </section>
   </div>`;
 }
 
@@ -2117,42 +2037,38 @@ function renderWeeklySchedule() {
       <button class="primary-btn" id="liveWatchWeekBtn" type="button" ${lockedFuture ? 'disabled' : ''}>Live watch all games</button>
     </div>
   </div>
-  <div class="grid-2 compact-grid weekly-layout-v2">
-    <div class="panel">
-      <div class="panel-head"><h3>Fixtures</h3><span>${lockedFuture ? 'Browse only' : 'Watch or sim'}</span></div>
-      <div class="weekly-grid single-col-grid weekly-grid-v2">
-        ${weekMatches.map(m => {
-          const home = byTeamId(m.homeTeamId); const away = byTeamId(m.awayTeamId);
-          const homeCoach = getTeamCoach(home.id); const awayCoach = getTeamCoach(away.id);
-          const homePalette = teamColors(home.id); const awayPalette = teamColors(away.id);
-          const playable = !lockedFuture;
-          return `<div class="week-game-card week-game-card-v2">
-            <div class="week-game-main week-game-main-v2">
-              <div class="week-fixture-team home" style="--team-primary:${homePalette.primary};--team-secondary:${homePalette.secondary};--team-text:${homePalette.text};">
-                <div class="week-team-crest">${teamLogoMark(home, 'mini-team-logo')}</div>
-                <div class="week-team-copy">
-                  <div class="week-team-name-strong">${teamLink(home.id, home.name)}</div>
-                  <div class="week-team-sub">${coachMetaLine(homeCoach)}</div>
-                </div>
-              </div>
-              <div class="week-versus week-versus-v2">${m.played ? `${m.result.homeGoals} - ${m.result.awayGoals}` : 'vs'}</div>
-              <div class="week-fixture-team away" style="--team-primary:${awayPalette.primary};--team-secondary:${awayPalette.secondary};--team-text:${awayPalette.text};">
-                <div class="week-team-copy align-right">
-                  <div class="week-team-name-strong">${teamLink(away.id, away.name)}</div>
-                  <div class="week-team-sub">${coachMetaLine(awayCoach)}</div>
-                </div>
-                <div class="week-team-crest">${teamLogoMark(away, 'mini-team-logo')}</div>
-              </div>
+  <div class="panel">
+    <div class="panel-head"><h3>Fixtures</h3><span>${lockedFuture ? 'Browse only' : 'Watch or sim'}</span></div>
+    <div class="weekly-grid schedule-fixture-grid">${weekMatches.map(m => {
+      const home = byTeamId(m.homeTeamId); const away = byTeamId(m.awayTeamId);
+      const homePalette = teamColors(home.id); const awayPalette = teamColors(away.id);
+      const homeRec = getTeamRecord(home.id) || { wins:0, draws:0, losses:0 };
+      const awayRec = getTeamRecord(away.id) || { wins:0, draws:0, losses:0 };
+      const playable = !lockedFuture;
+      return `<div class="week-game-card schedule-card-clean">
+        <div class="week-game-main week-game-main-clean">
+          <div class="week-fixture-team home" style="--team-primary:${homePalette.primary};--team-secondary:${homePalette.secondary};--team-text:${homePalette.text};">
+            <div class="week-team-crest">${teamLogoMark(home, 'mini-team-logo')}</div>
+            <div class="week-team-copy">
+              <div class="week-team-name-strong">${teamLink(home.id, home.name)}</div>
+              <div class="week-team-sub">${homeRec.wins}-${homeRec.draws}-${homeRec.losses} · Home</div>
             </div>
-            <div class="week-game-actions week-game-actions-v2">
-              <button class="small-btn watch-week-match-btn" data-id="${m.id}" ${!playable ? 'disabled' : ''}>Watch game</button>
-              <button class="small-btn sim-week-match-btn" data-id="${m.id}" ${(!playable || m.played) ? 'disabled' : ''}>Sim game</button>
+          </div>
+          <div class="week-versus week-versus-clean">${m.played ? `${m.result.homeGoals} - ${m.result.awayGoals}` : 'vs'}</div>
+          <div class="week-fixture-team away" style="--team-primary:${awayPalette.primary};--team-secondary:${awayPalette.secondary};--team-text:${awayPalette.text};">
+            <div class="week-team-copy align-right">
+              <div class="week-team-name-strong">${teamLink(away.id, away.name)}</div>
+              <div class="week-team-sub">${awayRec.wins}-${awayRec.draws}-${awayRec.losses} · Away</div>
             </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>
-    ${renderCoachCarousel()}
+            <div class="week-team-crest">${teamLogoMark(away, 'mini-team-logo')}</div>
+          </div>
+        </div>
+        <div class="week-game-actions week-game-actions-v2">
+          <button class="small-btn watch-week-match-btn" data-id="${m.id}" ${!playable ? 'disabled' : ''}>Watch game</button>
+          <button class="small-btn sim-week-match-btn" data-id="${m.id}" ${(!playable || m.played) ? 'disabled' : ''}>Sim game</button>
+        </div>
+      </div>`;
+    }).join('')}</div>
   </div>`;
 }
 
@@ -2180,7 +2096,7 @@ function renderStats() {
   <div class="panel">
     <div class="panel-head"><h3>League Leaders</h3><span>Top 10 by category</span></div>
     <div class="leaders-grid">
-      ${categories.map(([label,key]) => `<div class="leaders-card"><div class="leaders-card-title">${label}</div>${rows.slice().sort((a,b) => (b[key] || 0) - (a[key] || 0)).slice(0,10).map((p, idx) => `<div class="leaders-row"><span>${idx + 1}. <span class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</span></span><strong>${key === 'xg' ? (p[key] || 0).toFixed(1) : (p[key] || 0)}</strong></div>`).join('')}</div>`).join('')}
+      ${categories.map(([label,key]) => `<div class="leaders-card"><div class="leaders-card-title">${label}</div>${rows.slice().sort((a,b) => (b[key] || 0) - (a[key] || 0)).slice(0,10).map((p, idx) => `<div class="leaders-row"><span>${idx + 1}. ${playerLink(p.id, p.name)}</span><strong>${key === 'xg' ? (p[key] || 0).toFixed(1) : (p[key] || 0)}</strong></div>`).join('')}</div>`).join('')}
     </div>
   </div>
   <div class="panel stats-table-panel"><table class="tight-table stats-table-tight">
@@ -2196,7 +2112,7 @@ function renderStats() {
       ${makeSortableTh("RC","stats","reds","num")}
     </tr></thead><tbody>
       ${sorted.slice(0,220).map(p => `<tr>
-        <td><span class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</span></td>
+        <td>${playerLink(p.id, p.name)}</td>
         <td>${teamLink(p.clubId, p.club)}</td><td>${escapeHtml(p.pos)}</td>
         <td class="num">${p.gp}</td><td class="num">${p.goals}</td><td class="num">${p.assists}</td>
         <td class="num">${(p.xg||0).toFixed(1)}</td><td class="num">${p.yellows}</td><td class="num">${p.reds}</td>
@@ -2212,8 +2128,101 @@ function renderLeagueLeaders() {
   }));
   const cats = [["Goals","goals"],["Assists","assists"],["xG","xg"],["Appearances","appearances"],["Clean Sheets","cleanSheets"],["Yellow Cards","yellows"],["Red Cards","reds"]];
   return `${pageHead("League Leaders","Top 10 in every tracked stat, with quick access to the full leaderboard")}
-  <div class="leaders-grid full-leaders-grid">${cats.map(([label,key]) => `<div class="panel leaders-full-card"><div class="panel-head"><h3>${label}</h3><button class="text-link nav-jump-btn" data-target-page="stats">Open full leaderboard</button></div>${rows.slice().sort((a,b) => (b[key] || 0) - (a[key] || 0)).slice(0,10).map((p, idx) => `<div class="leaders-row"><span>${idx + 1}. <span class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</span> <small>${escapeHtml(p.pos)} · ${teamLink(p.clubId, p.club)}</small></span><strong>${key === 'xg' ? (p[key] || 0).toFixed(1) : formatNumber(p[key] || 0)}</strong></div>`).join('')}</div>`).join('')}</div>`;
+  <div class="leaders-grid full-leaders-grid">${cats.map(([label,key]) => `<div class="panel leaders-full-card"><div class="panel-head"><h3>${label}</h3><button class="text-link nav-jump-btn" data-target-page="stats">Open full leaderboard</button></div>${rows.slice().sort((a,b) => (b[key] || 0) - (a[key] || 0)).slice(0,10).map((p, idx) => `<div class="leaders-row"><span>${idx + 1}. ${playerLink(p.id, p.name)} <small>${escapeHtml(p.pos)} · ${teamLink(p.clubId, p.club)}</small></span><strong>${key === 'xg' ? (p[key] || 0).toFixed(1) : formatNumber(p[key] || 0)}</strong></div>`).join('')}</div>`).join('')}</div>`;
 }
+
+function renderFreeAgents() {
+  const team = getUserTeam(state);
+  const cap = getCapSummary(state, team.id);
+  const roster = getTeamPlayers(state, team.id);
+  const openSpots = Math.max(0, 30 - roster.length);
+  const composition = ["GK","LB","CB","RB","LM","RM","CDM","CM","CAM","LW","RW","ST"].map(pos => {
+    const count = roster.filter(p => p.position === pos).length;
+    return `<div>${pos}: <strong>${count}</strong></div>`;
+  }).join('');
+  const rows = state.freeAgents.slice().sort((a,b)=> (b.overall-a.overall) || (a.age-b.age));
+  return `${pageHead("Free Agents","Available")}
+  <div class="free-agency-shell">
+    <div class="free-agency-top">
+      <div class="free-agency-summary">
+        <div class="note">More: Upcoming Free Agents</div>
+        <p>You currently have <strong>${openSpots}</strong> open roster spots and <strong>${formatMoney(Math.max(0, cap.budgetRoom))}</strong> in cap space.</p>
+        <div class="note">Min contract: ${formatMoney(500000)} · Max contract: ${formatMoney(30000000)}</div>
+      </div>
+      <div class="free-agency-composition panel-lite"><div class="panel-head"><h3>Roster Composition</h3><span>Current</span></div><div class="fa-comp-grid">${composition}</div></div>
+    </div>
+    <div class="panel">
+      <div class="fa-toolbar"><div class="note">${rows.length} available players</div><div class="fa-search-row"><input id="freeAgentSearch" class="search-input" placeholder="Search" /><select id="freeAgentPageSize"><option>10</option><option selected>25</option><option>50</option></select></div></div>
+      <table class="tight-table free-agent-table"><thead><tr><th>Name</th><th>Pos</th><th class="num">Age</th><th class="num">Ovr</th><th class="num">Pot</th><th class="num">G</th><th class="num">Stats</th><th class="num">AV</th><th>Mood</th><th>Asking For</th><th>Exp</th><th>Negotiate</th></tr></thead><tbody>
+        ${rows.slice(0,25).map(p => `<tr><td>${playerLink(p.id, p.name)}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td><td class="num">${p.stats?.gp || 0}</td><td class="num">${(p.stats?.goals || 0) + (p.stats?.assists || 0)}</td><td class="num">${(getLivePlayerRating(p,1) || 0).toFixed(1)}</td><td><span class="badge">${escapeHtml(p.morale || 'Ok')}</span></td><td>${formatMoney(p.contract.salary)}</td><td>${state.season.year + (p.contract.yearsLeft || 0)}</td><td><button class="small-btn sign-fa-btn" data-id="${p.id}">Sign</button></td></tr>`).join('')}
+      </tbody></table>
+    </div>
+  </div>`;
+}
+
+function renderLeagueFinances() {
+  const teams = state.teams.slice().sort((a,b) => (b.finances.cash - a.finances.cash));
+  return `${pageHead("League Finances","Club-wide payroll, cash and allocation money")}
+  <div class="panel"><table class="tight-table"><thead><tr><th>Club</th><th class="num">Cash</th><th class="num">Budget</th><th class="num">GAM</th><th class="num">TAM</th><th class="num">Intl</th></tr></thead><tbody>
+  ${teams.map(t => { const cap=getCapSummary(state,t.id); return `<tr><td>${teamLink(t.id,t.name)}</td><td class="num">${formatMoney(t.finances.cash)}</td><td class="num">${formatMoney(cap.budgetUsed)}</td><td class="num">${formatMoney(t.gam)}</td><td class="num">${formatMoney(t.tam)}</td><td class="num">${cap.intlUsed}/${cap.intlTotal}</td></tr>`; }).join('')}
+  </tbody></table></div>`;
+}
+
+function renderLeagueHistory() {
+  const rows = (state.awardsHistory || []).slice().reverse();
+  return `${pageHead("League History","Season, champion, awards and cup results")}
+  <div class="panel"><table class="tight-table"><thead><tr><th>Season</th><th>Champion</th><th>Runner-up</th><th>MVP</th><th>Golden Boot</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${r.season || '—'}</td><td>${escapeHtml(r.champion || '—')}</td><td>${escapeHtml(r.runnerUp || '—')}</td><td>${escapeHtml(r.mvp || '—')}</td><td>${escapeHtml(r.goldenBoot || '—')}</td></tr>`).join('') || `<tr><td colspan="5">No league history yet.</td></tr>`}
+  </tbody></table></div>`;
+}
+
+function renderPowerRankings() {
+  const rows = state.teams.map(t => {
+    const rec = getTeamRecord(t.id) || { points:0, gd:0, played:0 };
+    const score = (rec.points * 5) + (rec.gd * 2) + teamOverall(state, t.id);
+    return { team:t, rec, score };
+  }).sort((a,b)=> b.score-a.score).slice(0,30);
+  return `${pageHead("Live Power Rankings","Form, standings and squad quality combined")}
+  <div class="panel"><table class="tight-table"><thead><tr><th>#</th><th>Club</th><th class="num">Pts</th><th class="num">GD</th><th class="num">Overall</th></tr></thead><tbody>
+    ${rows.map((r,i)=> `<tr><td>${i+1}</td><td>${teamLink(r.team.id,r.team.name)}</td><td class="num">${r.rec.points}</td><td class="num">${r.rec.gd>0?'+':''}${r.rec.gd}</td><td class="num">${teamOverall(state, r.team.id).toFixed(1)}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function renderNewsFeed() {
+  const items = (state.transactions || []).slice().reverse().slice(0,40);
+  return `${pageHead("News Feed","Social-style league updates")}
+  <div class="news-feed-list">${items.map((tx,i)=> `<div class="panel news-post"><div class="news-post-head"><strong>@mlsgmnews</strong><span>${tx.season || state.season.year}</span></div><div class="news-post-type">${escapeHtml(tx.type)}</div><div>${escapeHtml(tx.text)}</div></div>`).join('') || `<div class="panel note">No posts yet.</div>`}</div>`;
+}
+
+function renderPlayerRatings() {
+  const rows = state.players.filter(p => p.clubId).slice().sort((a,b)=> (b.overall-a.overall) || (b.potential-a.potential));
+  return `${pageHead("Player Ratings","Overall, potential and detailed attribute ratings")}
+  <div class="panel"><table class="tight-table"><thead><tr><th>Name</th><th>Club</th><th>Pos</th><th class="num">Age</th><th class="num">Ovr</th><th class="num">Pot</th><th class="num">Pace</th><th class="num">Passing</th><th class="num">Defense</th><th class="num">Physical</th></tr></thead><tbody>
+    ${rows.map(p => `<tr><td>${playerLink(p.id,p.name)}</td><td>${teamLink(p.clubId, byTeamId(p.clubId)?.name || '—')}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td><td class="num">${p.attributes?.pace || 0}</td><td class="num">${p.attributes?.passing || 0}</td><td class="num">${p.attributes?.defense || 0}</td><td class="num">${p.attributes?.physical || 0}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function renderInjuries() {
+  const rows = state.players.filter(p => p.clubId && p.injuredUntil && p.injuredUntil >= state.calendar.absoluteDay).map(p => ({ p, days: (p.injuredUntil - state.calendar.absoluteDay) })).sort((a,b)=> b.days-a.days);
+  return `${pageHead("Injuries","Current unavailable players across the league")}
+  <div class="panel"><table class="tight-table"><thead><tr><th>Player</th><th>Club</th><th>Pos</th><th>Injury</th><th class="num">Days Left</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${playerLink(r.p.id,r.p.name)}</td><td>${teamLink(r.p.clubId, byTeamId(r.p.clubId)?.name || '—')}</td><td>${escapeHtml(r.p.position)}</td><td>${escapeHtml(r.p.injuryMeta?.type || 'Unavailable')}</td><td class="num">${r.days}</td></tr>`).join('') || `<tr><td colspan="5">No active injuries.</td></tr>`}
+  </tbody></table></div>`;
+}
+
+function renderAwardRace() {
+  const rows = state.players.filter(p => p.clubId).map(p => ({ p, score: ((p.stats.goals || 0) * 4) + ((p.stats.assists || 0) * 3) + ((getLivePlayerRating(p,1) || 6) * 5) + ((getTeamRecord(p.clubId)?.points || 0) * 0.25) })).sort((a,b)=> b.score-a.score).slice(0,20);
+  return `${pageHead("Live Award Race","Rolling MVP race based on season form")}
+  <div class="panel"><table class="tight-table"><thead><tr><th>#</th><th>Player</th><th>Club</th><th class="num">Goals</th><th class="num">Assists</th><th class="num">Rating</th><th class="num">Race Score</th></tr></thead><tbody>
+    ${rows.map((r,i) => `<tr><td>${i+1}</td><td>${playerLink(r.p.id,r.p.name)}</td><td>${teamLink(r.p.clubId, byTeamId(r.p.clubId)?.name || '—')}</td><td class="num">${r.p.stats.goals || 0}</td><td class="num">${r.p.stats.assists || 0}</td><td class="num">${(getLivePlayerRating(r.p,1) || 0).toFixed(2)}</td><td class="num">${r.score.toFixed(1)}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function renderTradeProposals() {
+  return `${pageHead("Trade Proposals","Incoming and recent league offers")}
+  <div class="panel">${state.pendingOffer ? `<div class="offer-box"><strong>${escapeHtml(state.pendingOffer.bidClub)}</strong> offered ${formatMoney(state.pendingOffer.amount)} for ${escapeHtml(byPlayerId(state.pendingOffer.playerId)?.name || 'your player')}.</div>` : `<div class="note">No active trade proposals right now.</div>`}</div>`;
+}
+
 
 function renderTransactions() {
   return `${pageHead("Transactions Log","Signings, trades, offers, injuries, academy, awards")}
@@ -2432,7 +2441,7 @@ function renderBudget() {
       <div class="panel-head"><h3>Designation Board</h3><span>Higher-than-TAM salaries auto-DP on load</span></div>
       <table class="tight-table"><thead><tr><th>Name</th><th>Pos</th><th class="num">Age</th><th class="num">Salary</th><th>Tag</th><th>Set</th></tr></thead><tbody>
         ${players.slice(0,22).map(p => `<tr>
-          <td><span class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</span></td>
+          <td>${playerLink(p.id, p.name)}</td>
           <td>${escapeHtml(p.position)}</td>
           <td class="num">${p.age}</td>
           <td class="num">${formatMoney(p.contract.salary)}</td>
@@ -2452,16 +2461,16 @@ function renderBudget() {
       <div class="panel">
         <div class="panel-head"><h3>Roster Sheet</h3><span>Simple overview</span></div>
         <table class="tight-table"><thead><tr><th>Bucket</th><th class="num">Used</th><th class="num">Max</th><th>Names</th></tr></thead><tbody>
-          <tr><td>DP</td><td class="num">${dps.length}</td><td class="num">${cap.dpSlots}</td><td>${dps.map(p => `<span class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</span>`).join(', ') || 'None'}</td></tr>
-          <tr><td>U22</td><td class="num">${u22.length}</td><td class="num">${cap.u22Slots}</td><td>${u22.map(p => `<span class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</span>`).join(', ') || 'None'}</td></tr>
-          <tr><td>TAM</td><td class="num">${tamPlayers.length}</td><td class="num">—</td><td>${tamPlayers.map(p => `<span class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</span>`).join(', ') || 'None'}</td></tr>
-          <tr><td>INTL</td><td class="num">${intlPlayers.length}</td><td class="num">${team.internationalSlots}</td><td>${intlPlayers.map(p => `<span class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</span>`).join(', ') || 'None'}</td></tr>
+          <tr><td>DP</td><td class="num">${dps.length}</td><td class="num">${cap.dpSlots}</td><td>${dps.map(p => playerLink(p.id, p.name)).join(', ') || 'None'}</td></tr>
+          <tr><td>U22</td><td class="num">${u22.length}</td><td class="num">${cap.u22Slots}</td><td>${u22.map(p => playerLink(p.id, p.name)).join(', ') || 'None'}</td></tr>
+          <tr><td>TAM</td><td class="num">${tamPlayers.length}</td><td class="num">—</td><td>${tamPlayers.map(p => playerLink(p.id, p.name)).join(', ') || 'None'}</td></tr>
+          <tr><td>INTL</td><td class="num">${intlPlayers.length}</td><td class="num">${team.internationalSlots}</td><td>${intlPlayers.map(p => playerLink(p.id, p.name)).join(', ') || 'None'}</td></tr>
         </tbody></table>
       </div>
       <div class="panel">
         <div class="panel-head"><h3>Budget Charges</h3><span>Top hits</span></div>
         <table class="tight-table"><thead><tr><th>Name</th><th>Pos</th><th>Tag</th><th class="num">Charge</th></tr></thead><tbody>
-          ${players.slice(0,12).map(p => `<tr><td><span class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</span></td><td>${escapeHtml(p.position)}</td><td>${escapeHtml(p.designation || 'Std')}</td><td class="num">${formatMoney(designationBudgetCharge(p))}</td></tr>`).join('')}
+          ${players.slice(0,12).map(p => `<tr><td>${playerLink(p.id, p.name)}</td><td>${escapeHtml(p.position)}</td><td>${escapeHtml(p.designation || 'Std')}</td><td class="num">${formatMoney(designationBudgetCharge(p))}</td></tr>`).join('')}
         </tbody></table>
       </div>
       <div class="panel">
@@ -2551,7 +2560,7 @@ function renderTeamPage() {
     <div class="panel">
       <div class="panel-head"><h3>Top Players</h3><span>By overall</span></div>
       <table><thead><tr><th>Name</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th class="num">POT</th></tr></thead><tbody>
-        ${topPlayers.map(p => `<tr><td><span class="player-link" data-id="${p.id}">${escapeHtml(p.name)}</span></td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td></tr>`).join("")}
+        ${topPlayers.map(p => `<tr><td>${playerLink(p.id, p.name)}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td></tr>`).join("")}
       </tbody></table>
     </div>
 
@@ -2776,23 +2785,32 @@ async function renderPage() {
   if (!state) return;
   updateMeta();
   let html = "";
-  if      (currentPage==="dashboard")    html = renderDashboard();
-  else if (currentPage==="roster")       html = renderRoster();
-  else if (currentPage==="academy")      html = renderAcademy();
-  else if (currentPage==="standings")    html = renderStandings();
-  else if (currentPage==="schedule")     html = renderSchedule();
-  else if (currentPage==="weekly")       html = renderWeeklySchedule();
-  else if (currentPage==="leaders")      html = renderLeagueLeaders();
-  else if (currentPage==="stats")        html = renderStats();
-  else if (currentPage==="transactions") html = renderTransactions();
-  else if (currentPage==="trade")        html = renderTrade();
-  else if (currentPage==="budget")       html = renderBudget();
-  else if (currentPage==="draft")        html = renderDraft();
-  else if (currentPage==="team")         html = renderTeamPage();
-  else if (currentPage==="playoffs")     html = renderPlayoffs();
-  else if (currentPage==="openCup")      html = renderOpenCup();
-  else if (currentPage==="tactics")      html = renderTactics();
-  else if (currentPage==="saves")        html = await renderSaves();
+  if      (currentPage==="dashboard")      html = renderDashboard();
+  else if (currentPage==="roster")         html = renderRoster();
+  else if (currentPage==="academy")        html = renderAcademy();
+  else if (currentPage==="standings")      html = renderStandings();
+  else if (currentPage==="schedule" || currentPage==="teamSchedule") html = renderSchedule();
+  else if (currentPage==="weekly")         html = renderWeeklySchedule();
+  else if (currentPage==="leaders")        html = renderLeagueLeaders();
+  else if (currentPage==="stats")          html = renderStats();
+  else if (currentPage==="transactions")   html = renderTransactions();
+  else if (currentPage==="trade")          html = renderTrade();
+  else if (currentPage==="budget")         html = renderBudget();
+  else if (currentPage==="draft")          html = renderDraft();
+  else if (currentPage==="team")           html = renderTeamPage();
+  else if (currentPage==="playoffs")       html = renderPlayoffs();
+  else if (currentPage==="openCup")        html = renderOpenCup();
+  else if (currentPage==="tactics")        html = renderTactics();
+  else if (currentPage==="leagueFinances") html = renderLeagueFinances();
+  else if (currentPage==="leagueHistory")  html = renderLeagueHistory();
+  else if (currentPage==="power")          html = renderPowerRankings();
+  else if (currentPage==="news")           html = renderNewsFeed();
+  else if (currentPage==="freeAgents")     html = renderFreeAgents();
+  else if (currentPage==="proposals")      html = renderTradeProposals();
+  else if (currentPage==="ratings")        html = renderPlayerRatings();
+  else if (currentPage==="injuries")       html = renderInjuries();
+  else if (currentPage==="awards")         html = renderAwardRace();
+  else if (currentPage==="saves")          html = await renderSaves();
   $("#pageRoot").innerHTML = html;
   bindPageEvents();
   bindSortableHeaders();
@@ -2923,10 +2941,9 @@ function bindPageEvents() {
   }));
 
   $$(".team-link[data-id]").forEach(el => {
-    el.oncontextmenu = e => {
-      e.preventDefault();
-      armOpenInNewTab(el, "team", el.dataset.id);
-    };
+    if (el.tagName !== "A") {
+      el.oncontextmenu = e => { e.preventDefault(); armOpenInNewTab(el, "team", el.dataset.id); };
+    }
     el.onclick = async e => {
       e.preventDefault();
       if (shouldOpenInNewTab("team", el.dataset.id)) return openInNewTab("team", el.dataset.id);
@@ -2984,10 +3001,9 @@ function bindPageEvents() {
   });
 
   $$(".player-link[data-id]").forEach(el => {
-    el.oncontextmenu = e => {
-      e.preventDefault();
-      armOpenInNewTab(el, "player", el.dataset.id);
-    };
+    if (el.tagName !== "A") {
+      el.oncontextmenu = e => { e.preventDefault(); armOpenInNewTab(el, "player", el.dataset.id); };
+    }
     el.onclick = async e => {
       e.preventDefault();
       if (shouldOpenInNewTab("player", el.dataset.id)) return openInNewTab("player", el.dataset.id);

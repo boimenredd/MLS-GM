@@ -2027,3 +2027,223 @@ html[data-theme="light"] .setup-modal { border-color: #d7dfe8; }
   .week-fixture-team.away { justify-content: flex-start; }
   .week-team-copy.align-right { text-align:left; }
 }
+
+/* --- v10 layout cleanup --- */
+.layout { grid-template-columns: 250px minmax(0,1fr); }
+.sidebar-fbgm {
+  padding: 10px 0 18px;
+  display: block !important;
+  overflow: auto;
+}
+.sidebar-fbgm .nav-btn,
+.sidebar-fbgm .action-btn {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+  text-align: left;
+  background: transparent;
+  box-shadow: none;
+  padding: 8px 18px;
+}
+.sidebar-fbgm .nav-btn:hover,
+.sidebar-fbgm .nav-btn.active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg2));
+}
+.side-group { margin-top: 8px; padding-top: 6px; }
+.side-group .side-section-title {
+  padding: 0 18px;
+  margin: 10px 0 6px;
+}
+.nav-dashboard-btn {
+  font-weight: 700;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+.sidebar-fbgm .side-group-sim { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+.page-root { padding: 16px 18px 24px; max-width: 100%; }
+.dashboard-shell-v2 {
+  display: grid;
+  grid-template-columns: 300px minmax(540px,1fr) 420px;
+  gap: 14px;
+  align-items: start;
+}
+.dashboard-main-v2 { min-width: 0; }
+.dashboard-main-top {
+  display: grid;
+  grid-template-columns: 220px minmax(0,1fr);
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.dashboard-record-block { text-align: center; }
+.dashboard-record-big { font-size: 56px; line-height: 1; font-weight: 300; }
+.dashboard-record-sub { margin-top: 8px; font-size: 16px; color: var(--muted); }
+.dashboard-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4,minmax(0,1fr));
+  gap: 10px;
+}
+.dashboard-summary-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg3);
+}
+.dashboard-summary-item span,
+.news-card-type,
+.news-post-type,
+.pp-info-lbl {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.dashboard-summary-item strong { display: block; margin-top: 6px; font-size: 14px; }
+.dashboard-mid-grid,
+.dashboard-bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 14px;
+}
+.dashboard-bottom-grid { margin-top: 14px; grid-template-columns: 1.2fr 1fr; }
+.dashboard-news-col .headline-grid { display: grid; gap: 10px; }
+.news-card-fbgm {
+  border: 1px solid var(--line);
+  background: var(--bg2);
+  border-radius: 8px;
+  padding: 11px 12px;
+  font-size: 13px;
+}
+.news-card-copy { margin-top: 6px; line-height: 1.45; }
+.dashboard-standings-table td:first-child { width: 32px; }
+.dashboard-standings-table td:last-child,
+.dashboard-standings-table td:nth-last-child(2) { text-align: right; }
+.schedule-fixture-grid { grid-template-columns: 1fr; gap: 12px; }
+.schedule-card-clean { border-radius: 8px; overflow: hidden; }
+.week-game-main-clean { grid-template-columns: minmax(0,1fr) 90px minmax(0,1fr); gap: 10px; }
+.week-versus-clean { font-size: 22px; font-weight: 800; }
+.week-team-sub { opacity: .9; }
+.week-team-sub .coach-link, .week-team-sub .coach-meta-stars { display:none !important; }
+.free-agency-shell { display: grid; gap: 14px; }
+.free-agency-top { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 14px; align-items: start; }
+.free-agency-summary p { margin: 10px 0 6px; }
+.fa-comp-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px 12px; font-size: 13px; }
+.fa-toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom: 10px; flex-wrap:wrap; }
+.fa-search-row { display:flex; gap:8px; align-items:center; }
+.search-input {
+  min-width: 220px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg2);
+  color: var(--text);
+}
+.free-agent-table th, .free-agent-table td { white-space: nowrap; }
+.coach-profile-shell {
+  width: min(1100px, calc(100vw - 40px));
+  background: var(--bg2);
+  color: var(--text);
+  padding: 0;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.coach-hero-card-clean { border-radius: 0; }
+.coach-hero-main-clean {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 360px;
+  gap: 18px;
+  align-items: center;
+  padding: 16px 18px;
+}
+.coach-photo-xl { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; }
+.coach-hero-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
+.coach-hero-metrics div {
+  border: 1px solid rgba(255,255,255,.45);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(0,0,0,.12);
+}
+.coach-hero-metrics span { display:block; font-size:11px; text-transform:uppercase; opacity:.82; }
+.coach-profile-grid-clean {
+  display: grid;
+  grid-template-columns: minmax(0,1.35fr) 340px;
+  gap: 14px;
+  padding: 14px;
+  align-items: start;
+}
+.coach-overview-topgrid {
+  display:grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin-bottom:12px;
+}
+.pp-info-box {
+  border:1px solid var(--line);
+  border-radius:10px;
+  background: var(--bg3);
+  padding: 12px 14px;
+}
+.pp-info-val { margin-top: 6px; font-weight: 700; font-size: 16px; color: var(--text); }
+.coach-overview-bottom {
+  display:grid;
+  grid-template-columns: minmax(0,1fr) 220px;
+  gap: 14px;
+  align-items: start;
+}
+.coach-bars-clean { padding-top: 6px; }
+.coach-career-list-clean,
+.news-feed-list { display:grid; gap:10px; }
+.coach-career-row {
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 0;
+  border-bottom:1px solid var(--line);
+}
+.coach-career-row span, .coach-career-row em { color: var(--muted); font-style: normal; display:block; margin-top: 4px; }
+html[data-theme="light"] body,
+html[data-theme="light"] .page-root,
+html[data-theme="light"] .panel,
+html[data-theme="light"] .panel-lite,
+html[data-theme="light"] .card,
+html[data-theme="light"] table,
+html[data-theme="light"] table * ,
+html[data-theme="light"] .dash-list-row,
+html[data-theme="light"] .news-card-fbgm,
+html[data-theme="light"] .free-agency-summary,
+html[data-theme="light"] .fa-comp-grid,
+html[data-theme="light"] .pp-info-val,
+html[data-theme="light"] input,
+html[data-theme="light"] select,
+html[data-theme="light"] textarea {
+  color: var(--text);
+}
+html[data-theme="light"] .player-hero-card,
+html[data-theme="light"] .coach-hero-card { color: #fff; }
+html[data-theme="light"] .player-hero-card a,
+html[data-theme="light"] .coach-hero-card a,
+html[data-theme="light"] .player-hero-card span,
+html[data-theme="light"] .coach-hero-card span,
+html[data-theme="light"] .player-hero-card strong,
+html[data-theme="light"] .coach-hero-card strong { color: inherit; }
+html[data-theme="light"] .text-link { color: #1452a8; }
+@media (max-width: 1360px) {
+  .dashboard-shell-v2 { grid-template-columns: 260px minmax(420px,1fr) 360px; }
+  .dashboard-summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .dashboard-mid-grid, .dashboard-bottom-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 1120px) {
+  .layout, .dashboard-shell-v2, .free-agency-top, .coach-profile-grid-clean, .coach-overview-bottom, .coach-hero-main-clean { grid-template-columns: 1fr; }
+  .sidebar-fbgm { border-bottom: 1px solid var(--line); }
+  .sidebar-fbgm .nav-btn, .sidebar-fbgm .action-btn { width:auto; border-radius: 8px; margin: 2px; }
+}
+.sidebar-fbgm #simOneBtn,
+.sidebar-fbgm #simWeekBtn,
+.sidebar-fbgm #simMonthBtn,
+.sidebar-fbgm #simSeasonBtn,
+.sidebar-fbgm #simToDraftBtn,
+.sidebar-fbgm #simToExtensionsBtn,
+.sidebar-fbgm #simToFABtn,
+.sidebar-fbgm #simYearBtn { display:block !important; }

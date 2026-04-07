@@ -109,34 +109,57 @@
     </header>
 
     <div class="layout">
-      <aside class="sidebar">
-        <div class="side-section-title">Navigation</div>
-        <button class="nav-btn active" data-page="dashboard">&#128202; Dashboard</button>
-        <button class="nav-btn" data-page="roster">&#128101; Roster</button>
-        <button class="nav-btn" data-page="tactics">&#127919; Tactics</button>
-        <button class="nav-btn" data-page="academy">&#127979; Youth Academy</button>
-        <button class="nav-btn" data-page="standings">&#127942; Standings</button>
-        <button class="nav-btn" data-page="schedule">&#128197; Schedule</button>
-        <button class="nav-btn" data-page="weekly">&#128198; Weekly Schedule</button>
-        <button class="nav-btn" data-page="leaders">&#127942; League Leaders</button>
-        <button class="nav-btn" data-page="stats">&#128200; Player Stats</button>
-        <button class="nav-btn" data-page="transactions">&#128203; Transactions</button>
-        <button class="nav-btn" data-page="trade">&#128260; Trade Center</button>
-        <button class="nav-btn" data-page="budget">&#128176; Budget</button>
-        <button class="nav-btn" data-page="draft">&#127891; SuperDraft</button>
-        <button class="nav-btn" data-page="playoffs">&#129351; Playoffs</button>
-        <button class="nav-btn" data-page="openCup">&#127942; U.S. Open Cup</button>
-        <button class="nav-btn" data-page="saves">&#128190; Saves</button>
+      <aside class="sidebar sidebar-fbgm">
+        <button class="nav-btn active nav-dashboard-btn" data-page="dashboard">Dashboard</button>
 
-        <div class="side-section-title spaced">Simulation</div>
-        <button id="simOneBtn" class="action-btn">&#9654; Sim Next Match</button>
-        <button id="simWeekBtn" class="action-btn">&#128198; Sim 1 Week</button>
-        <button id="simMonthBtn" class="action-btn">&#128197; Sim 1 Month</button>
-        <button id="simSeasonBtn" class="action-btn">&#9193; Sim To End of Season</button>
-        <button id="simToDraftBtn" class="action-btn">&#127891; Sim To Draft</button>
-        <button id="simToExtensionsBtn" class="action-btn">&#9997;&#65039; Sim To Extensions</button>
-        <button id="simToFABtn" class="action-btn">&#128188; Sim To Free Agency</button>
-        <button id="simYearBtn" class="action-btn">&#128260; Sim To Next Season</button>
+        <div class="side-group">
+          <div class="side-section-title">League</div>
+          <button class="nav-btn" data-page="standings">Standings</button>
+          <button class="nav-btn" data-page="playoffs">Playoffs</button>
+          <button class="nav-btn" data-page="openCup">US Open Cup</button>
+          <button class="nav-btn" data-page="weekly">Weekly Schedule</button>
+          <button class="nav-btn" data-page="leagueFinances">Finances</button>
+          <button class="nav-btn" data-page="leagueHistory">League History</button>
+          <button class="nav-btn" data-page="power">Power Rankings</button>
+          <button class="nav-btn" data-page="transactions">Transactions</button>
+          <button class="nav-btn" data-page="news">News Feed</button>
+        </div>
+
+        <div class="side-group">
+          <div class="side-section-title">Team</div>
+          <button class="nav-btn" data-page="roster">Roster</button>
+          <button class="nav-btn" data-page="tactics">Tactics</button>
+          <button class="nav-btn" data-page="teamSchedule">Team Schedule</button>
+          <button class="nav-btn" data-page="budget">Budget</button>
+        </div>
+
+        <div class="side-group">
+          <div class="side-section-title">Players</div>
+          <button class="nav-btn" data-page="freeAgents">Free Agents</button>
+          <button class="nav-btn" data-page="trade">Trade</button>
+          <button class="nav-btn" data-page="proposals">Trade Proposals</button>
+          <button class="nav-btn" data-page="draft">Draft</button>
+        </div>
+
+        <div class="side-group">
+          <div class="side-section-title">Stats</div>
+          <button class="nav-btn" data-page="leaders">League Leaders</button>
+          <button class="nav-btn" data-page="ratings">Player Ratings</button>
+          <button class="nav-btn" data-page="injuries">Injuries</button>
+          <button class="nav-btn" data-page="awards">Live Award Race</button>
+        </div>
+
+        <div class="side-group side-group-sim">
+          <div class="side-section-title">Play</div>
+          <button id="simOneBtn" class="action-btn">Sim Next Match</button>
+          <button id="simWeekBtn" class="action-btn">Sim 1 Week</button>
+          <button id="simMonthBtn" class="action-btn">Sim 1 Month</button>
+          <button id="simSeasonBtn" class="action-btn">Sim To End of Season</button>
+          <button id="simToDraftBtn" class="action-btn">Sim To Draft</button>
+          <button id="simToExtensionsBtn" class="action-btn">Sim To Extensions</button>
+          <button id="simToFABtn" class="action-btn">Sim To Free Agency</button>
+          <button id="simYearBtn" class="action-btn">Sim To Next Season</button>
+        </div>
       </aside>
 
       <main id="pageRoot" class="page-root"></main>
