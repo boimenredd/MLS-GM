@@ -389,6 +389,126 @@ function roundMarketValue(value, step = 50000) {
   return Math.round(n / step) * step;
 }
 
+
+function averageMatchRating(player) {
+  const ratings = player?.stats?.matchRatings || [];
+  if (ratings.length) {
+    const total = ratings.reduce((sum, row) => sum + (Number(row.rating) || 0), 0);
+    return total / ratings.length;
+  }
+  const count = Number(player?.stats?.ratingCount || 0);
+  if (count > 0) return Number(player.stats.ratingSum || 0) / count;
+  return getLivePlayerRating(player, 1);
+}
+
+function deepCloneStatsMap(map) {
+  return JSON.parse(JSON.stringify(map || {}));
+}
+
+function tuneStatsForPosition(player, rawStats) {
+  const pos = player?.position || "CM";
+  const stats = deepCloneStatsMap(rawStats);
+  const groupCaps = {
+    GK: { physical:[55,88], passing:[38,72], shooting:[8,32], skill:[12,44], mentality:[42,84], defense:[8,34], goalkeeping:[58,95] },
+    CB: { physical:[55,90], passing:[40,74], shooting:[14,56], skill:[28,68], mentality:[50,84], defense:[58,95], goalkeeping:[5,14] },
+    LB: { physical:[50,86], passing:[48,84], shooting:[18,68], skill:[44,82], mentality:[46,82], defense:[48,86], goalkeeping:[5,14] },
+    RB: { physical:[50,86], passing:[48,84], shooting:[18,68], skill:[44,82], mentality:[46,82], defense:[48,86], goalkeeping:[5,14] },
+    CDM:{ physical:[50,86], passing:[52,84], shooting:[18,62], skill:[42,78], mentality:[50,86], defense:[50,88], goalkeeping:[5,14] },
+    CM: { physical:[48,84], passing:[54,86], shooting:[22,72], skill:[48,84], mentality:[48,86], defense:[34,74], goalkeeping:[5,14] },
+    CAM:{ physical:[44,80], passing:[58,90], shooting:[34,82], skill:[56,90], mentality:[48,84], defense:[18,56], goalkeeping:[5,14] },
+    LM: { physical:[46,84], passing:[50,84], shooting:[28,78], skill:[54,88], mentality:[42,80], defense:[24,62], goalkeeping:[5,14] },
+    RM: { physical:[46,84], passing:[50,84], shooting:[28,78], skill:[54,88], mentality:[42,80], defense:[24,62], goalkeeping:[5,14] },
+    LW: { physical:[44,84], passing:[46,80], shooting:[34,84], skill:[58,92], mentality:[42,80], defense:[16,52], goalkeeping:[5,14] },
+    RW: { physical:[44,84], passing:[46,80], shooting:[34,84], skill:[58,92], mentality:[42,80], defense:[16,52], goalkeeping:[5,14] },
+    ST: { physical:[50,88], passing:[38,76], shooting:[42,90], skill:[46,84], mentality:[48,84], defense:[12,48], goalkeeping:[5,14] },
+  };
+  const caps = groupCaps[pos] || groupCaps.CM;
+  const capValue = (group, val) => {
+    const [mn, mx] = caps[group] || [5, 95];
+    const n = Number(val) || 0;
+    return clampRating(Math.max(mn, Math.min(mx, n)));
+  };
+  for (const [groupName, group] of Object.entries(stats)) {
+    for (const [label, value] of Object.entries(group || {})) {
+      group[label] = capValue(groupName, value);
+    }
+  }
+
+  if (pos !== "GK" && stats.goalkeeping) {
+    for (const k of Object.keys(stats.goalkeeping)) stats.goalkeeping[k] = Math.max(5, Math.min(14, Number(stats.goalkeeping[k]) || 8));
+  }
+  if (pos === "GK") {
+    if (stats.shooting) {
+      stats.shooting["Shot Power"] = Math.min(stats.shooting["Shot Power"], 36);
+      stats.shooting["Heading Accuracy"] = Math.min(stats.shooting["Heading Accuracy"], 32);
+      stats.shooting["Volleys"] = Math.min(stats.shooting["Volleys"], 28);
+      stats.shooting["Free Kick Accuracy"] = Math.min(stats.shooting["Free Kick Accuracy"], 25);
+      stats.shooting["Curve"] = Math.min(stats.shooting["Curve"], 28);
+    }
+    if (stats.skill) {
+      stats.skill["Dribbling"] = Math.min(stats.skill["Dribbling"], 38);
+      stats.skill["Ball Control"] = Math.min(stats.skill["Ball Control"], 42);
+      stats.skill["Skill Moves"] = Math.min(stats.skill["Skill Moves"], 28);
+    }
+    if (stats.defense) {
+      stats.defense["Awareness"] = Math.min(stats.defense["Awareness"], 34);
+      stats.defense["Standing Tackle"] = Math.min(stats.defense["Standing Tackle"], 24);
+      stats.defense["Sliding Tackle"] = Math.min(stats.defense["Sliding Tackle"], 20);
+      stats.defense["Interceptions"] = Math.min(stats.defense["Interceptions"], 26);
+    }
+  }
+  if (["CB","LB","RB","CDM"].includes(pos) && stats.shooting) {
+    stats.shooting["Free Kick Accuracy"] = Math.min(stats.shooting["Free Kick Accuracy"], ["LB","RB"].includes(pos) ? 68 : 52)
+  }
+  if (["CB","LB","RB","CDM"].includes(pos) && stats.shooting) {
+    stats.shooting["Volleys"] = Math.min(stats.shooting["Volleys"], pos === "CB" ? 54 : 64);
+  }
+  if (["LW","RW","ST","CAM"].includes(pos) && stats.defense) {
+    stats.defense["Standing Tackle"] = Math.min(stats.defense["Standing Tackle"], pos === "CAM" ? 48 : 36);
+    stats.defense["Sliding Tackle"] = Math.min(stats.defense["Sliding Tackle"], pos === "CAM" ? 44 : 30);
+    stats.defense["Interceptions"] = Math.min(stats.defense["Interceptions"], pos === "CAM" ? 52 : 38);
+  }
+  return stats;
+}
+
+function getRecentMatchRatings(player, count = 8) {
+  const ratings = (player?.stats?.matchRatings || []).slice(-count);
+  if (ratings.length) return ratings;
+  const avg = Number(averageMatchRating(player).toFixed(1));
+  return Array.from({ length: Math.min(5, Math.max(1, player?.stats?.gp || 0)) }, (_, idx) => ({
+    week: idx + 1,
+    rating: avg,
+    result: "—",
+  }));
+}
+
+function showInfoOverlay(title, bodyHtml) {
+  document.getElementById("genericInfoOverlay")?.remove();
+  document.body.insertAdjacentHTML("beforeend", `<div id="genericInfoOverlay" class="pp-overlay"><div class="pp-modal info-overlay-box"><button class="pp-close" id="genericInfoClose">×</button><div class="panel-head"><h3>${escapeHtml(title)}</h3><span>Match Centre</span></div><div class="info-overlay-body">${bodyHtml}</div></div></div>`);
+  document.getElementById("genericInfoClose")?.addEventListener("click", () => document.getElementById("genericInfoOverlay")?.remove());
+  document.getElementById("genericInfoOverlay")?.addEventListener("click", e => {
+    if (e.target.id === "genericInfoOverlay") document.getElementById("genericInfoOverlay")?.remove();
+  });
+}
+
+function showMatchDetail(matchId, mode = "box") {
+  const match = (state?.schedule || []).find(m => m.id === matchId);
+  if (!match || !match.played || !match.result) return toast("That match has not been completed yet.", "warn");
+  const home = byTeamId(match.homeTeamId);
+  const away = byTeamId(match.awayTeamId);
+  const res = match.result;
+  const goalRows = (res.events || []).map(ev => {
+    const scorer = ev.scorerId ? byPlayerId(ev.scorerId) : null;
+    const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
+    return `<div class="detail-event-row"><span>${ev.minute}'</span><strong>⚽ ${escapeHtml(scorer?.name || "Unknown scorer")}</strong><em>${assist ? `👟 ${escapeHtml(assist.name)}` : "Unassisted"}</em></div>`;
+  }).join("") || `<div class="note">No goal events logged.</div>`;
+  if (mode === "recap") {
+    showInfoOverlay("Match Recap", `<div class="match-recap-hero"><strong>${escapeHtml(home.name)}</strong><span>${res.homeGoals} – ${res.awayGoals}</span><strong>${escapeHtml(away.name)}</strong></div><div class="note">Week ${match.week} · ${state.season.phase}</div><div class="panel-lite mt12"><div class="panel-head"><h3>Key Moments</h3><span>Auto recap</span></div>${goalRows}</div><div class="panel-lite mt12"><div class="panel-head"><h3>Stat Snapshot</h3><span>Full time</span></div><div class="dash-list-row"><span>Shots</span><strong>${res.homeShots}</strong><span>${res.awayShots}</span></div><div class="dash-list-row"><span>On target</span><strong>${res.homeSot}</strong><span>${res.awaySot}</span></div><div class="dash-list-row"><span>xG</span><strong>${(res.homeXg || 0).toFixed(2)}</strong><span>${(res.awayXg || 0).toFixed(2)}</span></div><div class="dash-list-row"><span>Possession</span><strong>${res.homePoss}%</strong><span>${res.awayPoss}%</span></div></div>`);
+    return;
+  }
+  showInfoOverlay("Box Score", `<div class="match-recap-hero"><strong>${escapeHtml(home.name)}</strong><span>${res.homeGoals} – ${res.awayGoals}</span><strong>${escapeHtml(away.name)}</strong></div><table class="tight-table info-score-table"><thead><tr><th>Club</th><th class="num">Goals</th><th class="num">Shots</th><th class="num">SOT</th><th class="num">xG</th><th class="num">Poss</th><th class="num">YC</th><th class="num">RC</th></tr></thead><tbody><tr><td>${escapeHtml(home.name)}</td><td class="num">${res.homeGoals}</td><td class="num">${res.homeShots}</td><td class="num">${res.homeSot}</td><td class="num">${(res.homeXg || 0).toFixed(2)}</td><td class="num">${res.homePoss}%</td><td class="num">${res.homeYellows || 0}</td><td class="num">${res.homeReds || 0}</td></tr><tr><td>${escapeHtml(away.name)}</td><td class="num">${res.awayGoals}</td><td class="num">${res.awayShots}</td><td class="num">${res.awaySot}</td><td class="num">${(res.awayXg || 0).toFixed(2)}</td><td class="num">${res.awayPoss}%</td><td class="num">${res.awayYellows || 0}</td><td class="num">${res.awayReds || 0}</td></tr></tbody></table><div class="panel-lite mt12"><div class="panel-head"><h3>Goal Log</h3><span>Events</span></div>${goalRows}</div>`);
+}
+
 function formatMarketValue(value) {
   return formatMoney(roundMarketValue(value));
 }
@@ -426,14 +546,15 @@ function getPlayerStatProfile(player) {
   const technical = d.technical || {};
   const defending = d.defending || {};
   const goalkeeping = d.goalkeeping || {};
-  const basePass = Number(a.passing || 60);
+
+  const basePass = Number(a.passing || 55);
   const baseShoot = Number(a.shooting || 55);
   const baseDrib = Number(a.dribbling || 58);
   const baseDef = Number(a.defense || 45);
   const basePhys = Number(a.physical || 58);
   const basePace = Number(a.pace || 60);
 
-  const stats = {
+  const rawStats = {
     physical: {
       Height: heightToRating(player?.height),
       Strength: clampRating(physical.strength ?? basePhys),
@@ -483,23 +604,24 @@ function getPlayerStatProfile(player) {
     },
   };
 
+  const stats = tuneStatsForPosition(player, rawStats);
   const categoryRatings = Object.fromEntries(Object.entries(stats).map(([key, group]) => [key, averageRatings(Object.values(group))]));
   const weightsByPos = {
-    GK: { goalkeeping: 0.62, physical: 0.14, mentality: 0.12, passing: 0.08, defense: 0.04 },
-    CB: { defense: 0.42, physical: 0.26, mentality: 0.12, passing: 0.1, skill: 0.05, shooting: 0.05 },
-    LB: { defense: 0.26, physical: 0.22, passing: 0.18, skill: 0.16, mentality: 0.1, shooting: 0.08 },
-    RB: { defense: 0.26, physical: 0.22, passing: 0.18, skill: 0.16, mentality: 0.1, shooting: 0.08 },
-    CDM: { defense: 0.26, passing: 0.22, physical: 0.18, mentality: 0.16, skill: 0.12, shooting: 0.06 },
-    CM: { passing: 0.24, skill: 0.22, mentality: 0.18, physical: 0.16, defense: 0.12, shooting: 0.08 },
-    CAM: { passing: 0.26, skill: 0.24, mentality: 0.16, shooting: 0.16, physical: 0.1, defense: 0.08 },
+    GK: { goalkeeping: 0.72, physical: 0.12, mentality: 0.08, passing: 0.06, defense: 0.02 },
+    CB: { defense: 0.44, physical: 0.24, mentality: 0.12, passing: 0.1, skill: 0.05, shooting: 0.05 },
+    LB: { defense: 0.24, physical: 0.22, passing: 0.18, skill: 0.16, mentality: 0.1, shooting: 0.1 },
+    RB: { defense: 0.24, physical: 0.22, passing: 0.18, skill: 0.16, mentality: 0.1, shooting: 0.1 },
+    CDM: { defense: 0.24, passing: 0.22, physical: 0.18, mentality: 0.16, skill: 0.12, shooting: 0.08 },
+    CM: { passing: 0.24, skill: 0.2, mentality: 0.18, physical: 0.16, defense: 0.12, shooting: 0.1 },
+    CAM: { passing: 0.26, skill: 0.24, mentality: 0.14, shooting: 0.18, physical: 0.1, defense: 0.08 },
     LM: { skill: 0.24, passing: 0.2, physical: 0.18, shooting: 0.16, mentality: 0.12, defense: 0.1 },
     RM: { skill: 0.24, passing: 0.2, physical: 0.18, shooting: 0.16, mentality: 0.12, defense: 0.1 },
-    LW: { skill: 0.26, shooting: 0.2, passing: 0.18, physical: 0.16, mentality: 0.12, defense: 0.08 },
-    RW: { skill: 0.26, shooting: 0.2, passing: 0.18, physical: 0.16, mentality: 0.12, defense: 0.08 },
-    ST: { shooting: 0.32, skill: 0.2, physical: 0.18, mentality: 0.14, passing: 0.1, defense: 0.06 },
+    LW: { skill: 0.28, shooting: 0.22, passing: 0.16, physical: 0.14, mentality: 0.12, defense: 0.08 },
+    RW: { skill: 0.28, shooting: 0.22, passing: 0.16, physical: 0.14, mentality: 0.12, defense: 0.08 },
+    ST: { shooting: 0.34, skill: 0.2, physical: 0.18, mentality: 0.14, passing: 0.1, defense: 0.04 },
   };
   const weights = weightsByPos[player?.position] || { physical: .17, passing: .17, shooting: .17, skill: .17, mentality: .16, defense: .16 };
-  const positionRating = clampRating(Object.entries(weights).reduce((sum, [key, wt]) => sum + (categoryRatings[key] || 0) * wt, 0));
+  const positionRating = clampRating(Math.round(Object.entries(weights).reduce((sum, [key, wt]) => sum + (categoryRatings[key] || 0) * wt, 0)));
   return { stats, categoryRatings, positionRating };
 }
 
@@ -793,11 +915,18 @@ function normalizeState(st) {
   for (const player of [...(st.players || []), ...(st.freeAgents || [])]) {
     normalizeLegacyPosition(player);
     hydratePlayer(player, seasonYear);
+    const prof = getPlayerStatProfile(player);
+    player.overall = prof.positionRating;
+    player.potential = Math.max(player.overall, Number(player.potential || player.overall));
   }
   for (const teamId of Object.keys(st.academies || {})) {
     st.academies[teamId] = (st.academies[teamId] || []).map(p => {
       normalizeLegacyPosition(p);
-      return hydratePlayer(p, seasonYear);
+      hydratePlayer(p, seasonYear);
+      const prof = getPlayerStatProfile(p);
+      p.overall = prof.positionRating;
+      p.potential = Math.max(p.overall, Number(p.potential || p.overall));
+      return p;
     });
   }
 
@@ -809,7 +938,11 @@ function normalizeState(st) {
   st.draft.pool ||= [];
   st.draft.pool = st.draft.pool.map(p => {
     normalizeLegacyPosition(p);
-    return hydratePlayer(p, seasonYear);
+    hydratePlayer(p, seasonYear);
+    const prof = getPlayerStatProfile(p);
+    p.overall = prof.positionRating;
+    p.potential = Math.max(p.overall, Number(p.potential || p.overall));
+    return p;
   });
   st.draft.picks ||= [];
   st.draft.order ||= [];
@@ -1683,6 +1816,26 @@ async function showVARReview(minute, scorerName = "") {
 
 // ── Main live match loop ─────────────────────────────────────────────────────
 
+function buildAuxMatchEvents(match, result) {
+  const homePack = livePitchScene?.homePack || getLineupForFormation(match.homeTeamId, getLiveFormation(match.homeTeamId));
+  const awayPack = livePitchScene?.awayPack || getLineupForFormation(match.awayTeamId, getLiveFormation(match.awayTeamId));
+  const randomPlayerId = (pack, posFilter = null) => {
+    const pool = (pack?.xi || []).map(x => x.player).filter(Boolean).filter(p => !posFilter || posFilter(p));
+    return pool.length ? pool[Math.floor(Math.random() * pool.length)].id : null;
+  };
+  const extra = [];
+  for (let i = 0; i < (result.homeYellows || 0); i++) extra.push({ minute: 18 + i * 11 + Math.floor(Math.random()*10), type: "yellow", side: "home", playerId: randomPlayerId(homePack, p => p.position !== "GK") });
+  for (let i = 0; i < (result.awayYellows || 0); i++) extra.push({ minute: 20 + i * 9 + Math.floor(Math.random()*12), type: "yellow", side: "away", playerId: randomPlayerId(awayPack, p => p.position !== "GK") });
+  for (let i = 0; i < (result.homeReds || 0); i++) extra.push({ minute: 62 + Math.floor(Math.random()*18), type: "red", side: "home", playerId: randomPlayerId(homePack, p => p.position !== "GK") });
+  for (let i = 0; i < (result.awayReds || 0); i++) extra.push({ minute: 62 + Math.floor(Math.random()*18), type: "red", side: "away", playerId: randomPlayerId(awayPack, p => p.position !== "GK") });
+  const subMinutes = [58, 67, 76];
+  subMinutes.forEach((m, idx) => {
+    if ((homePack?.bench || [])[idx]) extra.push({ minute: m + Math.floor(Math.random()*4), type: "sub", side: "home", playerId: homePack.bench[idx].id });
+    if ((awayPack?.bench || [])[idx]) extra.push({ minute: m + 1 + Math.floor(Math.random()*4), type: "sub", side: "away", playerId: awayPack.bench[idx].id });
+  });
+  return extra.sort((a,b) => a.minute - b.minute);
+}
+
 async function playLiveMatch(match) {
   bindOverlayButtons();
 
@@ -1738,7 +1891,7 @@ async function playLiveMatch(match) {
   renderLiveStatBars(result, match, 1);
 
   let hg = 0, ag = 0, ei = 0;
-  const sortedEvents = [...(result.events || [])].sort((a, b) => a.minute - b.minute);
+  const timelineEvents = [...(result.events || []).map(ev => ({ ...ev, type: 'goal' })), ...buildAuxMatchEvents(match, result)].sort((a, b) => a.minute - b.minute || ((a.type === 'goal') ? -1 : 1));
 
   addSimEvent(0, `<b>Kickoff!</b> ${escapeHtml(ht.name)} vs ${escapeHtml(at.name)}`);
 
@@ -1776,53 +1929,91 @@ async function playLiveMatch(match) {
     if (Math.random() < 0.18) addSimEvent(minute, commentary[Math.floor(Math.random() * commentary.length)]);
     await animateLiveSegment(livePitchScene, minute, result, match, null);
 
-    while (ei < sortedEvents.length && sortedEvents[ei].minute <= minute) {
-      const ev = sortedEvents[ei];
-      const scorer = ev.scorerId ? byPlayerId(ev.scorerId) : null;
-      const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
-      const pName = scorer?.name || "Unknown";
-      bumpLiveRating(scorer?.id, 0.95);
-      bumpLiveRating(assist?.id, 0.35);
-      const concededPack = ev.side === "home" ? livePitchScene?.awayPack : livePitchScene?.homePack;
-      (concededPack?.xi || []).forEach(({ player }) => bumpLiveRating(player?.id, player?.position === 'GK' ? -0.22 : -0.08));
+    while (ei < timelineEvents.length && timelineEvents[ei].minute <= minute) {
+      const ev = timelineEvents[ei];
+      if (ev.type === "goal") {
+        const scorer = ev.scorerId ? byPlayerId(ev.scorerId) : null;
+        const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
+        const pName = scorer?.name || "Unknown";
+        bumpLiveRating(scorer?.id, 0.95);
+        bumpLiveRating(assist?.id, 0.35);
+        const concededPack = ev.side === "home" ? livePitchScene?.awayPack : livePitchScene?.homePack;
+        (concededPack?.xi || []).forEach(({ player }) => bumpLiveRating(player?.id, player?.position === 'GK' ? -0.22 : -0.08));
 
-      if (ev.side === "home") hg++; else ag++;
-      if (el("sim-score")) el("sim-score").textContent = `${hg} – ${ag}`;
+        if (ev.side === "home") hg++; else ag++;
+        if (el("sim-score")) el("sim-score").textContent = `${hg} – ${ag}`;
 
-      if (Math.random() < 0.10) {
-        simPaused = true; await sleep(16);
-        const confirmed = await showVARReview(minute, pName);
-        simPaused = false;
-        if (!confirmed) {
-          if (ev.side === "home") hg--; else ag--;
-          if (el("sim-score")) el("sim-score").textContent = `${hg} – ${ag}`;
-          ei++; continue;
+        if (Math.random() < 0.10 && !simSkipped) {
+          simPaused = true; await sleep(16);
+          const confirmed = await showVARReview(minute, pName);
+          simPaused = false;
+          if (!confirmed) {
+            if (ev.side === "home") hg--; else ag--;
+            if (el("sim-score")) el("sim-score").textContent = `${hg} – ${ag}`;
+            ei++; continue;
+          }
         }
-      }
 
-      livePitchScene.lastMinute = minute;
-      await animateLiveSegment(livePitchScene, minute, result, match, { type: "goal", side: ev.side, scorer: pName });
+        livePitchScene.lastMinute = minute;
+        await animateLiveSegment(livePitchScene, minute, result, match, { type: "goal", side: ev.side, scorer: pName });
 
-      addSimEvent(minute,
-        `⚽ <b>GOAL!</b> ${escapeHtml(pName)}${assist ? ` <span style="color:var(--muted)">(assist: ${escapeHtml(assist.name)})</span>` : ""}`,
-        "background:rgba(34,197,94,0.08);border-left:3px solid var(--green);padding-left:6px;border-radius:3px;");
+        addSimEvent(minute,
+          `⚽ <b>${escapeHtml(pName)}</b>${assist ? ` <span class="sim-event-assist">👟 ${escapeHtml(assist.name)}</span>` : ""}`,
+          "background:rgba(34,197,94,0.08);border-left:3px solid var(--green);padding-left:6px;border-radius:3px;");
 
-      const scoreEl = el("sim-score");
-      if (scoreEl) {
-        scoreEl.style.transition = "transform .22s,color .22s";
-        scoreEl.style.color = "var(--green)";
-        scoreEl.style.transform = "scale(1.08)";
-        setTimeout(() => { if (scoreEl) { scoreEl.style.color = ""; scoreEl.style.transform = ""; } }, 420);
-      }
+        const scoreEl = el("sim-score");
+        if (scoreEl) {
+          scoreEl.style.transition = "transform .22s,color .22s";
+          scoreEl.style.color = "var(--green)";
+          scoreEl.style.transform = "scale(1.08)";
+          setTimeout(() => { if (scoreEl) { scoreEl.style.color = ""; scoreEl.style.transform = ""; } }, 420);
+        }
 
-      if (!simSkipped && !simAbortRequested) {
-        simPaused = true; await sleep(16);
-        await showGoalReplay(pName, assist?.name || null, minute, ev.side);
-        simPaused = false;
+        if (!simSkipped && !simAbortRequested) {
+          simPaused = true; await sleep(16);
+          await showGoalReplay(pName, assist?.name || null, minute, ev.side);
+          simPaused = false;
+        }
+      } else if (ev.type === "yellow") {
+        const player = ev.playerId ? byPlayerId(ev.playerId) : null;
+        addSimEvent(minute, `🟨 ${escapeHtml(player?.name || 'Player')} booked.`);
+        bumpLiveRating(player?.id, -0.18);
+      } else if (ev.type === "red") {
+        const player = ev.playerId ? byPlayerId(ev.playerId) : null;
+        addSimEvent(minute, `🟥 ${escapeHtml(player?.name || 'Player')} sent off.`, "color:var(--red);font-weight:700;");
+        bumpLiveRating(player?.id, -0.65);
+      } else if (ev.type === "sub") {
+        const player = ev.playerId ? byPlayerId(ev.playerId) : null;
+        addSimEvent(minute, `🔁 ${escapeHtml(player?.name || 'Substitute')} enters the match.`);
+        bumpLiveRating(player?.id, 0.08);
       }
       ei++;
-    }
+    }    }
     await sleep(simSpeedKey === "turbo" ? 10 : simSpeedKey === "fast" ? 14 : 18);
+  }
+
+  if (simSkipped && !simAbortRequested) {
+    for (; ei < timelineEvents.length; ei++) {
+      const ev = timelineEvents[ei];
+      const minute = ev.minute || 90;
+      if (ev.type === "goal") {
+        const scorer = ev.scorerId ? byPlayerId(ev.scorerId) : null;
+        const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
+        if (ev.side === "home") hg++; else ag++;
+        if (el("sim-score")) el("sim-score").textContent = `${hg} – ${ag}`;
+        addSimEvent(minute, `⚽ <b>${escapeHtml(scorer?.name || 'Unknown')}</b>${assist ? ` <span class="sim-event-assist">👟 ${escapeHtml(assist.name)}</span>` : ""}`);
+      } else if (ev.type === "yellow") {
+        const player = ev.playerId ? byPlayerId(ev.playerId) : null;
+        addSimEvent(minute, `🟨 ${escapeHtml(player?.name || 'Player')} booked.`);
+      } else if (ev.type === "red") {
+        const player = ev.playerId ? byPlayerId(ev.playerId) : null;
+        addSimEvent(minute, `🟥 ${escapeHtml(player?.name || 'Player')} sent off.`);
+      } else if (ev.type === "sub") {
+        const player = ev.playerId ? byPlayerId(ev.playerId) : null;
+        addSimEvent(minute, `🔁 ${escapeHtml(player?.name || 'Substitute')} enters the match.`);
+      }
+    }
+    if (el("sim-score")) el("sim-score").textContent = `${result.homeGoals} – ${result.awayGoals}`;
   }
 
   simInProgress = false;
@@ -1893,6 +2084,8 @@ function openPlayerProfile(playerId) {
   const s = p.stats || {};
   const country = p.nationality || "Unknown";
   const profile = getPlayerStatProfile(p);
+  const displayOverall = profile.positionRating;
+  const displayPotential = Math.max(displayOverall, Number(p.potential || displayOverall));
   const categoryOrder = [
     ["Physical", profile.stats.physical],
     ["Passing", profile.stats.passing],
@@ -1902,17 +2095,10 @@ function openPlayerProfile(playerId) {
     ["Defense", profile.stats.defense],
     ["Goalkeeping", profile.stats.goalkeeping],
   ];
-  const years = [];
-  for (let y = Math.max(2023, (state.season.year || 2026) - 3); y <= (state.season.year || 2026); y++) years.push(y);
-  const marketSeriesRaw = years.map((year, idx) => {
-    const ageAdj = p.age <= 20 ? 1.05 : p.age <= 24 ? 1.12 : p.age <= 29 ? 1 : p.age <= 32 ? 0.92 : 0.82;
-    return Math.max(350000, Math.round((p.contract?.salary || 100000) * (0.7 + idx * 0.12) * ageAdj * (0.84 + ((profile.positionRating || p.overall || 60) - 55) / 78)));
-  });
-  const marketSeries = marketSeriesRaw.map(v => roundMarketValue(v));
-  const highest = Math.max(...marketSeries);
   const statTiles = p.position === "GK"
-    ? [["Clean sheets", s.cleanSheets || 0], ["Goals against", s.ga || 0], ["Matches", s.gp || 0], ["Rating", getLivePlayerRating(p, 1).toFixed(2)], ["Minutes", formatNumber(s.min || 0)], ["Saves", s.saves || 0]]
-    : [["Goals", s.goals || 0], ["Assists", s.assists || 0], ["Started", s.gs || 0], ["Matches", s.gp || 0], ["Minutes", formatNumber(s.min || 0)], ["Rating", getLivePlayerRating(p, 1).toFixed(2)], ["Yellow cards", s.yellows || 0], ["Red cards", s.reds || 0]];
+    ? [["Clean sheets", s.cleanSheets || 0], ["Goals against", s.ga || 0], ["Matches", s.gp || 0], ["Rating", averageMatchRating(p).toFixed(2)], ["Minutes", formatNumber(s.min || 0)], ["Saves", s.saves || 0]]
+    : [["Goals", s.goals || 0], ["Assists", s.assists || 0], ["Started", s.gs || 0], ["Matches", s.gp || 0], ["Minutes", formatNumber(s.min || 0)], ["Rating", averageMatchRating(p).toFixed(2)], ["Yellow cards", s.yellows || 0], ["Red cards", s.reds || 0]];
+  const recentRatings = getRecentMatchRatings(p, 8);
   const traits = (p.traits || []).slice(0, 5);
   const traitHtml = traits.length ? traits.map(t => `<span class="trait-pill">${escapeHtml(t)}</span>`).join("") : `<span class="trait-pill">Balanced profile</span>`;
   const secondaryPosition = p.position === "LB" ? "LM"
@@ -1923,10 +2109,10 @@ function openPlayerProfile(playerId) {
     : "Versatile";
 
   const html = `<div id="playerProfileOverlay" class="pp-overlay">
-    <div class="pp-modal pp-player-shell player-profile-clean-shell">
+    <div class="pp-modal pp-player-shell player-profile-clean-shell player-profile-no-hero-bg">
       <button class="pp-close" id="ppClose">×</button>
-      <div class="player-hero-card player-hero-card-clean">
-        <div class="player-hero-top player-hero-top-clean">
+      <div class="player-hero-card player-hero-card-clean player-hero-card-minimal">
+        <div class="player-hero-top-clean player-hero-top-tabs">
           <div class="player-hero-id-block">
             <div class="player-avatar">${escapeHtml((p.name || "P").split(" ").map(x => x[0]).slice(0, 2).join(""))}</div>
             <div>
@@ -1934,81 +2120,91 @@ function openPlayerProfile(playerId) {
               <div class="player-hero-sub">${team ? teamLink(team.id, team.name) : "Free Agent"} · ${escapeHtml(country)}</div>
             </div>
           </div>
-          <div class="player-hero-metrics-clean">
-            <div><span>Overall</span><strong>${p.overall}</strong></div>
-            <div><span>Potential</span><strong>${p.potential}</strong></div>
+          <div class="player-hero-metrics-clean player-hero-metrics-three">
+            <div><span>Overall</span><strong>${displayOverall}</strong></div>
+            <div><span>Potential</span><strong>${displayPotential}</strong></div>
             <div><span>${escapeHtml(p.position)} rating</span><strong>${profile.positionRating}</strong></div>
-            <div><span>Market value</span><strong>${formatMarketValue(marketSeries[marketSeries.length - 1])}</strong></div>
           </div>
+        </div>
+        <div class="player-profile-tabbar">
+          <button class="pp-tab-btn active" data-pp-tab="overview">Overview</button>
+          <button class="pp-tab-btn" data-pp-tab="ratings">Ratings</button>
+          <button class="pp-tab-btn" data-pp-tab="stats">Stats</button>
         </div>
       </div>
 
-      <div class="player-profile-top-grid-clean">
-        <section class="panel player-summary-panel-clean">
-          <div class="panel-head"><h3>Overview</h3><span>${team ? teamLink(team.id, team.name) : "Free Agent"}</span></div>
-          <div class="player-summary-grid-clean">
-            <div class="pp-info-box"><span class="pp-info-lbl">Height</span><strong class="pp-info-val">${escapeHtml(p.height || `5'10"`)}</strong></div>
-            <div class="pp-info-box"><span class="pp-info-lbl">Age</span><strong class="pp-info-val">${p.age}</strong></div>
-            <div class="pp-info-box"><span class="pp-info-lbl">Preferred foot</span><strong class="pp-info-val">${escapeHtml(p.preferredFoot || "Right")}</strong></div>
-            <div class="pp-info-box"><span class="pp-info-lbl">Country</span><strong class="pp-info-val">${escapeHtml(country)}</strong></div>
-            <div class="pp-info-box"><span class="pp-info-lbl">Transfer value</span><strong class="pp-info-val">${formatMarketValue(marketSeries[marketSeries.length - 1])}</strong></div>
-            <div class="pp-info-box"><span class="pp-info-lbl">Contract end</span><strong class="pp-info-val">${p.contract?.expiresYear || (state.season.year + (p.contract?.yearsLeft || 0))}</strong></div>
-          </div>
-          <div class="player-overview-split-clean">
-            <div class="player-position-box-clean">
-              <div class="pp-section-title">Position</div>
-              <div class="position-primary">${escapeHtml(p.position)}</div>
-              <div class="note">Primary</div>
-              <div class="player-pos-chip">${escapeHtml(p.position)}</div>
-              <div class="note" style="margin-top:10px;">${escapeHtml(secondaryPosition)}</div>
+      <div class="pp-tab-panel active" data-pp-panel="overview">
+        <div class="player-profile-top-grid-clean overview-grid-balanced">
+          <section class="panel player-summary-panel-clean">
+            <div class="panel-head"><h3>Overview</h3><span>${team ? teamLink(team.id, team.name) : "Free Agent"}</span></div>
+            <div class="player-summary-grid-clean">
+              <div class="pp-info-box"><span class="pp-info-lbl">Height</span><strong class="pp-info-val">${escapeHtml(p.height || `5'10"`)}</strong></div>
+              <div class="pp-info-box"><span class="pp-info-lbl">Age</span><strong class="pp-info-val">${p.age}</strong></div>
+              <div class="pp-info-box"><span class="pp-info-lbl">Preferred foot</span><strong class="pp-info-val">${escapeHtml(p.preferredFoot || "Right")}</strong></div>
+              <div class="pp-info-box"><span class="pp-info-lbl">Country</span><strong class="pp-info-val">${escapeHtml(country)}</strong></div>
+              <div class="pp-info-box"><span class="pp-info-lbl">Contract end</span><strong class="pp-info-val">${p.contract?.expiresYear || (state.season.year + (p.contract?.yearsLeft || 0))}</strong></div>
+              <div class="pp-info-box"><span class="pp-info-lbl">Salary</span><strong class="pp-info-val">${formatMoney(roundMarketValue(p.contract?.salary || 0))}</strong></div>
             </div>
-            <div class="player-traits-card-clean">
-              <div class="pp-section-title">Player traits</div>
-              <div class="trait-radar-placeholder">${traitHtml}</div>
+            <div class="player-overview-split-clean">
+              <div class="player-position-box-clean">
+                <div class="pp-section-title">Position</div>
+                <div class="position-primary">${escapeHtml(p.position)}</div>
+                <div class="note">Primary</div>
+                <div class="player-pos-chip">${escapeHtml(p.position)}</div>
+                <div class="note" style="margin-top:10px;">${escapeHtml(secondaryPosition)}</div>
+              </div>
+              <div class="player-traits-card-clean">
+                <div class="pp-section-title">Player traits</div>
+                <div class="trait-radar-placeholder">${traitHtml}</div>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section class="panel player-career-panel-clean">
-          <div class="panel-head"><h3>Career</h3><span>${team ? "Senior career" : "Free agent"}</span></div>
-          <div class="career-list">
-            <div class="career-item"><strong>${team ? escapeHtml(team.name) : "Free Agent"}</strong><span>${Math.max(2023, state.season.year - (p.contract?.yearsLeft || 0) - 1)} — now</span><em>${formatNumber(s.gp || 0)} apps</em></div>
-            ${p.homegrown ? `<div class="career-item"><strong>Youth career</strong><span>Academy pathway</span><em>Homegrown</em></div>` : ""}
-          </div>
-          <div class="subtle-divider"></div>
-          <div class="player-mini-metrics player-mini-metrics-clean">
-            <div><span>Salary</span><strong>${formatMoney(p.contract?.salary || 0)}</strong></div>
-            <div><span>Country</span><strong>${escapeHtml(country)}</strong></div>
-            <div><span>Position rating</span><strong>${profile.positionRating}</strong></div>
-            <div><span>Potential</span><strong>${p.potential}</strong></div>
-          </div>
-        </section>
+          <section class="panel player-career-panel-clean">
+            <div class="panel-head"><h3>Career</h3><span>${team ? "Senior career" : "Free agent"}</span></div>
+            <div class="career-list">
+              <div class="career-item"><strong>${team ? escapeHtml(team.name) : "Free Agent"}</strong><span>${Math.max(2023, state.season.year - (p.contract?.yearsLeft || 0) - 1)} — now</span><em>${formatNumber(s.gp || 0)} apps</em></div>
+              ${p.homegrown ? `<div class="career-item"><strong>Youth career</strong><span>Academy pathway</span><em>Homegrown</em></div>` : ""}
+            </div>
+            <div class="subtle-divider"></div>
+            <div class="player-mini-metrics player-mini-metrics-clean">
+              <div><span>Average rating</span><strong>${averageMatchRating(p).toFixed(2)}</strong></div>
+              <div><span>Country</span><strong>${escapeHtml(country)}</strong></div>
+              <div><span>Position rating</span><strong>${profile.positionRating}</strong></div>
+              <div><span>Potential</span><strong>${displayPotential}</strong></div>
+            </div>
+          </section>
+        </div>
       </div>
 
-      <div class="player-ratings-grid-clean">
-        ${categoryOrder.map(([title, group]) => renderPlayerStatCard(title, profile.categoryRatings[title.toLowerCase()] || averageRatings(Object.values(group)), group)).join('')}
+      <div class="pp-tab-panel" data-pp-panel="ratings">
+        <div class="player-ratings-grid-clean">
+          ${categoryOrder.map(([title, group]) => renderPlayerStatCard(title, profile.categoryRatings[title.toLowerCase()] || averageRatings(Object.values(group)), group)).join('')}
+        </div>
       </div>
 
-      <div class="player-profile-bottom-grid-clean">
-        <section class="panel">
-          <div class="panel-head"><h3>Transfer value</h3><span>Highest: ${formatMarketValue(highest)}</span></div>
-          <div class="market-graph market-graph-clean">${marketSeries.map(v => `<div class="market-bar"><i style="height:${Math.max(12, Math.round((v / highest) * 100))}%"></i></div>`).join("")}</div>
-          <div class="market-years">${years.map(y => `<span>${y}</span>`).join("")}</div>
-        </section>
-        <section class="panel">
-          <div class="panel-head"><h3>${state.season.year} / ${state.season.year + 1}</h3><span>${escapeHtml(team?.name || "Season stats")}</span></div>
-          <div class="player-season-stat-strip player-season-stat-strip-clean">${statTiles.map(([k,v]) => `<div class="season-stat"><strong>${v}</strong><span>${escapeHtml(k)}</span></div>`).join("")}</div>
-        </section>
-      </div>
-
-      <div class="panel">
-        <div class="panel-head"><h3>Match stats</h3><span>Sim season log</span></div>
-        <table class="tight-table player-match-table-clean"><thead><tr><th>Category</th><th class="num">Value</th><th>Category</th><th class="num">Value</th></tr></thead><tbody>
-          <tr><td>Goals</td><td class="num">${s.goals || 0}</td><td>Assists</td><td class="num">${s.assists || 0}</td></tr>
-          <tr><td>Shots</td><td class="num">${s.shots || 0}</td><td>On target</td><td class="num">${s.shotsOnTarget || 0}</td></tr>
-          <tr><td>xG</td><td class="num">${(s.xg || 0).toFixed(1)}</td><td>Minutes</td><td class="num">${formatNumber(s.min || 0)}</td></tr>
-          <tr><td>Yellow cards</td><td class="num">${s.yellows || 0}</td><td>Red cards</td><td class="num">${s.reds || 0}</td></tr>
-        </tbody></table>
+      <div class="pp-tab-panel" data-pp-panel="stats">
+        <div class="player-profile-bottom-grid-clean player-profile-bottom-grid-stats">
+          <section class="panel">
+            <div class="panel-head"><h3>${state.season.year} / ${state.season.year + 1}</h3><span>${escapeHtml(team?.name || "Season stats")}</span></div>
+            <div class="player-season-stat-strip player-season-stat-strip-clean">${statTiles.map(([k,v]) => `<div class="season-stat"><strong>${v}</strong><span>${escapeHtml(k)}</span></div>`).join("")}</div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h3>Match rating history</h3><span>Recent matches</span></div>
+            <table class="tight-table player-match-table-clean"><thead><tr><th>Match</th><th>Week</th><th>Result</th><th class="num">Rating</th></tr></thead><tbody>
+              ${recentRatings.slice().reverse().map((row, idx) => `<tr><td>#${recentRatings.length - idx}</td><td>${row.week || "—"}</td><td>${escapeHtml(row.result || "—")}</td><td class="num">${Number(row.rating || 0).toFixed(1)}</td></tr>`).join("")}
+            </tbody></table>
+          </section>
+        </div>
+        <div class="panel mt12">
+          <div class="panel-head"><h3>Match stats</h3><span>Season totals</span></div>
+          <table class="tight-table player-match-table-clean"><thead><tr><th>Category</th><th class="num">Value</th><th>Category</th><th class="num">Value</th></tr></thead><tbody>
+            <tr><td>Goals</td><td class="num">${s.goals || 0}</td><td>Assists</td><td class="num">${s.assists || 0}</td></tr>
+            <tr><td>Shots</td><td class="num">${s.shots || 0}</td><td>On target</td><td class="num">${s.shotsOnTarget || 0}</td></tr>
+            <tr><td>xG</td><td class="num">${(s.xg || 0).toFixed(1)}</td><td>Minutes</td><td class="num">${formatNumber(s.min || 0)}</td></tr>
+            <tr><td>Yellow cards</td><td class="num">${s.yellows || 0}</td><td>Red cards</td><td class="num">${s.reds || 0}</td></tr>
+          </tbody></table>
+        </div>
       </div>
     </div>
   </div>`;
@@ -2017,6 +2213,11 @@ function openPlayerProfile(playerId) {
   document.body.insertAdjacentHTML("beforeend", html);
   document.getElementById("ppClose")?.addEventListener("click", () => document.getElementById("playerProfileOverlay")?.remove());
   document.getElementById("playerProfileOverlay")?.addEventListener("click", e => { if (e.target.id === "playerProfileOverlay") document.getElementById("playerProfileOverlay")?.remove(); });
+  document.querySelectorAll("#playerProfileOverlay .pp-tab-btn").forEach(btn => btn.addEventListener("click", () => {
+    const tab = btn.dataset.ppTab;
+    document.querySelectorAll("#playerProfileOverlay .pp-tab-btn").forEach(b => b.classList.toggle("active", b === btn));
+    document.querySelectorAll("#playerProfileOverlay .pp-tab-panel").forEach(panel => panel.classList.toggle("active", panel.dataset.ppPanel === tab));
+  }));
   document.querySelectorAll("#playerProfileOverlay .team-link").forEach(el => {
     el.oncontextmenu = e => { e.preventDefault(); armOpenInNewTab(el, "team", el.dataset.id); };
     el.onclick = async e => {
@@ -2045,7 +2246,7 @@ function renderDashboard() {
   const roster = getTeamPlayers(state, team.id);
   const goalLeader = [...roster].sort((a, b) => (b.stats.goals - a.stats.goals) || (b.overall - a.overall))[0];
   const assistLeader = [...roster].sort((a, b) => (b.stats.assists - a.stats.assists) || (b.overall - a.overall))[0];
-  const ratingLeader = [...roster].sort((a, b) => b.overall - a.overall)[0];
+  const ratingLeader = [...roster].sort((a, b) => averageMatchRating(b) - averageMatchRating(a))[0];
   const headlines = (state.transactions || []).slice(0, 6).reverse();
   const schedule = state.schedule.filter(m => !m.played && (m.homeTeamId === team.id || m.awayTeamId === team.id)).slice(0, 5);
   const confTable = confRows.slice(0, 16).map((r, i) => `<tr class="${r.teamId === team.id ? 'highlight-row' : ''}"><td>${i + 1}</td><td>${teamLink(r.teamId, byTeamId(r.teamId)?.name || '—')}</td><td class="num">${r.points}</td><td class="num">${r.gd > 0 ? '+' : ''}${r.gd}</td></tr>`).join("");
@@ -2085,7 +2286,7 @@ function renderDashboard() {
           <h4>Team Leaders</h4>
           <div class="dash-list-row"><span>Goals</span><strong>${goalLeader ? playerLink(goalLeader.id, goalLeader.name) : '—'}</strong><span>${goalLeader?.stats.goals || 0}</span></div>
           <div class="dash-list-row"><span>Assists</span><strong>${assistLeader ? playerLink(assistLeader.id, assistLeader.name) : '—'}</strong><span>${assistLeader?.stats.assists || 0}</span></div>
-          <div class="dash-list-row"><span>Best player</span><strong>${ratingLeader ? playerLink(ratingLeader.id, ratingLeader.name) : '—'}</strong><span>${ratingLeader?.overall || 0}</span></div>
+          <div class="dash-list-row"><span>Best average rating</span><strong>${ratingLeader ? playerLink(ratingLeader.id, ratingLeader.name) : '—'}</strong><span>${ratingLeader ? averageMatchRating(ratingLeader).toFixed(2) : '0.00'}</span></div>
           <div class="panel-link-row"><button class="text-link nav-jump-btn" data-target-page="roster">» Full Roster</button></div>
         </div>
         <div>
@@ -2186,52 +2387,65 @@ function renderWeeklySchedule() {
   weeklyScheduleWeek = Math.max(1, Math.min(maxWeek, weeklyScheduleWeek || state.calendar.week || 1));
   const currentWeek = state.calendar.week || 1;
   const weekMatches = state.schedule.filter(m => m.week === weeklyScheduleWeek);
+  const upcomingMatches = weekMatches.filter(m => !m.played);
+  const completedMatches = weekMatches.filter(m => m.played);
   const lockedFuture = weeklyScheduleWeek > currentWeek;
+
+  const renderFixtureCard = (m, completed = false) => {
+    const home = byTeamId(m.homeTeamId); const away = byTeamId(m.awayTeamId);
+    const homePalette = teamColors(home.id); const awayPalette = teamColors(away.id);
+    const homeRec = getTeamRecord(home.id) || { wins:0, draws:0, losses:0 };
+    const awayRec = getTeamRecord(away.id) || { wins:0, draws:0, losses:0 };
+    const homeCoach = getTeamCoach(home.id);
+    const awayCoach = getTeamCoach(away.id);
+    const result = m.result || {};
+    return `<div class="week-mini-card ${completed ? 'is-complete' : ''}">
+      <div class="week-mini-teams">
+        <div class="week-mini-team" style="--team-primary:${homePalette.primary};--team-secondary:${homePalette.secondary};--team-text:${homePalette.text};">
+          <div class="week-mini-crest">${teamLogoMark(home, 'mini-team-logo')}</div>
+          <div class="week-mini-copy">
+            <div class="week-mini-name">${teamLink(home.id, home.name)}</div>
+            <div class="week-mini-meta">${homeRec.wins}-${homeRec.draws}-${homeRec.losses} · ${homeCoach ? coachLink(homeCoach.id, homeCoach.name) : 'No coach listed'}</div>
+          </div>
+          ${completed ? `<div class="week-mini-score">${result.homeGoals ?? 0}</div>` : ``}
+        </div>
+        <div class="week-mini-divider">${completed ? 'FT' : 'vs'}</div>
+        <div class="week-mini-team away" style="--team-primary:${awayPalette.primary};--team-secondary:${awayPalette.secondary};--team-text:${awayPalette.text};">
+          ${completed ? `<div class="week-mini-score">${result.awayGoals ?? 0}</div>` : ``}
+          <div class="week-mini-copy align-right">
+            <div class="week-mini-name">${teamLink(away.id, away.name)}</div>
+            <div class="week-mini-meta">${awayRec.wins}-${awayRec.draws}-${awayRec.losses} · ${awayCoach ? coachLink(awayCoach.id, awayCoach.name) : 'No coach listed'}</div>
+          </div>
+          <div class="week-mini-crest">${teamLogoMark(away, 'mini-team-logo')}</div>
+        </div>
+      </div>
+      <div class="week-mini-actions">
+        ${completed ? `<button class="small-btn box-score-btn" data-id="${m.id}">Box score</button><button class="small-btn recap-btn" data-id="${m.id}">Match recap</button>`
+        : `<button class="small-btn watch-week-match-btn" data-id="${m.id}" ${lockedFuture ? 'disabled' : ''}>Watch game</button><button class="small-btn sim-week-match-btn" data-id="${m.id}" ${lockedFuture ? 'disabled' : ''}>Sim game</button>`}
+      </div>
+    </div>`;
+  };
+
   return `${pageHead("Weekly Schedule","Current matchday lock — future weeks stay view-only until the current week is fully completed")}
   <div class="panel weekly-toolbar">
     <div class="weekly-nav">
       <button class="small-btn" id="weekPrevBtn">‹</button>
       <button class="small-btn" id="weekNextBtn">›</button>
-      <select id="weekSelect">${Array.from({length:maxWeek}, (_,i) => `<option value="${i+1}" ${i+1===weeklyScheduleWeek ? 'selected' : ''}>Matchday ${i+1}</option>`).join('')}</select>
-      ${lockedFuture ? `<span class="badge yellow">Future matchday locked</span>` : `<span class="badge green">Current playable week</span>`}
+      <select id="weekSelect">${Array.from({length:maxWeek}, (_,i) => `<option value="${i+1}" ${i+1===weeklyScheduleWeek ? 'selected' : ''}>${i+1}</option>`).join('')}</select>
+      ${lockedFuture ? `<span class="badge yellow">Future matchday locked</span>` : `<span class="badge">Current playable week</span>`}
     </div>
     <div class="weekly-actions">
-      <button class="ghost-btn" id="simWeekOnlyBtn" type="button" ${lockedFuture ? 'disabled' : ''}>Sim matchday</button>
-      <button class="primary-btn" id="liveWatchWeekBtn" type="button" ${lockedFuture ? 'disabled' : ''}>Live watch all games</button>
+      <button class="ghost-btn" id="simWeekOnlyBtn" type="button" ${lockedFuture || !upcomingMatches.length ? 'disabled' : ''}>Sim matchday</button>
+      <button class="primary-btn" id="liveWatchWeekBtn" type="button" ${lockedFuture || !upcomingMatches.length ? 'disabled' : ''}>Live watch all games</button>
     </div>
   </div>
   <div class="panel">
-    <div class="panel-head"><h3>Fixtures</h3><span>${lockedFuture ? 'Browse only' : 'Watch or sim'}</span></div>
-    <div class="weekly-grid schedule-fixture-grid">${weekMatches.map(m => {
-      const home = byTeamId(m.homeTeamId); const away = byTeamId(m.awayTeamId);
-      const homePalette = teamColors(home.id); const awayPalette = teamColors(away.id);
-      const homeRec = getTeamRecord(home.id) || { wins:0, draws:0, losses:0 };
-      const awayRec = getTeamRecord(away.id) || { wins:0, draws:0, losses:0 };
-      const playable = !lockedFuture;
-      return `<div class="week-game-card schedule-card-clean">
-        <div class="week-game-main week-game-main-clean">
-          <div class="week-fixture-team home" style="--team-primary:${homePalette.primary};--team-secondary:${homePalette.secondary};--team-text:${homePalette.text};">
-            <div class="week-team-crest">${teamLogoMark(home, 'mini-team-logo')}</div>
-            <div class="week-team-copy">
-              <div class="week-team-name-strong">${teamLink(home.id, home.name)}</div>
-              <div class="week-team-sub">${homeRec.wins}-${homeRec.draws}-${homeRec.losses} · Home</div>
-            </div>
-          </div>
-          <div class="week-versus week-versus-clean">${m.played ? `${m.result.homeGoals} - ${m.result.awayGoals}` : 'vs'}</div>
-          <div class="week-fixture-team away" style="--team-primary:${awayPalette.primary};--team-secondary:${awayPalette.secondary};--team-text:${awayPalette.text};">
-            <div class="week-team-copy align-right">
-              <div class="week-team-name-strong">${teamLink(away.id, away.name)}</div>
-              <div class="week-team-sub">${awayRec.wins}-${awayRec.draws}-${awayRec.losses} · Away</div>
-            </div>
-            <div class="week-team-crest">${teamLogoMark(away, 'mini-team-logo')}</div>
-          </div>
-        </div>
-        <div class="week-game-actions week-game-actions-v2">
-          <button class="small-btn watch-week-match-btn" data-id="${m.id}" ${!playable ? 'disabled' : ''}>Watch game</button>
-          <button class="small-btn sim-week-match-btn" data-id="${m.id}" ${(!playable || m.played) ? 'disabled' : ''}>Sim game</button>
-        </div>
-      </div>`;
-    }).join('')}</div>
+    <div class="panel-head"><h3>Upcoming Games</h3><span>${upcomingMatches.length}</span></div>
+    <div class="weekly-grid schedule-fixture-grid compact-weekly-grid">${upcomingMatches.map(m => renderFixtureCard(m, false)).join('') || `<div class="note">No upcoming matches left for this matchday.</div>`}</div>
+  </div>
+  <div class="panel mt12">
+    <div class="panel-head"><h3>Completed Games</h3><span>${completedMatches.length}</span></div>
+    <div class="weekly-grid schedule-fixture-grid compact-weekly-grid">${completedMatches.map(m => renderFixtureCard(m, true)).join('') || `<div class="note">No completed games yet for this matchday.</div>`}</div>
   </div>`;
 }
 
@@ -3069,8 +3283,9 @@ function bindPageEvents() {
   $$(".watch-week-match-btn").forEach(btn => btn.addEventListener("click", async () => {
     const match = state.schedule.find(m => m.id === btn.dataset.id);
     if (!match) return;
-    if (!match.played && match.week !== state.calendar.week) return toast("That matchday has not opened yet.", "warn");
-    if (!match.played) simulateMatch(state, match);
+    if (match.played) return toast("Completed matches move to the box score section below.", "warn");
+    if (match.week !== state.calendar.week) return toast("That matchday has not opened yet.", "warn");
+    simulateMatch(state, match);
     await playLiveMatch(match);
     await persist(); await renderPage();
   }));
@@ -3081,6 +3296,8 @@ function bindPageEvents() {
     simulateMatch(state, match);
     await persist(); await renderPage();
   }));
+  $$(".box-score-btn").forEach(btn => btn.addEventListener("click", () => showMatchDetail(btn.dataset.id, "box")));
+  $$(".recap-btn").forEach(btn => btn.addEventListener("click", () => showMatchDetail(btn.dataset.id, "recap")));
   $$(".nav-jump-btn").forEach(btn => btn.addEventListener("click", async () => {
     currentPage = btn.dataset.targetPage || "dashboard";
     $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page === currentPage));

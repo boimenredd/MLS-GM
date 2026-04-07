@@ -317,40 +317,43 @@ function buildRealMlsPlayerPool(teams, seasonYear = 2026) {
 
 function makeDetailedRatings(position, a) {
   const sideBias = (position === "LB" || position === "LM" || position === "LW") ? 2 : (position === "RB" || position === "RM" || position === "RW" ? -2 : 0);
-  return {
+  const gkMode = position === "GK";
+  const clampByPos = (val, mn, mx) => clamp(Math.round(val), mn, mx);
+  const detail = {
     physical: {
-      acceleration: clamp(Math.round(a.pace + randInt(-6, 6)), 25, 98),
-      sprintSpeed: clamp(Math.round(a.pace + randInt(-5, 5)), 25, 98),
-      agility: clamp(Math.round((a.pace + a.dribbling) / 2 + randInt(-7, 7)), 25, 98),
-      stamina: clamp(Math.round((a.physical + a.pace) / 2 + randInt(-8, 8)), 25, 98),
-      strength: clamp(Math.round(a.physical + randInt(-8, 8)), 25, 98),
-      jumping: clamp(Math.round((a.physical + a.defense) / 2 + randInt(-7, 7)), 25, 98),
+      acceleration: clampByPos(a.pace + randInt(-6, 6), gkMode ? 28 : 25, gkMode ? 74 : 98),
+      sprintSpeed: clampByPos(a.pace + randInt(-5, 5), gkMode ? 28 : 25, gkMode ? 76 : 98),
+      agility: clampByPos((a.pace + a.dribbling) / 2 + randInt(-7, 7), gkMode ? 24 : 25, gkMode ? 68 : 98),
+      stamina: clampByPos((a.physical + a.pace) / 2 + randInt(-8, 8), gkMode ? 34 : 25, gkMode ? 86 : 98),
+      strength: clampByPos(a.physical + randInt(-8, 8), 25, 98),
+      jumping: clampByPos((a.physical + a.defense) / 2 + randInt(-7, 7), gkMode ? 42 : 25, 98),
     },
     technical: {
-      finishing: clamp(Math.round((a.shooting * 1.08) + randInt(-7, 7)), 20, 98),
-      longShots: clamp(Math.round((a.shooting * 0.94) + randInt(-7, 7)), 20, 98),
-      crossing: clamp(Math.round((a.passing + a.dribbling) / 2 + (["LB","RB","LM","RM","LW","RW"].includes(position) ? 6 : -2) + sideBias + randInt(-7, 7)), 20, 98),
-      shortPassing: clamp(Math.round(a.passing + randInt(-6, 6)), 20, 98),
-      vision: clamp(Math.round((a.passing + a.dribbling) / 2 + (position === "CAM" ? 8 : 0) + randInt(-7, 7)), 20, 98),
-      dribbling: clamp(Math.round(a.dribbling + randInt(-6, 6)), 20, 98),
-      firstTouch: clamp(Math.round((a.dribbling + a.passing) / 2 + randInt(-6, 6)), 20, 98),
-      setPieces: clamp(Math.round((a.passing + a.shooting) / 2 + randInt(-10, 8)), 20, 98),
+      finishing: clampByPos((a.shooting * (gkMode ? 0.32 : 1.08)) + randInt(-7, 7), gkMode ? 5 : 20, gkMode ? 26 : 98),
+      longShots: clampByPos((a.shooting * (gkMode ? 0.36 : 0.94)) + randInt(-7, 7), gkMode ? 5 : 20, gkMode ? 34 : 98),
+      crossing: clampByPos((a.passing + a.dribbling) / 2 + (["LB","RB","LM","RM","LW","RW"].includes(position) ? 6 : -2) + sideBias + randInt(-7, 7), gkMode ? 8 : 20, gkMode ? 30 : 98),
+      shortPassing: clampByPos(a.passing + randInt(-6, 6), gkMode ? 22 : 20, gkMode ? 78 : 98),
+      vision: clampByPos((a.passing + a.dribbling) / 2 + (position === "CAM" ? 8 : 0) + randInt(-7, 7), gkMode ? 12 : 20, gkMode ? 46 : 98),
+      dribbling: clampByPos(a.dribbling + randInt(-6, 6), gkMode ? 8 : 20, gkMode ? 38 : 98),
+      firstTouch: clampByPos((a.dribbling + a.passing) / 2 + randInt(-6, 6), gkMode ? 12 : 20, gkMode ? 44 : 98),
+      setPieces: clampByPos((a.passing + a.shooting) / 2 + randInt(-10, 8), gkMode ? 8 : 20, gkMode ? 32 : 98),
     },
     defending: {
-      marking: clamp(Math.round(a.defense + (["CB","LB","RB","CDM"].includes(position) ? 5 : -8) + randInt(-7, 7)), 20, 98),
-      tackling: clamp(Math.round(a.defense + (["CB","LB","RB","CDM"].includes(position) ? 6 : -10) + randInt(-7, 7)), 20, 98),
-      interceptions: clamp(Math.round(a.defense + (["CDM","CM","CAM"].includes(position) ? 2 : 0) + randInt(-7, 7)), 20, 98),
-      heading: clamp(Math.round((a.defense + a.physical) / 2 + (position === "ST" ? 4 : 0) + randInt(-8, 8)), 20, 98),
-      positioning: clamp(Math.round((a.defense + a.passing) / 2 + randInt(-8, 8)), 20, 98),
+      marking: clampByPos(a.defense + (["CB","LB","RB","CDM"].includes(position) ? 5 : -8) + randInt(-7, 7), gkMode ? 5 : 20, gkMode ? 28 : 98),
+      tackling: clampByPos(a.defense + (["CB","LB","RB","CDM"].includes(position) ? 6 : -10) + randInt(-7, 7), gkMode ? 5 : 20, gkMode ? 24 : 98),
+      interceptions: clampByPos(a.defense + (["CDM","CM","CAM"].includes(position) ? 2 : 0) + randInt(-7, 7), gkMode ? 5 : 20, gkMode ? 26 : 98),
+      heading: clampByPos((a.defense + a.physical) / 2 + (position === "ST" ? 4 : 0) + randInt(-8, 8), gkMode ? 10 : 20, gkMode ? 34 : 98),
+      positioning: clampByPos((a.defense + a.passing) / 2 + randInt(-8, 8), gkMode ? 18 : 20, gkMode ? 60 : 98),
     },
     goalkeeping: {
-      handling: clamp(Math.round((position === "GK" ? a.defense + 10 : 8) + randInt(-8, 8)), 1, 98),
-      reflexes: clamp(Math.round((position === "GK" ? a.defense + 12 : 8) + randInt(-8, 8)), 1, 98),
-      oneOnOnes: clamp(Math.round((position === "GK" ? a.defense + 8 : 6) + randInt(-8, 8)), 1, 98),
-      kicking: clamp(Math.round((position === "GK" ? a.passing : 8) + randInt(-8, 8)), 1, 98),
-      command: clamp(Math.round((position === "GK" ? a.physical + 6 : 6) + randInt(-8, 8)), 1, 98),
+      handling: clampByPos((gkMode ? a.defense + 10 : 8) + randInt(-8, 8), 1, gkMode ? 98 : 14),
+      reflexes: clampByPos((gkMode ? a.defense + 12 : 8) + randInt(-8, 8), 1, gkMode ? 98 : 14),
+      oneOnOnes: clampByPos((gkMode ? a.defense + 8 : 6) + randInt(-8, 8), 1, gkMode ? 98 : 14),
+      kicking: clampByPos((gkMode ? a.passing : 8) + randInt(-8, 8), 1, gkMode ? 88 : 14),
+      command: clampByPos((gkMode ? a.physical + 6 : 6) + randInt(-8, 8), 1, gkMode ? 94 : 14),
     },
   };
+  return detail;
 }
 
 function deriveTraits(player) {
@@ -924,6 +927,7 @@ function giveStats(state, teamId, teamGoals, oppGoals, xg, shots, sot, yellows, 
     .sort((a, b) => b.overall - a.overall)
     .slice(0, 11);
 
+  const ratingMap = new Map();
   starters.forEach(p => {
     p.stats.gp  += 1;
     p.stats.gs  += 1;
@@ -933,12 +937,22 @@ function giveStats(state, teamId, teamGoals, oppGoals, xg, shots, sot, yellows, 
       10,
       100
     );
+    const baseRating = 6.1
+      + (resultType === "win" ? 0.45 : resultType === "draw" ? 0.15 : -0.12)
+      + Math.random() * 0.45
+      + ((p.overall || 60) - 60) * 0.012;
+    ratingMap.set(p.id, baseRating);
   });
 
   const gk = starters.find(p => p.position === "GK");
   if (gk) {
     gk.stats.ga += oppGoals;
-    if (oppGoals === 0) gk.stats.cleanSheets += 1;
+    if (oppGoals === 0) {
+      gk.stats.cleanSheets += 1;
+      ratingMap.set(gk.id, (ratingMap.get(gk.id) || 6.2) + 0.55);
+    } else {
+      ratingMap.set(gk.id, (ratingMap.get(gk.id) || 6.2) - (oppGoals * 0.1));
+    }
   }
 
   for (let i = 0; i < teamGoals; i++) {
@@ -947,17 +961,45 @@ function giveStats(state, teamId, teamGoals, oppGoals, xg, shots, sot, yellows, 
     scorer.stats.shots         += randInt(1, 3);
     scorer.stats.shotsOnTarget += 1;
     scorer.stats.xg            += xg / Math.max(1, teamGoals);
+    ratingMap.set(scorer.id, (ratingMap.get(scorer.id) || 6.2) + 0.72);
     if (Math.random() < 0.72) {
       const pool = starters.filter(p => p.id !== scorer.id);
-      if (pool.length) chooseScorer(pool).stats.assists += 1;
+      if (pool.length) {
+        const assister = chooseScorer(pool);
+        assister.stats.assists += 1;
+        ratingMap.set(assister.id, (ratingMap.get(assister.id) || 6.2) + 0.32);
+      }
     }
   }
 
-  for (let i = 0; i < yellows; i++) pick(starters).stats.yellows += 1;
+  for (let i = 0; i < yellows; i++) {
+    const booked = pick(starters);
+    booked.stats.yellows += 1;
+    ratingMap.set(booked.id, (ratingMap.get(booked.id) || 6.2) - 0.18);
+  }
   for (let i = 0; i < reds; i++) {
     const outfield = starters.filter(p => p.position !== "GK");
-    if (outfield.length) pick(outfield).stats.reds += 1;
+    if (outfield.length) {
+      const sentOff = pick(outfield);
+      sentOff.stats.reds += 1;
+      ratingMap.set(sentOff.id, (ratingMap.get(sentOff.id) || 6.2) - 0.8);
+    }
   }
+
+  starters.forEach(p => {
+    const finalRating = clamp(Math.round((ratingMap.get(p.id) || 6.2) * 10) / 10, 4.8, 9.9);
+    p.stats.ratingSum = (Number(p.stats.ratingSum) || 0) + finalRating;
+    p.stats.ratingCount = (Number(p.stats.ratingCount) || 0) + 1;
+    p.stats.lastRating = finalRating;
+    p.stats.matchRatings ||= [];
+    p.stats.matchRatings.push({
+      season: state.season.year,
+      week: state.calendar.week,
+      rating: finalRating,
+      result: resultType === "win" ? "W" : resultType === "loss" ? "L" : "D",
+    });
+    if (p.stats.matchRatings.length > 30) p.stats.matchRatings.shift();
+  });
 }
 
 // ─── Core match simulation ────────────────────────────────────────────────────
