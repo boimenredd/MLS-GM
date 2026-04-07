@@ -41,7 +41,7 @@
           <label for="userTeamSelect">Your Club</label><select id="userTeamSelect"></select>
           <label for="leagueModeSelect">League Type</label>
           <select id="leagueModeSelect">
-            <option value="real">Real MLS players</option>
+            <option value="real">Real MLS players + FBref-ready ratings</option>
             <option value="generated" selected>Auto-generated players</option>
           </select>
           <label for="salaryCapInput">Salary Cap</label><input id="salaryCapInput" type="number" value="6425000" />
@@ -273,6 +273,20 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script type="module" src="./js/app-main-v14.js?v=14"></script>
+  <script>
+(function () {
+  const open = id => document.getElementById(id)?.classList.add("open");
+  const close = id => document.getElementById(id)?.classList.remove("open");
+  const bind = () => {
+    document.getElementById("showCreateLeagueBtn")?.addEventListener("click", () => open("setupOverlay"));
+    document.getElementById("closeSetupBtn")?.addEventListener("click", () => close("setupOverlay"));
+    document.getElementById("showLoadLeagueBtn")?.addEventListener("click", () => open("loadOverlay"));
+    document.getElementById("closeLoadBtn")?.addEventListener("click", () => close("loadOverlay"));
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, { once: true });
+  else bind();
+})();
+</script>
+<script type="module" src="./js/app-main-v15.js?v=15"></script>
 </body>
 </html>

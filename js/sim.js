@@ -211,38 +211,206 @@ function contractYearsForAge(age) {
   return randInt(1, 2);
 }
 
-function makeRealPlayerAttributes(row, position) {
-  let attrs;
+function numStat(row, key, fallback = 0) {
+  const n = Number(row?.[key]);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function avgStat(row, keys, fallback = 0) {
+  const vals = keys.map(key => numStat(row, key)).filter(v => Number.isFinite(v) && v > 0);
+  if (!vals.length) return fallback;
+  return vals.reduce((sum, v) => sum + v, 0) / vals.length;
+}
+
+function ageRealRatingModifier(age, position) {
+  const n = Number(age) || 24;
   if (position === "GK") {
-    const gkBase = mean([row.gkDiv, row.gkHan, row.gkKic, row.gkPos, row.gkRef]) || row.ovr || 60;
-    attrs = {
-      pace: clamp(Math.round((Number(row.pac) || 42) * 0.9), 20, 90),
-      shooting: clamp(Math.round((Number(row.sho) || 14) * 0.55), 5, 50),
-      passing: clamp(Math.round((Number(row.pas) || 45) * 0.95), 18, 88),
-      dribbling: clamp(Math.round((Number(row.dri) || 30) * 0.82), 12, 82),
-      defense: clamp(Math.round(gkBase), 25, 98),
-      physical: clamp(Math.round((Number(row.phy) || 62) * 0.95), 20, 95),
-    };
+    if (n <= 20) return -8;
+    if (n <= 23) return -4;
+    if (n <= 27) return 0;
+    if (n <= 33) return 2;
+    if (n <= 36) return 0;
+    return -2;
+  }
+  if (n <= 18) return -10;
+  if (n <= 20) return -7;
+  if (n <= 22) return -4;
+  if (n <= 24) return -1;
+  if (n <= 29) return 1;
+  if (n <= 32) return 0;
+  if (n <= 34) return -2;
+  return -5;
+}
+
+function realPotentialFromOverall(overallRating, age) {
+  const n = Number(age) || 24;
+  const ceilingBoost = n <= 18 ? randInt(8, 14)
+    : n <= 20 ? randInt(6, 11)
+    : n <= 22 ? randInt(4, 8)
+    : n <= 24 ? randInt(2, 5)
+    : n <= 27 ? randInt(0, 3)
+    : n <= 30 ? randInt(0, 2)
+    : randInt(0, 1);
+  return clamp(overallRating + ceilingBoost, overallRating, 90);
+}
+
+function makeRealDetailedRatingsFromRow(row, position) {
+  const detailed = {
+    physical: {
+      acceleration: clamp(Math.round(numStat(row, "acceleration", numStat(row, "pac", 60))), 20, 99),
+      sprintSpeed: clamp(Math.round(numStat(row, "sprintSpeed", numStat(row, "pac", 60))), 20, 99),
+      agility: clamp(Math.round(numStat(row, "agility", avgStat(row, ["dribbling", "balance"], numStat(row, "dri", 60)))), 20, 99),
+      stamina: clamp(Math.round(numStat(row, "stamina", numStat(row, "phy", 60))), 20, 99),
+      strength: clamp(Math.round(numStat(row, "strength", numStat(row, "phy", 60))), 20, 99),
+      jumping: clamp(Math.round(numStat(row, "jumping", avgStat(row, ["strength", "headingAccuracy"], numStat(row, "phy", 60)))), 20, 99),
+    },
+    technical: {
+      finishing: clamp(Math.round(numStat(row, "finishing", numStat(row, "sho", 55))), 5, 99),
+      longShots: clamp(Math.round(avgStat(row, ["shotPower", "longShots"], numStat(row, "sho", 55))), 5, 99),
+      crossing: clamp(Math.round(numStat(row, "crossing", avgStat(row, ["vision", "shortPassing"], numStat(row, "pas", 55)))), 5, 99),
+      shortPassing: clamp(Math.round(numStat(row, "shortPassing", numStat(row, "pas", 55))), 5, 99),
+      vision: clamp(Math.round(numStat(row, "vision", numStat(row, "pas", 55))), 5, 99),
+      dribbling: clamp(Math.round(numStat(row, "dribbling", numStat(row, "dri", 55))), 5, 99),
+      firstTouch: clamp(Math.round(numStat(row, "ballControl", avgStat(row, ["dribbling", "reactions"], numStat(row, "dri", 55)))), 5, 99),
+      setPieces: clamp(Math.round(avgStat(row, ["freeKickAccuracy", "curve", "penalties"], avgStat(row, ["vision", "shortPassing"], numStat(row, "pas", 55)))), 5, 99),
+    },
+    defending: {
+      marking: clamp(Math.round(numStat(row, "defAwareness", numStat(row, "deff", 45))), 5, 99),
+      tackling: clamp(Math.round(avgStat(row, ["standingTackle", "slidingTackle"], numStat(row, "deff", 45))), 5, 99),
+      interceptions: clamp(Math.round(numStat(row, "interceptions", numStat(row, "deff", 45))), 5, 99),
+      heading: clamp(Math.round(numStat(row, "headingAccuracy", avgStat(row, ["jumping", "strength"], 55))), 5, 99),
+      positioning: clamp(Math.round(position === "GK"
+        ? numStat(row, "gkPos", 60)
+        : avgStat(row, ["positioning", "reactions", "composure"], 60)), 5, 99),
+    },
+    goalkeeping: {
+      handling: clamp(Math.round(numStat(row, "gkHan", 10)), 1, 99),
+      reflexes: clamp(Math.round(numStat(row, "gkRef", 10)), 1, 99),
+      oneOnOnes: clamp(Math.round(avgStat(row, ["gkDiv", "gkRef"], 10)), 1, 99),
+      kicking: clamp(Math.round(numStat(row, "gkKic", 10)), 1, 99),
+      command: clamp(Math.round(numStat(row, "gkPos", 10)), 1, 99),
+    },
+  };
+
+  if (position === "GK") {
+    detailed.technical.finishing = Math.min(detailed.technical.finishing, 18);
+    detailed.technical.longShots = Math.min(detailed.technical.longShots, 16);
+    detailed.technical.crossing = Math.min(detailed.technical.crossing, 18);
+    detailed.technical.dribbling = Math.min(detailed.technical.dribbling, 28);
+    detailed.technical.firstTouch = Math.min(detailed.technical.firstTouch, 34);
+    detailed.technical.setPieces = Math.min(detailed.technical.setPieces, 18);
+    detailed.defending.marking = Math.min(detailed.defending.marking, 20);
+    detailed.defending.tackling = Math.min(detailed.defending.tackling, 18);
+    detailed.defending.interceptions = Math.min(detailed.defending.interceptions, 18);
+    detailed.defending.heading = Math.min(detailed.defending.heading, 26);
   } else {
-    attrs = {
-      pace: clamp(Math.round(Number(row.pac) || 40), 20, 99),
-      shooting: clamp(Math.round(Number(row.sho) || 30), 20, 99),
-      passing: clamp(Math.round(Number(row.pas) || 35), 20, 99),
-      dribbling: clamp(Math.round(Number(row.dri) || 35), 20, 99),
-      defense: clamp(Math.round(Number(row.deff) || 25), 20, 99),
-      physical: clamp(Math.round(Number(row.phy) || 35), 20, 99),
-    };
+    for (const key of Object.keys(detailed.goalkeeping)) detailed.goalkeeping[key] = Math.min(detailed.goalkeeping[key], 14);
   }
 
-  const target = Number(row.ovr) || 60;
-  const current = mean(Object.values(attrs));
-  const gap = target - current;
-  const gapMultiplier = position === "GK" ? 0.9 : 0.96;
-  for (const key of Object.keys(attrs)) {
-    const boosted = attrs[key] + gap * gapMultiplier;
-    attrs[key] = clamp(Math.round(boosted), position === "GK" && key === "shooting" ? 5 : 20, 99);
-  }
-  return attrs;
+  return detailed;
+}
+
+function categoryAverage(category) {
+  const vals = Object.values(category || {}).map(v => Number(v)).filter(v => Number.isFinite(v));
+  return vals.length ? vals.reduce((sum, v) => sum + v, 0) / vals.length : 0;
+}
+
+function positionWeights(position) {
+  return {
+    GK: { goalkeeping: 0.72, physical: 0.12, mentality: 0.08, passing: 0.06, defense: 0.02 },
+    CB: { defense: 0.44, physical: 0.24, mentality: 0.12, passing: 0.10, skill: 0.05, shooting: 0.05 },
+    LB: { defense: 0.24, physical: 0.22, passing: 0.18, skill: 0.16, mentality: 0.10, shooting: 0.10 },
+    RB: { defense: 0.24, physical: 0.22, passing: 0.18, skill: 0.16, mentality: 0.10, shooting: 0.10 },
+    CDM:{ defense: 0.24, passing: 0.22, physical: 0.18, mentality: 0.16, skill: 0.12, shooting: 0.08 },
+    CM: { passing: 0.24, skill: 0.20, mentality: 0.18, physical: 0.16, defense: 0.12, shooting: 0.10 },
+    CAM:{ passing: 0.26, skill: 0.24, mentality: 0.14, shooting: 0.18, physical: 0.10, defense: 0.08 },
+    LM: { skill: 0.24, passing: 0.20, physical: 0.18, shooting: 0.16, mentality: 0.12, defense: 0.10 },
+    RM: { skill: 0.24, passing: 0.20, physical: 0.18, shooting: 0.16, mentality: 0.12, defense: 0.10 },
+    LW: { skill: 0.28, shooting: 0.22, passing: 0.16, physical: 0.14, mentality: 0.12, defense: 0.08 },
+    RW: { skill: 0.28, shooting: 0.22, passing: 0.16, physical: 0.14, mentality: 0.12, defense: 0.08 },
+    ST: { shooting: 0.34, skill: 0.20, physical: 0.18, mentality: 0.14, passing: 0.10, defense: 0.04 },
+  }[position] || { physical: 0.17, passing: 0.17, shooting: 0.17, skill: 0.17, mentality: 0.16, defense: 0.16 };
+}
+
+function computeRealProfileFromRow(row, position) {
+  const detailed = makeRealDetailedRatingsFromRow(row, position);
+  const heightText = String(row?.height || "");
+  const heightCmMatch = heightText.match(/(\d+)cm/);
+  const heightRating = clamp(Math.round(heightCmMatch ? Number(heightCmMatch[1]) - 90 : 78), 40, 95);
+  const categoryRatings = {
+    physical: categoryAverage({
+      Height: heightRating,
+      Strength: detailed.physical.strength,
+      SprintSpeed: detailed.physical.sprintSpeed,
+      Acceleration: detailed.physical.acceleration,
+      Endurance: detailed.physical.stamina,
+    }),
+    passing: categoryAverage({
+      Vision: detailed.technical.vision,
+      Power: avgStat({a:detailed.technical.shortPassing,b:detailed.physical.strength}, ["a","b"], 55),
+      Accuracy: detailed.technical.shortPassing,
+      Crossing: detailed.technical.crossing,
+      LongPassing: avgStat({a:detailed.technical.shortPassing,b:detailed.technical.vision,c:detailed.technical.setPieces}, ["a","b","c"], 55),
+    }),
+    shooting: categoryAverage({
+      ShotPower: clamp(Math.round(numStat(row, "shotPower", numStat(row, "sho", 55))), 5, 99),
+      HeadingAccuracy: detailed.defending.heading,
+      Volleys: clamp(Math.round(numStat(row, "volleys", numStat(row, "sho", 55))), 5, 99),
+      FreeKickAccuracy: clamp(Math.round(numStat(row, "freeKickAccuracy", detailed.technical.setPieces)), 5, 99),
+      Curve: clamp(Math.round(numStat(row, "curve", detailed.technical.setPieces)), 5, 99),
+    }),
+    skill: categoryAverage({
+      Dribbling: detailed.technical.dribbling,
+      BallControl: detailed.technical.firstTouch,
+      SkillMoves: clamp(Math.round(avgStat({a:numStat(row, "skillMoves", 2) * 18, b:detailed.technical.dribbling, c:detailed.physical.agility}, ["a","b","c"], 50)), 5, 99),
+    }),
+    mentality: categoryAverage({
+      Aggression: clamp(Math.round(numStat(row, "aggression", avgStat(row, ["strength", "stamina"], 55))), 5, 99),
+      Positioning: clamp(Math.round(position === "GK" ? detailed.goalkeeping.command : avgStat(row, ["positioning", "composure", "reactions"], 60)), 5, 99),
+      Penalties: clamp(Math.round(numStat(row, "penalties", avgStat(row, ["finishing", "composure"], 55))), 5, 99),
+      Composure: clamp(Math.round(numStat(row, "composure", avgStat(row, ["ballControl", "vision"], 55))), 5, 99),
+    }),
+    defense: categoryAverage({
+      Awareness: detailed.defending.marking,
+      StandingTackle: clamp(Math.round(numStat(row, "standingTackle", detailed.defending.tackling)), 5, 99),
+      SlidingTackle: clamp(Math.round(numStat(row, "slidingTackle", detailed.defending.tackling)), 5, 99),
+      Interceptions: detailed.defending.interceptions,
+    }),
+    goalkeeping: categoryAverage({
+      Diving: clamp(Math.round(numStat(row, "gkDiv", detailed.goalkeeping.reflexes)), 1, 99),
+      Handling: detailed.goalkeeping.handling,
+      Kicking: detailed.goalkeeping.kicking,
+      Positioning: detailed.goalkeeping.command,
+      Reflexes: detailed.goalkeeping.reflexes,
+    }),
+  };
+
+  const overallBase = Object.entries(positionWeights(position)).reduce((sum, [key, wt]) => sum + (categoryRatings[key] || 0) * wt, 0);
+  const overallRating = clamp(Math.round(overallBase + ageRealRatingModifier(row?.age, position)), 46, 89);
+
+  const attributes = position === "GK"
+    ? {
+        pace: clamp(Math.round(avgStat(row, ["acceleration", "sprintSpeed"], 45) * 0.82), 20, 85),
+        shooting: clamp(Math.round(avgStat(row, ["finishing", "shotPower", "volleys"], 12) * 0.35), 5, 24),
+        passing: clamp(Math.round(avgStat(row, ["shortPassing", "longPassing", "vision", "gkKic"], 52)), 18, 88),
+        dribbling: clamp(Math.round(avgStat(row, ["ballControl", "reactions", "agility"], 30) * 0.7), 12, 78),
+        defense: clamp(Math.round(categoryRatings.goalkeeping), 38, 95),
+        physical: clamp(Math.round(avgStat(row, ["strength", "jumping", "stamina", "gkPos"], 62)), 35, 92),
+      }
+    : {
+        pace: clamp(Math.round(avgStat(row, ["acceleration", "sprintSpeed"], numStat(row, "pac", 60))), 20, 99),
+        shooting: clamp(Math.round(avgStat(row, ["finishing", "shotPower", "positioning", "volleys", "longShots"], numStat(row, "sho", 55))), 20, 99),
+        passing: clamp(Math.round(avgStat(row, ["vision", "shortPassing", "longPassing", "crossing", "curve"], numStat(row, "pas", 55))), 20, 99),
+        dribbling: clamp(Math.round(avgStat(row, ["dribbling", "ballControl", "agility", "balance", "reactions", "composure"], numStat(row, "dri", 55))), 20, 99),
+        defense: clamp(Math.round(avgStat(row, ["interceptions", "defAwareness", "standingTackle", "slidingTackle", "headingAccuracy"], numStat(row, "deff", 45))), 20, 99),
+        physical: clamp(Math.round(avgStat(row, ["jumping", "stamina", "strength", "aggression"], numStat(row, "phy", 55))), 20, 99),
+      };
+
+  return { detailed, categoryRatings, overallRating, attributes };
+}
+
+function makeRealPlayerAttributes(row, position) {
+  return computeRealProfileFromRow(row, position).attributes;
 }
 
 function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
@@ -251,16 +419,10 @@ function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
   const nationality = normalizeRealNation(row.nation);
   const domestic = domesticForTeam(nationality, team.country);
   const rosterRole = idx < 20 ? "Senior" : idx < 24 ? "Supplemental" : "Reserve";
-  const attributes = makeRealPlayerAttributes(row, position);
-  const displayedOvr = clamp(Math.round(Number(row.ovr) || overall({ attributes })), 46, 92);
-  const upside = age <= 18 ? randInt(8, 14)
-    : age <= 20 ? randInt(6, 11)
-    : age <= 22 ? randInt(4, 8)
-    : age <= 24 ? randInt(2, 5)
-    : age <= 27 ? randInt(0, 3)
-    : age <= 30 ? randInt(0, 2)
-    : randInt(0, 1);
-  const potential = clamp(displayedOvr + upside, displayedOvr, 92);
+  const profile = computeRealProfileFromRow(row, position);
+  const attributes = profile.attributes;
+  const displayedOvr = profile.overallRating;
+  const potential = realPotentialFromOverall(displayedOvr, age);
   let salary = estimateSalaryByProfile(position, displayedOvr, age, rosterRole);
   if (displayedOvr >= 82) salary = Math.max(salary, randInt(4500000, 12000000));
   else if (displayedOvr >= 78) salary = Math.max(salary, randInt(2200000, 6500000));
@@ -273,6 +435,10 @@ function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
     nationality,
     domestic,
     preferredFoot: row.preferredFoot || "Right",
+    height: row.height || null,
+    weight: row.weight || null,
+    photoUrl: row.photoUrl || null,
+    sourceProfileUrl: row.profileUrl || null,
     clubId: team.id,
     position,
     rosterRole,
@@ -289,27 +455,36 @@ function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
     injuredUntil: null,
     injuryMeta: null,
     attributes,
+    detailed: profile.detailed,
     overall: displayedOvr,
     potential,
     stats: {
       gp: 0, gs: 0, min: 0, goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, xg: 0,
       yellows: 0, reds: 0, cleanSheets: 0, ga: 0, motm: 0,
     },
-    source: "real-mls-csv",
+    source: "real-mls-fbref-ready",
     realPlayer: true,
   }, seasonYear);
 }
 
 function buildRealMlsPlayerPool(teams, seasonYear = 2026) {
   const rowsByTeam = new Map();
+  const realRatingCache = new Map();
   for (const row of REAL_MLS_PLAYERS) {
     if (!row?.team) continue;
     if (!rowsByTeam.has(row.team)) rowsByTeam.set(row.team, []);
     rowsByTeam.get(row.team).push(row);
   }
+  const getRealOvr = row => {
+    const key = `${row.name}|${row.team}|${row.position}`;
+    if (!realRatingCache.has(key)) {
+      realRatingCache.set(key, computeRealProfileFromRow(row, normalizeGeneratedPosition(row.position || "CM", row.preferredFoot || "Right")).overallRating);
+    }
+    return realRatingCache.get(key);
+  };
   const players = [];
   for (const team of teams) {
-    const rows = (rowsByTeam.get(team.name) || []).slice().sort((a, b) => (Number(b.ovr) || 0) - (Number(a.ovr) || 0) || (Number(a.age) || 99) - (Number(b.age) || 99) || String(a.name).localeCompare(String(b.name)));
+    const rows = (rowsByTeam.get(team.name) || []).slice().sort((a, b) => getRealOvr(b) - getRealOvr(a) || (Number(a.age) || 99) - (Number(b.age) || 99) || String(a.name).localeCompare(String(b.name)));
     rows.forEach((row, idx) => players.push(makeRealMlsPlayer(team, row, idx, seasonYear)));
   }
   return players;
