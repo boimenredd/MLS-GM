@@ -400,7 +400,11 @@ function averageMatchRating(player) {
   }
   const count = Number(player?.stats?.ratingCount || 0);
   if (count > 0) return Number(player.stats.ratingSum || 0) / count;
-  return getLivePlayerRating(player, 1);
+  return null;
+}
+function displayAverageRating(player, digits = 2) {
+  const avg = averageMatchRating(player);
+  return Number.isFinite(avg) ? Number(avg).toFixed(digits) : '—';
 }
 
 function deepCloneStatsMap(map) {
@@ -476,12 +480,7 @@ function tuneStatsForPosition(player, rawStats) {
 function getRecentMatchRatings(player, count = 8) {
   const ratings = (player?.stats?.matchRatings || []).slice(-count);
   if (ratings.length) return ratings;
-  const avg = Number(averageMatchRating(player).toFixed(1));
-  return Array.from({ length: Math.min(5, Math.max(1, player?.stats?.gp || 0)) }, (_, idx) => ({
-    week: idx + 1,
-    rating: avg,
-    result: "—",
-  }));
+  return [];
 }
 
 function showInfoOverlay(title, bodyHtml) {
@@ -644,7 +643,7 @@ function playerPhoto(player, cls = "player-photo-inline") {
   const src = player?.photoUrl;
   const fallback = `<span class="${cls} player-photo-fallback">${initials}</span>`;
   if (src) {
-    return `<span class="player-photo-shell ${cls}">${fallback}<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" /></span>`;
+    return `<span class="player-photo-shell ${cls}">${fallback}<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('show-fallback');this.remove()" /></span>`;
   }
   return fallback;
 }
@@ -1107,61 +1106,53 @@ function toggleSimPause() {
 // ── Overlay button wiring (runs once) ────────────────────────────────────────
 
 function bindOverlayButtons() {
-  if (overlayButtonsBound) return;
-  overlayButtonsBound = true;
+  document.querySelectorAll(".sim-speed-opt").forEach(b => {
+    const clone = b.cloneNode(true);
+    b.replaceWith(clone);
+    clone.addEventListener("click", () => setSimSpeed(clone.dataset.speed));
+  });
 
-  document.querySelectorAll(".sim-speed-opt").forEach(b =>
-    b.addEventListener("click", () => setSimSpeed(b.dataset.speed)));
-
-  document.getElementById("sim-pause-btn")
-    ?.addEventListener("click", toggleSimPause);
-
-  document.getElementById("sim-skip-btn")
-    ?.addEventListener("click", () => { simSkipped = true; simPaused = false; });
-
-  document.querySelectorAll(".msim-tab-btn").forEach(btn => btn.addEventListener("click", () => {
-    simView = btn.dataset.view || "fitness";
-    document.querySelectorAll(".msim-tab-btn").forEach(b => b.classList.toggle("active", b === btn));
-    if (livePitchScene) renderLiveStatBars(livePitchScene.lastStats || {}, livePitchScene.lastMatch || null, livePitchScene.lastMinute || 1);
-  }));
-
-  document.querySelectorAll(".msim-side-tab").forEach(btn => btn.addEventListener("click", () => {
-    const parent = btn.closest('.msim-side-switcher');
-    parent?.querySelectorAll('.msim-side-tab').forEach(b => b.classList.toggle('active', b === btn));
-    if (btn.dataset.sideView === 'events' || btn.dataset.sideView === 'home') simLeftView = btn.dataset.sideView;
-    else simRightView = btn.dataset.sideView;
-    if (livePitchScene?.lastMatch) renderMiniLineups(livePitchScene.lastMatch, livePitchScene.lastMinute || 1);
-  }));
-
-  const overlay = document.getElementById("match-sim-overlay");
-  if (overlay && !document.getElementById("sim-close-btn")) {
-    const cb = document.createElement("button");
-    cb.id = "sim-close-btn";
-    cb.className = "sim-close-btn";
-    cb.textContent = "✕ Exit";
-    cb.addEventListener("click", () => {
-      simAbortRequested = true;
-      simPaused = false;
-      simInProgress = false;
-      overlay.classList.remove("open");
-      document.getElementById("goal-replay-overlay")?.classList.remove("open");
-      document.getElementById("var-overlay")?.classList.remove("open");
-    });
-    const box = document.getElementById("match-sim-box") || overlay;
-    box.style.position = "relative";
-    box.appendChild(cb);
+  const pauseBtn = document.getElementById("sim-pause-btn");
+  if (pauseBtn) {
+    const clone = pauseBtn.cloneNode(true);
+    pauseBtn.replaceWith(clone);
+    clone.addEventListener("click", toggleSimPause);
   }
 
-  document.addEventListener("keydown", e => {
-    if (e.key === "Escape") {
+  const skipBtn = document.getElementById("sim-skip-btn");
+  if (skipBtn) {
+    const clone = skipBtn.cloneNode(true);
+    skipBtn.replaceWith(clone);
+    clone.addEventListener("click", () => { simSkipped = true; simPaused = false; });
+  }
+
+  const closeBtn = document.getElementById("sim-close-btn");
+  if (closeBtn) {
+    const clone = closeBtn.cloneNode(true);
+    closeBtn.replaceWith(clone);
+    clone.addEventListener("click", () => {
       simAbortRequested = true;
       simPaused = false;
       simInProgress = false;
       document.getElementById("match-sim-overlay")?.classList.remove("open");
       document.getElementById("goal-replay-overlay")?.classList.remove("open");
       document.getElementById("var-overlay")?.classList.remove("open");
-    }
-  });
+    });
+  }
+
+  if (!overlayButtonsBound) {
+    overlayButtonsBound = true;
+    document.addEventListener("keydown", e => {
+      if (e.key === "Escape") {
+        simAbortRequested = true;
+        simPaused = false;
+        simInProgress = false;
+        document.getElementById("match-sim-overlay")?.classList.remove("open");
+        document.getElementById("goal-replay-overlay")?.classList.remove("open");
+        document.getElementById("var-overlay")?.classList.remove("open");
+      }
+    });
+  }
 }
 
 // ── Live sim helpers ─────────────────────────────────────────────────────────
@@ -1863,47 +1854,176 @@ function buildAuxMatchEvents(match, result) {
   return extra.sort((a,b) => a.minute - b.minute);
 }
 
-async function playLiveMatch(match) {
-  bindOverlayButtons();
 
+function liveEventSummaryForPlayer(playerId) {
+  const items = (livePitchScene?.eventLog || []).filter(ev => ev.playerId === playerId || ev.assistId === playerId);
+  let goals = 0, assists = 0, yellows = 0, reds = 0;
+  for (const ev of items) {
+    if (ev.type === 'goal' && ev.playerId === playerId) goals++;
+    if (ev.type === 'goal' && ev.assistId === playerId) assists++;
+    if (ev.type === 'yellow' && ev.playerId === playerId) yellows++;
+    if (ev.type === 'red' && ev.playerId === playerId) reds++;
+  }
+  return { goals, assists, yellows, reds };
+}
+
+function buildFotmobLiveShell(match) {
+  return `
+    <button id="sim-close-btn" class="sim-close-btn" type="button">×</button>
+    <div class="fotmob-live-shell">
+      <div class="fotmob-live-head">
+        <div class="fotmob-live-meta">${escapeHtml(state.season.phase)} · Week ${match.week}</div>
+        <div class="fotmob-live-meta">${escapeHtml(getUserTeam(state).stadium || 'MLS Venue')}</div>
+      </div>
+      <div class="fotmob-score-hero">
+        <div class="fotmob-score-team left"><div class="fotmob-score-name" id="sim-home-name"></div><div class="fotmob-goal-list" id="sim-home-goals"></div></div>
+        <div class="fotmob-score-center"><div class="fotmob-minute-pill" id="sim-minute">0'</div><div class="fotmob-scoreline" id="sim-score">0 - 0</div><div class="fotmob-score-sub" id="sim-score-sub">Live</div></div>
+        <div class="fotmob-score-team right"><div class="fotmob-score-name" id="sim-away-name"></div><div class="fotmob-goal-list" id="sim-away-goals"></div></div>
+      </div>
+      <div class="fotmob-tabbar"><button class="fotmob-tab">Facts</button><button class="fotmob-tab">Commentary</button><button class="fotmob-tab active">Lineup</button><button class="fotmob-tab">Stats</button><button class="fotmob-tab">Head-to-Head</button></div>
+      <div class="fotmob-lineup-card">
+        <div class="fotmob-lineup-top"><div class="fotmob-rating-tag" id="fotmob-home-team-rating">—</div><div class="fotmob-formation-line"><span id="fotmob-home-formation">—</span><strong>Lineup</strong><span id="fotmob-away-formation">—</span></div><div class="fotmob-rating-tag away" id="fotmob-away-team-rating">—</div></div>
+        <div id="fotmob-pitch" class="fotmob-pitch"></div>
+        <div id="fotmob-sub-banner" class="fotmob-sub-banner hidden"></div>
+        <div class="fotmob-coach-row">
+          <div class="fotmob-coach-side" id="fotmob-home-coach"></div>
+          <div class="fotmob-coach-title">Coach</div>
+          <div class="fotmob-coach-side right" id="fotmob-away-coach"></div>
+        </div>
+        <div class="fotmob-bench-row">
+          <div class="fotmob-bench-side" id="fotmob-home-bench"></div>
+          <div class="fotmob-commentary-card"><div class="panel-head"><h3>Commentary</h3><span id="fotmob-commentary-meta">Live feed</span></div><div class="match-events fotmob-commentary-list" id="sim-events"></div></div>
+          <div class="fotmob-bench-side right" id="fotmob-away-bench"></div>
+        </div>
+      </div>
+      <div class="fotmob-controls">
+        <button class="btn btn-sm sim-speed-opt" data-speed="slow" type="button">Slow</button>
+        <button class="btn btn-sm sim-speed-opt active" data-speed="normal" type="button">Normal</button>
+        <button class="btn btn-sm sim-speed-opt" data-speed="fast" type="button">Fast</button>
+        <button class="btn btn-sm sim-speed-opt" data-speed="turbo" type="button">Turbo</button>
+        <button class="btn btn-sm" id="sim-pause-btn" type="button">Pause</button>
+        <button class="btn btn-sm" id="sim-skip-btn" type="button">Skip to FT</button>
+      </div>
+    </div>`;
+}
+
+function renderFotmobCoachAndBench(match, minute = 1) {
+  const homeCoach = getTeamCoach(match.homeTeamId);
+  const awayCoach = getTeamCoach(match.awayTeamId);
+  const hp = livePitchScene?.homePack;
+  const ap = livePitchScene?.awayPack;
+  const coachHtml = coach => `${coach ? `${playerPhoto({ name: coach.name, photoUrl: coach.headshot }, 'player-photo-inline')}<strong>${escapeHtml(coach.name)}</strong>` : `<strong>Coach</strong>`}`;
+  const benchHtml = (players=[]) => players.map(p => `<div class="fotmob-bench-pill">${playerPhoto(p,'player-photo-inline')}<span>${escapeHtml(p.position)} ${escapeHtml((p.name||'').split(' ').slice(-1)[0] || p.name)}</span><strong>${getLivePlayerRating(p, minute).toFixed(1)}</strong></div>`).join('') || `<div class="note">No bench listed.</div>`;
+  const hc = document.getElementById('fotmob-home-coach'); if (hc) hc.innerHTML = coachHtml(homeCoach);
+  const ac = document.getElementById('fotmob-away-coach'); if (ac) ac.innerHTML = coachHtml(awayCoach);
+  const hb = document.getElementById('fotmob-home-bench'); if (hb) hb.innerHTML = benchHtml(hp?.bench || []);
+  const ab = document.getElementById('fotmob-away-bench'); if (ab) ab.innerHTML = benchHtml(ap?.bench || []);
+}
+
+function renderFotmobScorers() {
+  const homeWrap = document.getElementById('sim-home-goals');
+  const awayWrap = document.getElementById('sim-away-goals');
+  if (!homeWrap || !awayWrap) return;
+  const events = (livePitchScene?.eventLog || []).filter(ev => ev.type === 'goal').sort((a,b) => (a.minute||0) - (b.minute||0));
+  const rows = side => events.filter(ev => ev.side === side).map(ev => {
+    const scorer = ev.playerId ? byPlayerId(ev.playerId) : null;
+    return `<div>${escapeHtml(scorer?.name || 'Unknown')} ${ev.minute || 0}'</div>`;
+  }).join('');
+  homeWrap.innerHTML = rows('home');
+  awayWrap.innerHTML = rows('away');
+}
+
+function renderFotmobPitch(match, minute = 1) {
+  const pitch = document.getElementById('fotmob-pitch');
+  if (!pitch || !livePitchScene) return;
+  const hp = livePitchScene.homePack; const ap = livePitchScene.awayPack;
+  const homeLayout = FORMATION_LAYOUT[livePitchScene.homeFormation] || FORMATION_LAYOUT['4-3-3'];
+  const awayLayout = FORMATION_LAYOUT[livePitchScene.awayFormation] || FORMATION_LAYOUT['4-3-3'];
+  const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
+    const player = entry.player;
+    if (!player) return '';
+    const slot = layout[idx] || { x:.5, y:.5 };
+    const left = side === 'home' ? `${slot.y * 45 + 6}%` : `${100 - (slot.y * 45 + 6)}%`;
+    const top = `${slot.x * 82 + 9}%`;
+    const rating = getLivePlayerRating(player, minute).toFixed(1);
+    const icons = liveEventSummaryForPlayer(player.id);
+    const iconHtml = [icons.goals ? `<span>⚽</span>` : '', icons.assists ? `<span>👟</span>` : '', icons.yellows ? `<span>🟨</span>` : '', icons.reds ? `<span>🟥</span>` : ''].join('');
+    return `<div class="fotmob-player fotmob-player-${side}" style="left:${left};top:${top};">
+      <div class="fotmob-player-rating ${side === 'home' ? 'home' : 'away'}">${rating}</div>
+      <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar')}</div>
+      ${iconHtml ? `<div class="fotmob-player-icons">${iconHtml}</div>` : ''}
+      <div class="fotmob-player-name">${escapeHtml(player.number || player.jerseyNumber || '')} ${escapeHtml(player.name)}</div>
+    </div>`;
+  }).join('');
+  pitch.innerHTML = `<div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, 'home')}${renderSide(ap?.xi || [], awayLayout, 'away')}`;
+  const homeAvg = hp ? avg((hp.xi||[]).map(({player}) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+  const awayAvg = ap ? avg((ap.xi||[]).map(({player}) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+  const hEl = document.getElementById('fotmob-home-team-rating'); if (hEl) hEl.textContent = homeAvg;
+  const aEl = document.getElementById('fotmob-away-team-rating'); if (aEl) aEl.textContent = awayAvg;
+  const hf = document.getElementById('fotmob-home-formation'); if (hf) hf.textContent = livePitchScene.homeFormation;
+  const af = document.getElementById('fotmob-away-formation'); if (af) af.textContent = livePitchScene.awayFormation;
+}
+
+function refreshFotmobLive(match, minute = 1) {
+  const ht = byTeamId(match.homeTeamId); const at = byTeamId(match.awayTeamId);
+  const score = livePitchScene?.score || { home:0, away:0 };
+  const minuteEl = document.getElementById('sim-minute'); if (minuteEl) minuteEl.textContent = `${minute}'`;
+  const scoreEl = document.getElementById('sim-score'); if (scoreEl) scoreEl.textContent = `${score.home} - ${score.away}`;
+  const subEl = document.getElementById('sim-score-sub'); if (subEl) subEl.textContent = `${state.season.phase} · Live`;
+  const hName = document.getElementById('sim-home-name'); if (hName) hName.innerHTML = renderSimClubChip(ht, 'home');
+  const aName = document.getElementById('sim-away-name'); if (aName) aName.innerHTML = renderSimClubChip(at, 'away');
+  renderFotmobScorers();
+  renderFotmobPitch(match, minute);
+  renderFotmobCoachAndBench(match, minute);
+  const banner = document.getElementById('fotmob-sub-banner');
+  if (banner) {
+    const recentSub = livePitchScene?.recentSub;
+    if (recentSub && minute - recentSub.minute <= 6) {
+      banner.classList.remove('hidden');
+      banner.innerHTML = `🔁 ${escapeHtml(recentSub.team)} · ${escapeHtml(recentSub.playerIn || 'Substitution')}`;
+    } else {
+      banner.classList.add('hidden');
+      banner.innerHTML = '';
+    }
+  }
+}
+
+function applySubstitutionToPack(pack, playerId) {
+  if (!pack) return;
+  const benchIdx = (pack.bench || []).findIndex(p => p.id === playerId);
+  if (benchIdx < 0) return;
+  const incoming = pack.bench.splice(benchIdx, 1)[0];
+  const samePosIdx = (pack.xi || []).findIndex(entry => entry.position === incoming.position);
+  const replaceIdx = samePosIdx >= 0 ? samePosIdx : Math.max(0, (pack.xi || []).length - 1);
+  const outgoing = pack.xi[replaceIdx]?.player;
+  pack.xi[replaceIdx] = { position: incoming.position, player: incoming };
+  if (outgoing) pack.bench.push(outgoing);
+  return { incoming, outgoing };
+}
+
+async function playLiveMatch(match) {
   const overlay = document.getElementById("match-sim-overlay");
-  if (!overlay) { console.error("match-sim-overlay not found"); return; }
-  overlay.classList.add("open");
+  const box = document.getElementById("match-sim-box");
+  if (!overlay || !box) { console.error("match sim overlay not found"); return; }
 
   simInProgress = true;
   simPaused = false;
   simSkipped = false;
   simAbortRequested = false;
+  simSpeedKey = "normal";
+  box.innerHTML = buildFotmobLiveShell(match);
+  overlay.classList.add("open");
+  bindOverlayButtons();
   setSimSpeed("normal");
 
   const ht = byTeamId(match.homeTeamId);
   const at = byTeamId(match.awayTeamId);
-
-  const el = id => document.getElementById(id);
-
-  if (el("sim-home-name")) el("sim-home-name").innerHTML = renderSimClubChip(ht, "home");
-  if (el("sim-away-name")) el("sim-away-name").innerHTML = renderSimClubChip(at, "away");
-  if (el("msim-comp-badge")) el("msim-comp-badge").textContent = `MLS ${state.season.year} Live`;
-  if (el("sim-minute")) el("sim-minute").textContent = "Kickoff";
-  if (el("sim-score")) el("sim-score").textContent = "0 – 0";
-  if (el("sim-events")) el("sim-events").innerHTML = "";
-  if (el("sim-progress-fill")) el("sim-progress-fill").style.width = "0%";
-  if (el("sim-close-btn")) el("sim-close-btn").style.display = "";
-
-  simView = "fitness";
-  simLeftView = "home";
-  simRightView = "away";
-  document.querySelectorAll(".msim-tab-btn").forEach(b => b.classList.toggle("active", b.dataset.view === simView));
-  const sideTabs = document.querySelectorAll(".msim-side-tab");
-  sideTabs.forEach(b => {
-    const active = [simLeftView, simRightView].includes(b.dataset.sideView);
-    b.classList.toggle("active", active);
-  });
   livePitchScene = buildLivePitchScene(match);
   livePitchScene.lastMatch = match;
-  if (el("sim-score-sub")) el("sim-score-sub").textContent = `${state.season.phase} · Tactical View`;
-  renderMiniLineups(match, 1);
-  drawLivePitch(livePitchScene, 1);
+  livePitchScene.score = { home: 0, away: 0 };
+  livePitchScene.eventLog = [];
+  refreshFotmobLive(match, 0);
+  addSimEvent(0, `<b>Kickoff</b> · ${escapeHtml(ht.name)} vs ${escapeHtml(at.name)}`);
 
   const result = match.result || {
     homeGoals:0, awayGoals:0, homeXg:0, awayXg:0,
@@ -1913,30 +2033,19 @@ async function playLiveMatch(match) {
     events:[],
   };
 
-  livePitchScene.lastStats = result;
-  livePitchScene.lastMinute = 1;
-  renderLiveStatBars(result, match, 1);
-
   let hg = 0, ag = 0, ei = 0;
   const timelineEvents = [...(result.events || []).map(ev => ({ ...ev, type: 'goal' })), ...buildAuxMatchEvents(match, result)].sort((a, b) => a.minute - b.minute || ((a.type === 'goal') ? -1 : 1));
-
-  addSimEvent(0, `<b>Kickoff!</b> ${escapeHtml(ht.name)} vs ${escapeHtml(at.name)}`);
-
   const commentary = [
     "Patient spell of possession in midfield.",
-    "The tempo drops as both teams reset.",
-    "Promising buildup down the flank.",
-    "A dangerous ball flashes across the box.",
-    "The crowd reacts to a half-chance.",
-    "A tactical foul halts the counter-attack.",
-    "Corner — cleared away at the near post.",
-    "Yellow card shown for a late challenge.",
-    "The keeper parries it wide for a corner.",
-    "Offside flag cuts short the move.",
-    "The referee has a word with the captain.",
-    "Substitution warming up on the touchline.",
-    "Long ball over the top — flagged offside.",
-    "Brilliant last-ditch tackle in the box!",
+    "Promising overload in the half-space.",
+    "The ball is recycled through the back line.",
+    "A dangerous delivery is half-cleared.",
+    "The crowd senses an opening.",
+    "The tempo drops as both teams regroup.",
+    "A switch of play opens the far side.",
+    "The goalkeeper slows things down.",
+    "A tactical foul stops the break.",
+    "A loose pass hands possession back.",
   ];
 
   for (let minute = 1; minute <= 90; minute++) {
@@ -1944,91 +2053,55 @@ async function playLiveMatch(match) {
     while (simPaused && !simAbortRequested) await sleep(100);
     if (simSkipped || simAbortRequested) break;
 
-    if (el("sim-minute")) el("sim-minute").textContent = `${minute}'`;
-    if (el("sim-progress-fill")) el("sim-progress-fill").style.width = `${(minute/90)*100}%`;
-    livePitchScene.lastMinute = minute;
-    livePitchScene.lastStats = result;
-    livePitchScene.lastMatch = match;
     Object.keys(livePitchScene.playerRatings || {}).forEach(pid => {
-      livePitchScene.playerRatings[pid] = Math.max(5.3, Math.min(9.7, livePitchScene.playerRatings[pid] + (Math.random() * 0.02 - 0.008)));
+      livePitchScene.playerRatings[pid] = Math.max(5.3, Math.min(9.7, livePitchScene.playerRatings[pid] + (Math.random() * 0.018 - 0.006)));
     });
-
-    if (Math.random() < 0.18) addSimEvent(minute, commentary[Math.floor(Math.random() * commentary.length)]);
-    await animateLiveSegment(livePitchScene, minute, result, match, null);
+    if (Math.random() < 0.16) addSimEvent(minute, commentary[Math.floor(Math.random() * commentary.length)]);
 
     while (ei < timelineEvents.length && timelineEvents[ei].minute <= minute) {
       const ev = timelineEvents[ei];
+      livePitchScene.eventLog.push(ev);
       if (ev.type === "goal") {
         const scorer = ev.scorerId ? byPlayerId(ev.scorerId) : null;
         const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
-        const pName = scorer?.name || "Unknown";
+        if (ev.side === "home") hg++; else ag++;
+        livePitchScene.score = { home: hg, away: ag };
         bumpLiveRating(scorer?.id, 0.95);
         bumpLiveRating(assist?.id, 0.35);
-        const concededPack = ev.side === "home" ? livePitchScene?.awayPack : livePitchScene?.homePack;
-        (concededPack?.xi || []).forEach(({ player }) => bumpLiveRating(player?.id, player?.position === 'GK' ? -0.22 : -0.08));
-
-        if (ev.side === "home") hg++; else ag++;
-        if (el("sim-score")) el("sim-score").textContent = `${hg} – ${ag}`;
-
-        if (Math.random() < 0.10 && !simSkipped) {
-          simPaused = true; await sleep(16);
-          const confirmed = await showVARReview(minute, pName);
-          simPaused = false;
-          if (!confirmed) {
-            if (ev.side === "home") hg--; else ag--;
-            if (el("sim-score")) el("sim-score").textContent = `${hg} – ${ag}`;
-            ei++; continue;
-          }
-        }
-
-        livePitchScene.lastMinute = minute;
-        await animateLiveSegment(livePitchScene, minute, result, match, { type: "goal", side: ev.side, scorer: pName });
-
-        addSimEvent(minute,
-          `⚽ <b>${escapeHtml(pName)}</b>${assist ? ` <span class="sim-event-assist">👟 ${escapeHtml(assist.name)}</span>` : ""}`,
-          "background:rgba(34,197,94,0.08);border-left:3px solid var(--green);padding-left:6px;border-radius:3px;");
-
-        const scoreEl = el("sim-score");
-        if (scoreEl) {
-          scoreEl.style.transition = "transform .22s,color .22s";
-          scoreEl.style.color = "var(--green)";
-          scoreEl.style.transform = "scale(1.08)";
-          setTimeout(() => { if (scoreEl) { scoreEl.style.color = ""; scoreEl.style.transform = ""; } }, 420);
-        }
-
-        if (!simSkipped && !simAbortRequested) {
-          simPaused = true; await sleep(16);
-          await showGoalReplay(pName, assist?.name || null, minute, ev.side);
-          simPaused = false;
-        }
+        addSimEvent(minute, `⚽ <b>${escapeHtml(scorer?.name || 'Unknown')}</b>${assist ? ` <span class="sim-event-assist">👟 ${escapeHtml(assist.name)}</span>` : ''}`, "background:rgba(34,197,94,0.08);border-left:3px solid var(--green);padding-left:6px;border-radius:3px;");
       } else if (ev.type === "yellow") {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
-        addSimEvent(minute, `🟨 ${escapeHtml(player?.name || 'Player')} booked.`);
         bumpLiveRating(player?.id, -0.18);
+        addSimEvent(minute, `🟨 ${escapeHtml(player?.name || 'Player')} booked.`);
       } else if (ev.type === "red") {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
-        addSimEvent(minute, `🟥 ${escapeHtml(player?.name || 'Player')} sent off.`, "color:var(--red);font-weight:700;");
         bumpLiveRating(player?.id, -0.65);
+        addSimEvent(minute, `🟥 ${escapeHtml(player?.name || 'Player')} sent off.`, "color:var(--red);font-weight:700;");
       } else if (ev.type === "sub") {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
+        if (ev.side === 'home') applySubstitutionToPack(livePitchScene.homePack, ev.playerId); else applySubstitutionToPack(livePitchScene.awayPack, ev.playerId);
+        livePitchScene.recentSub = { minute, team: ev.side === 'home' ? ht.name : at.name, playerIn: player?.name || 'Substitution' };
         addSimEvent(minute, `🔁 ${escapeHtml(player?.name || 'Substitute')} enters the match.`);
         bumpLiveRating(player?.id, 0.08);
       }
       ei++;
     }
-    await sleep(simSpeedKey === "turbo" ? 10 : simSpeedKey === "fast" ? 14 : 18);
+
+    refreshFotmobLive(match, minute);
+    await sleep(simSpeedKey === "turbo" ? 8 : simSpeedKey === "fast" ? 14 : simSpeedKey === "slow" ? 28 : 20);
   }
 
   if (simSkipped && !simAbortRequested) {
     for (; ei < timelineEvents.length; ei++) {
       const ev = timelineEvents[ei];
       const minute = ev.minute || 90;
+      livePitchScene.eventLog.push(ev);
       if (ev.type === "goal") {
         const scorer = ev.scorerId ? byPlayerId(ev.scorerId) : null;
         const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
         if (ev.side === "home") hg++; else ag++;
-        if (el("sim-score")) el("sim-score").textContent = `${hg} – ${ag}`;
-        addSimEvent(minute, `⚽ <b>${escapeHtml(scorer?.name || 'Unknown')}</b>${assist ? ` <span class="sim-event-assist">👟 ${escapeHtml(assist.name)}</span>` : ""}`);
+        livePitchScene.score = { home: hg, away: ag };
+        addSimEvent(minute, `⚽ <b>${escapeHtml(scorer?.name || 'Unknown')}</b>${assist ? ` <span class="sim-event-assist">👟 ${escapeHtml(assist.name)}</span>` : ''}`);
       } else if (ev.type === "yellow") {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
         addSimEvent(minute, `🟨 ${escapeHtml(player?.name || 'Player')} booked.`);
@@ -2037,27 +2110,26 @@ async function playLiveMatch(match) {
         addSimEvent(minute, `🟥 ${escapeHtml(player?.name || 'Player')} sent off.`);
       } else if (ev.type === "sub") {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
+        if (ev.side === 'home') applySubstitutionToPack(livePitchScene.homePack, ev.playerId); else applySubstitutionToPack(livePitchScene.awayPack, ev.playerId);
+        livePitchScene.recentSub = { minute, team: ev.side === 'home' ? ht.name : at.name, playerIn: player?.name || 'Substitution' };
         addSimEvent(minute, `🔁 ${escapeHtml(player?.name || 'Substitute')} enters the match.`);
       }
     }
-    if (el("sim-score")) el("sim-score").textContent = `${result.homeGoals} – ${result.awayGoals}`;
+    livePitchScene.score = { home: result.homeGoals, away: result.awayGoals };
+    refreshFotmobLive(match, 90);
   }
 
   simInProgress = false;
   if (simAbortRequested) {
     overlay.classList.remove("open");
-    document.getElementById("goal-replay-overlay")?.classList.remove("open");
-    document.getElementById("var-overlay")?.classList.remove("open");
     livePitchScene = null;
     return;
   }
 
-  if (el("sim-minute")) el("sim-minute").textContent = "Full Time";
-  if (el("sim-progress-fill")) el("sim-progress-fill").style.width = "100%";
-  addSimEvent(90,
-    `<b>Full Time.</b> ${escapeHtml(ht.name)} ${result.homeGoals}–${result.awayGoals} ${escapeHtml(at.name)}`,
-    "color:var(--accent);font-weight:700;");
-  await sleep(400);
+  const minuteEl = document.getElementById('sim-minute'); if (minuteEl) minuteEl.textContent = 'FT';
+  const metaEl = document.getElementById('fotmob-commentary-meta'); if (metaEl) metaEl.textContent = 'Full time';
+  addSimEvent(90, `<b>Full Time.</b> ${escapeHtml(ht.name)} ${result.homeGoals}–${result.awayGoals} ${escapeHtml(at.name)}`, "color:var(--accent);font-weight:700;");
+  await sleep(450);
   livePitchScene = null;
 }
 
@@ -2122,9 +2194,10 @@ function openPlayerProfile(playerId) {
     ["Defense", profile.stats.defense],
     ["Goalkeeping", profile.stats.goalkeeping],
   ];
+  const displayAvgRating = displayAverageRating(p, 2);
   const statTiles = p.position === "GK"
-    ? [["Clean sheets", s.cleanSheets || 0], ["Goals against", s.ga || 0], ["Matches", s.gp || 0], ["Rating", averageMatchRating(p).toFixed(2)], ["Minutes", formatNumber(s.min || 0)], ["Saves", s.saves || 0]]
-    : [["Goals", s.goals || 0], ["Assists", s.assists || 0], ["Started", s.gs || 0], ["Matches", s.gp || 0], ["Minutes", formatNumber(s.min || 0)], ["Rating", averageMatchRating(p).toFixed(2)], ["Yellow cards", s.yellows || 0], ["Red cards", s.reds || 0]];
+    ? [["Clean sheets", s.cleanSheets || 0], ["Goals against", s.ga || 0], ["Matches", s.gp || 0], ["Rating", displayAvgRating], ["Minutes", formatNumber(s.min || 0)], ["Saves", s.saves || 0]]
+    : [["Goals", s.goals || 0], ["Assists", s.assists || 0], ["Started", s.gs || 0], ["Matches", s.gp || 0], ["Minutes", formatNumber(s.min || 0)], ["Rating", displayAvgRating], ["Yellow cards", s.yellows || 0], ["Red cards", s.reds || 0]];
   const recentRatings = getRecentMatchRatings(p, 8);
   const traits = (p.traits || []).slice(0, 5);
   const traitHtml = traits.length ? traits.map(t => `<span class="trait-pill">${escapeHtml(t)}</span>`).join("") : `<span class="trait-pill">Balanced profile</span>`;
@@ -2150,7 +2223,7 @@ function openPlayerProfile(playerId) {
           <div class="player-hero-metrics-clean player-hero-metrics-three">
             <div><span>Overall</span><strong>${displayOverall}</strong></div>
             <div><span>Potential</span><strong>${displayPotential}</strong></div>
-            <div><span>${escapeHtml(p.position)} rating</span><strong>${profile.positionRating}</strong></div>
+            <div><span>${escapeHtml(p.position)} rating</span><strong>${displayOverall}</strong></div>
           </div>
         </div>
         <div class="player-profile-tabbar">
@@ -2195,9 +2268,9 @@ function openPlayerProfile(playerId) {
             </div>
             <div class="subtle-divider"></div>
             <div class="player-mini-metrics player-mini-metrics-clean">
-              <div><span>Average rating</span><strong>${averageMatchRating(p).toFixed(2)}</strong></div>
+              <div><span>Average rating</span><strong>${displayAvgRating}</strong></div>
               <div><span>Country</span><strong>${escapeHtml(country)}</strong></div>
-              <div><span>Position rating</span><strong>${profile.positionRating}</strong></div>
+              <div><span>Position rating</span><strong>${displayOverall}</strong></div>
               <div><span>Potential</span><strong>${displayPotential}</strong></div>
             </div>
           </section>
@@ -2219,7 +2292,7 @@ function openPlayerProfile(playerId) {
           <section class="panel">
             <div class="panel-head"><h3>Match rating history</h3><span>Recent matches</span></div>
             <table class="tight-table player-match-table-clean"><thead><tr><th>Match</th><th>Week</th><th>Result</th><th class="num">Rating</th></tr></thead><tbody>
-              ${recentRatings.slice().reverse().map((row, idx) => `<tr><td>#${recentRatings.length - idx}</td><td>${row.week || "—"}</td><td>${escapeHtml(row.result || "—")}</td><td class="num">${Number(row.rating || 0).toFixed(1)}</td></tr>`).join("")}
+              ${recentRatings.length ? recentRatings.slice().reverse().map((row, idx) => `<tr><td>#${recentRatings.length - idx}</td><td>${row.week || "—"}</td><td>${escapeHtml(row.result || "—")}</td><td class="num">${Number(row.rating || 0).toFixed(1)}</td></tr>`).join("") : `<tr><td colspan="4" class="note" style="text-align:center">No match ratings yet.</td></tr>`}
             </tbody></table>
           </section>
         </div>
@@ -2273,7 +2346,8 @@ function renderDashboard() {
   const roster = getTeamPlayers(state, team.id);
   const goalLeader = [...roster].sort((a, b) => (b.stats.goals - a.stats.goals) || (b.overall - a.overall))[0];
   const assistLeader = [...roster].sort((a, b) => (b.stats.assists - a.stats.assists) || (b.overall - a.overall))[0];
-  const ratingLeader = [...roster].sort((a, b) => averageMatchRating(b) - averageMatchRating(a))[0];
+  const ratedRoster = roster.filter(p => Number.isFinite(averageMatchRating(p)));
+  const ratingLeader = [...ratedRoster].sort((a, b) => averageMatchRating(b) - averageMatchRating(a))[0];
   const headlines = (state.transactions || []).slice(0, 6).reverse();
   const schedule = state.schedule.filter(m => !m.played && (m.homeTeamId === team.id || m.awayTeamId === team.id)).slice(0, 5);
   const confTable = confRows.slice(0, 16).map((r, i) => `<tr class="${r.teamId === team.id ? 'highlight-row' : ''}"><td>${i + 1}</td><td>${teamLink(r.teamId, byTeamId(r.teamId)?.name || '—')}</td><td class="num">${r.points}</td><td class="num">${r.gd > 0 ? '+' : ''}${r.gd}</td></tr>`).join("");
@@ -2283,10 +2357,15 @@ function renderDashboard() {
     return `<tr><td class="num">${m.week}</td><td>${teamLink(opp.id, opp.name)}</td><td>${venue}</td></tr>`;
   }).join("") || `<tr><td colspan="3">No upcoming matches.</td></tr>`;
   const newsCards = headlines.map(tx => `<div class="news-card-fbgm"><div class="news-card-type">${escapeHtml(tx.type)}</div><div class="news-card-copy">${escapeHtml(tx.text)}</div></div>`).join("") || `<div class="note">No headlines yet.</div>`;
+  const recentPlayed = state.schedule.filter(m => m.played);
+  const userPlayed = recentPlayed.filter(m => m.homeTeamId === team.id || m.awayTeamId === team.id).slice(-4).reverse();
+  const otherPlayed = recentPlayed.filter(m => m.homeTeamId !== team.id && m.awayTeamId !== team.id).slice(-8).reverse();
+  const tickerMatches = [...userPlayed, ...otherPlayed].slice(0, 10);
   return `${pageHead(`${team.name} Dashboard`, `${state.season.year} ${state.season.phase.toLowerCase()}`)}
-  <div class="score-ticker">${state.schedule.filter(m => m.played).slice(-8).reverse().map(m => {
+  <div class="score-ticker">${tickerMatches.map(m => {
     const h = byTeamId(m.homeTeamId), a = byTeamId(m.awayTeamId);
-    return `<div class="ticker-item">${teamLogoMark(h, 'mini-team-logo')}<span>${escapeHtml(h.shortName || h.name)}</span><strong>${m.result.homeGoals}</strong><span>${escapeHtml(a.shortName || a.name)}</span><strong>${m.result.awayGoals}</strong></div>`;
+    const isUser = m.homeTeamId === team.id || m.awayTeamId === team.id;
+    return `<div class="ticker-item ${isUser ? 'ticker-item-user' : ''}">${teamLogoMark(h, 'mini-team-logo')}<span>${escapeHtml(h.shortName || h.name)}</span><strong>${m.result.homeGoals}</strong><span>${escapeHtml(a.shortName || a.name)}</span><strong>${m.result.awayGoals}</strong></div>`;
   }).join("") || `<div class="ticker-item"><span>No results yet</span></div>`}</div>
   <div class="dashboard-shell-v2">
     <section class="panel dashboard-standings-col">
@@ -2313,7 +2392,7 @@ function renderDashboard() {
           <h4>Team Leaders</h4>
           <div class="dash-list-row"><span>Goals</span><strong>${goalLeader ? playerLink(goalLeader.id, goalLeader.name) : '—'}</strong><span>${goalLeader?.stats.goals || 0}</span></div>
           <div class="dash-list-row"><span>Assists</span><strong>${assistLeader ? playerLink(assistLeader.id, assistLeader.name) : '—'}</strong><span>${assistLeader?.stats.assists || 0}</span></div>
-          <div class="dash-list-row"><span>Best average rating</span><strong>${ratingLeader ? playerLink(ratingLeader.id, ratingLeader.name) : '—'}</strong><span>${ratingLeader ? averageMatchRating(ratingLeader).toFixed(2) : '0.00'}</span></div>
+          <div class="dash-list-row"><span>Best average rating</span><strong>${ratingLeader ? playerLink(ratingLeader.id, ratingLeader.name) : '—'}</strong><span>${ratingLeader ? displayAverageRating(ratingLeader, 2) : '—'}</span></div>
           <div class="panel-link-row"><button class="text-link nav-jump-btn" data-target-page="roster">» Full Roster</button></div>
         </div>
         <div>

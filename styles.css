@@ -2987,3 +2987,87 @@ html[data-theme="light"] .player-photo-hero {
   position: relative;
   z-index: 1;
 }
+
+
+/* --- v24 cleanup + fotmob live shell --- */
+.ticker-item-user { border-color: color-mix(in srgb, var(--accent) 58%, var(--line)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent); }
+.player-photo-shell .player-photo-fallback { display: none; }
+.player-photo-shell.show-fallback .player-photo-fallback { display: inline-flex; }
+.player-photo-shell.show-fallback .player-photo-img { display: none; }
+.player-profile-clean-shell .panel,
+.player-profile-clean-shell .pp-info-box,
+.player-profile-clean-shell .player-position-box-clean,
+.player-profile-clean-shell .player-traits-card-clean,
+.player-profile-clean-shell .player-stat-card,
+.player-profile-clean-shell .season-stat { border-radius: 14px; }
+.player-summary-grid-clean { align-items: stretch; }
+.player-mini-metrics-clean > div { display:flex; flex-direction:column; justify-content:center; }
+.player-profile-clean-shell .career-list { gap: 12px; }
+.player-profile-clean-shell .career-item { padding: 8px 0; }
+html[data-theme="dark"] .msim-lineup-name,
+html[data-theme="dark"] .msim-bench-row,
+html[data-theme="dark"] .player-link,
+html[data-theme="dark"] .player-link-text,
+html[data-theme="dark"] .team-link,
+html[data-theme="dark"] .coach-link,
+html[data-theme="dark"] .week-mini-name,
+html[data-theme="dark"] .week-mini-name .team-link,
+html[data-theme="dark"] .week-mini-meta,
+html[data-theme="dark"] .week-mini-meta .coach-link,
+html[data-theme="dark"] .week-mini-meta .team-link { color: #fff !important; }
+#match-sim-box { width: min(1120px, calc(100vw - 26px)); padding: 14px; background: #111214; border-color: rgba(255,255,255,.12); }
+.fotmob-live-shell { color: #fff; display: grid; gap: 14px; }
+.fotmob-live-head { display:flex; justify-content:space-between; align-items:center; font-size:12px; color: rgba(255,255,255,.72); padding: 2px 6px; }
+.fotmob-score-hero { display:grid; grid-template-columns: 1fr 220px 1fr; align-items:center; gap:18px; background: #1f1f22; border:1px solid rgba(255,255,255,.08); border-radius: 18px; padding: 18px 20px; }
+.fotmob-score-team { min-width:0; }
+.fotmob-score-team.right { text-align:right; }
+.fotmob-score-name .msim-team-chip { background:none; border:0; padding:0; justify-content:flex-start; }
+.fotmob-score-team.right .msim-team-chip { justify-content:flex-end; }
+.fotmob-score-name .msim-team-text { font-size: 29px; font-weight: 800; color:#fff; }
+.fotmob-goal-list { margin-top: 10px; font-size: 14px; line-height: 1.5; color: rgba(255,255,255,.86); }
+.fotmob-score-center { text-align:center; }
+.fotmob-minute-pill { display:inline-flex; align-items:center; justify-content:center; min-width:92px; padding:10px 18px; border-radius:999px; background:#2a2a2e; font-size:34px; font-weight:800; margin-bottom:10px; }
+.fotmob-scoreline { font-size:64px; font-weight:900; line-height:1; }
+.fotmob-score-sub { margin-top:8px; color: rgba(255,255,255,.6); font-size: 13px; }
+.fotmob-tabbar { display:flex; gap: 26px; padding: 0 6px 4px; border-bottom:1px solid rgba(255,255,255,.08); }
+.fotmob-tab { background:none; border:0; color:rgba(255,255,255,.62); font-size:16px; font-weight:700; padding: 0 0 12px; }
+.fotmob-tab.active { color:#fff; border-bottom:3px solid #57e389; }
+.fotmob-lineup-card { background:#242427; border:1px solid rgba(255,255,255,.08); border-radius: 18px; padding: 14px 16px 18px; }
+.fotmob-lineup-top { display:grid; grid-template-columns: 74px 1fr 74px; align-items:center; gap:10px; margin-bottom:12px; }
+.fotmob-rating-tag { justify-self:start; background:#22c55e; color:#102014; border-radius: 999px; font-weight:800; padding:6px 12px; }
+.fotmob-rating-tag.away { justify-self:end; background:#fb923c; color:#261400; }
+.fotmob-formation-line { display:flex; justify-content:space-between; align-items:center; color:#fff; font-weight:700; }
+.fotmob-formation-line span { color: rgba(255,255,255,.78); }
+.fotmob-pitch { position: relative; height: 690px; border-radius: 18px; overflow: hidden; background: linear-gradient(180deg,#343437 0%,#2b2b2e 100%); }
+.fotmob-pitch::before { content:''; position:absolute; inset:0; background: linear-gradient(90deg, transparent 49.8%, rgba(255,255,255,.08) 50%, transparent 50.2%), radial-gradient(circle at center, transparent 0 68px, rgba(255,255,255,.08) 69px 71px, transparent 72px); }
+.fotmob-pen-box { position:absolute; top: 23%; width: 14%; height: 54%; border:2px solid rgba(255,255,255,.08); }
+.fotmob-pen-box.left { left: 0; border-left:0; border-top-right-radius:12px; border-bottom-right-radius:12px; }
+.fotmob-pen-box.right { right: 0; border-right:0; border-top-left-radius:12px; border-bottom-left-radius:12px; }
+.fotmob-player { position:absolute; transform: translate(-50%, -50%); width: 118px; text-align:center; z-index:2; }
+.fotmob-player-avatar, .player-photo-fallback.fotmob-player-avatar { width: 52px; height: 52px; border-radius:50%; object-fit:cover; border:2px solid rgba(255,255,255,.18); background:#3a3a3d; }
+.fotmob-player-avatar-wrap { display:flex; justify-content:center; }
+.fotmob-player-name { margin-top:7px; font-size:14px; font-weight:700; color:#fff; line-height:1.15; text-shadow: 0 1px 0 rgba(0,0,0,.35); }
+.fotmob-player-rating { position:absolute; top:-6px; right:20px; min-width:36px; padding:3px 7px; border-radius:999px; font-size:14px; font-weight:900; color:#102014; background:#22c55e; box-shadow:0 4px 10px rgba(0,0,0,.25); }
+.fotmob-player-rating.away { background:#fb923c; color:#281200; }
+.fotmob-player-icons { position:absolute; left:50%; transform:translateX(-50%); top: 42px; display:flex; gap:4px; font-size:14px; }
+.fotmob-sub-banner { margin: 14px auto 0; width: fit-content; background:#313136; color:#fff; border-radius:999px; padding:8px 14px; font-weight:700; }
+.fotmob-coach-row { display:grid; grid-template-columns: 1fr 120px 1fr; align-items:center; gap:12px; margin-top: 16px; }
+.fotmob-coach-side { display:flex; align-items:center; gap:10px; color:#fff; font-size:18px; font-weight:800; }
+.fotmob-coach-side.right { justify-content:flex-end; }
+.fotmob-coach-title { text-align:center; color:#fff; font-size:22px; font-weight:800; }
+.fotmob-bench-row { display:grid; grid-template-columns: minmax(240px,1fr) minmax(320px,420px) minmax(240px,1fr); gap:14px; margin-top: 14px; align-items:start; }
+.fotmob-bench-side { display:flex; flex-wrap:wrap; gap:8px; align-content:flex-start; }
+.fotmob-bench-side.right { justify-content:flex-end; }
+.fotmob-bench-pill { display:inline-flex; align-items:center; gap:7px; background:#1b1b1e; border:1px solid rgba(255,255,255,.08); border-radius:999px; padding:6px 8px; color:#fff; font-size:12px; }
+.fotmob-bench-pill strong { font-variant-numeric: tabular-nums; }
+.fotmob-commentary-card { background:#1b1b1e; border:1px solid rgba(255,255,255,.08); border-radius:14px; padding:12px; min-height: 180px; }
+.fotmob-commentary-card .panel-head h3, .fotmob-commentary-card .panel-head span { color:#fff; }
+.fotmob-commentary-list { max-height: 220px; }
+.fotmob-controls { display:flex; justify-content:center; gap:8px; flex-wrap:wrap; }
+.fotmob-controls .btn { background:#26262a; border-color: rgba(255,255,255,.1); color:#fff; }
+.fotmob-controls .sim-speed-opt.active { background:#22c55e; color:#102014; border-color:#22c55e; }
+@media (max-width: 1100px) { .fotmob-score-hero { grid-template-columns: 1fr; text-align:center; } .fotmob-score-team.right { text-align:center; } .fotmob-bench-row, .fotmob-coach-row { grid-template-columns: 1fr; } .fotmob-coach-side.right, .fotmob-bench-side.right { justify-content:flex-start; } }
+
+.player-profile-clean-shell.pp-modal, #playerProfileOverlay .panel, #playerProfileOverlay .pp-info-box, #playerProfileOverlay .season-stat, #playerProfileOverlay .player-stat-card, #playerProfileOverlay .player-position-box-clean, #playerProfileOverlay .player-traits-card-clean { background: color-mix(in srgb, var(--bg2) 92%, #000 8%) !important; }
+
+.side-group-sim { display:none !important; }

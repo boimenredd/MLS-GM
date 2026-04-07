@@ -72,8 +72,8 @@
           </select>
           <label for="leagueModeSelect">League Type</label>
           <select id="leagueModeSelect">
-            <option value="real">Real MLS players + CSV ratings</option>
-            <option value="generated" selected>Auto-generated players</option>
+            <option value="real" selected>Real players</option>
+            <option value="generated">Auto-generated players</option>
           </select>
           <div id="realModeHint" style="font-size:12px;color:#94a3b8;margin:6px 0 10px;line-height:1.35;">Real-player mode uses the bundled MLS player CSV dataset in this build.</div>
           <label for="salaryCapInput">Salary Cap</label><input id="salaryCapInput" type="number" value="6425000" />
@@ -183,21 +183,20 @@
           <button class="nav-btn" data-page="injuries">Injuries</button>
           <button class="nav-btn" data-page="awards">Live Award Race</button>
         </div>
-
-        <div class="side-group side-group-sim">
-          <div class="side-section-title">Play</div>
-          <button id="simOneBtn" class="action-btn">Sim Next Match</button>
-          <button id="simWeekBtn" class="action-btn">Sim 1 Week</button>
-          <button id="simMonthBtn" class="action-btn">Sim 1 Month</button>
-          <button id="simSeasonBtn" class="action-btn">Sim To End of Season</button>
-          <button id="simToDraftBtn" class="action-btn">Sim To Draft</button>
-          <button id="simToExtensionsBtn" class="action-btn">Sim To Extensions</button>
-          <button id="simToFABtn" class="action-btn">Sim To Free Agency</button>
-          <button id="simYearBtn" class="action-btn">Sim To Next Season</button>
-        </div>
       </aside>
 
       <main id="pageRoot" class="page-root"></main>
+    </div>
+    
+    <div id="hiddenSimActions" class="hidden" aria-hidden="true">
+      <button id="simOneBtn" type="button"></button>
+      <button id="simWeekBtn" type="button"></button>
+      <button id="simMonthBtn" type="button"></button>
+      <button id="simSeasonBtn" type="button"></button>
+      <button id="simToDraftBtn" type="button"></button>
+      <button id="simToExtensionsBtn" type="button"></button>
+      <button id="simToFABtn" type="button"></button>
+      <button id="simYearBtn" type="button"></button>
     </div>
   </div>
 
