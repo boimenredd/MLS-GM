@@ -38,7 +38,38 @@
       <div class="setup-grid">
         <div class="panel-lite">
           <label for="saveSlotInput">Save Slot</label><input id="saveSlotInput" type="text" value="slot1" />
-          <label for="userTeamSelect">Your Club</label><select id="userTeamSelect"></select>
+          <label for="userTeamSelect">Your Club</label><select id="userTeamSelect">
+            <option value="Atlanta United">Atlanta United</option>
+            <option value="Austin FC">Austin FC</option>
+            <option value="Charlotte FC">Charlotte FC</option>
+            <option value="Chicago Fire FC">Chicago Fire FC</option>
+            <option value="FC Cincinnati">FC Cincinnati</option>
+            <option value="Colorado Rapids">Colorado Rapids</option>
+            <option value="Columbus Crew">Columbus Crew</option>
+            <option value="D.C. United">D.C. United</option>
+            <option value="FC Dallas">FC Dallas</option>
+            <option value="Houston Dynamo FC">Houston Dynamo FC</option>
+            <option value="Sporting Kansas City">Sporting Kansas City</option>
+            <option value="LA Galaxy">LA Galaxy</option>
+            <option value="Los Angeles FC">Los Angeles FC</option>
+            <option value="Inter Miami CF">Inter Miami CF</option>
+            <option value="Minnesota United FC">Minnesota United FC</option>
+            <option value="CF Montréal">CF Montréal</option>
+            <option value="Nashville SC">Nashville SC</option>
+            <option value="New England Revolution">New England Revolution</option>
+            <option value="New York City FC">New York City FC</option>
+            <option value="New York Red Bulls">New York Red Bulls</option>
+            <option value="Orlando City SC">Orlando City SC</option>
+            <option value="Philadelphia Union">Philadelphia Union</option>
+            <option value="Portland Timbers">Portland Timbers</option>
+            <option value="Real Salt Lake">Real Salt Lake</option>
+            <option value="San Diego FC">San Diego FC</option>
+            <option value="San Jose Earthquakes">San Jose Earthquakes</option>
+            <option value="Seattle Sounders FC">Seattle Sounders FC</option>
+            <option value="St. Louis CITY SC">St. Louis CITY SC</option>
+            <option value="Toronto FC">Toronto FC</option>
+            <option value="Vancouver Whitecaps FC">Vancouver Whitecaps FC</option>
+          </select>
           <label for="leagueModeSelect">League Type</label>
           <select id="leagueModeSelect">
             <option value="real">Real MLS players + FBref-ready ratings</option>
@@ -275,10 +306,18 @@
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script>
 (function () {
+  const TEAM_OPTIONS = ["Atlanta United","Austin FC","Charlotte FC","Chicago Fire FC","FC Cincinnati","Colorado Rapids","Columbus Crew","D.C. United","FC Dallas","Houston Dynamo FC","Sporting Kansas City","LA Galaxy","Los Angeles FC","Inter Miami CF","Minnesota United FC","CF Montréal","Nashville SC","New England Revolution","New York City FC","New York Red Bulls","Orlando City SC","Philadelphia Union","Portland Timbers","Real Salt Lake","San Diego FC","San Jose Earthquakes","Seattle Sounders FC","St. Louis CITY SC","Toronto FC","Vancouver Whitecaps FC"];
   const open = id => document.getElementById(id)?.classList.add("open");
   const close = id => document.getElementById(id)?.classList.remove("open");
+  const ensureTeams = () => {
+    const sel = document.getElementById("userTeamSelect");
+    if (!sel) return;
+    if (sel.options.length) return;
+    sel.innerHTML = TEAM_OPTIONS.map(name => `<option value="${name}">${name}</option>`).join("");
+  };
   const bind = () => {
-    document.getElementById("showCreateLeagueBtn")?.addEventListener("click", () => open("setupOverlay"));
+    ensureTeams();
+    document.getElementById("showCreateLeagueBtn")?.addEventListener("click", () => { ensureTeams(); open("setupOverlay"); });
     document.getElementById("closeSetupBtn")?.addEventListener("click", () => close("setupOverlay"));
     document.getElementById("showLoadLeagueBtn")?.addEventListener("click", () => open("loadOverlay"));
     document.getElementById("closeLoadBtn")?.addEventListener("click", () => close("loadOverlay"));
