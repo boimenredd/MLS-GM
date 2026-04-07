@@ -3524,8 +3524,7 @@ async function createLeagueFromForm() {
     if (opts.leagueMode === "real") {
       const ds = getRealMlsDatasetStatus();
       if (!ds.ready) {
-        toast(ds.note || "Real MLS players is not available in this build yet.", "warn");
-        return;
+        console.warn("Real MLS dataset status check reported unavailable, attempting create anyway:", ds);
       }
     }
     state = normalizeState(createNewState(opts));
