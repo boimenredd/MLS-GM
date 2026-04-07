@@ -28,14 +28,17 @@ import { REAL_MLS_PLAYERS, REAL_MLS_DATA_META } from "./real-mls-data.js";
 
 export function getRealMlsDatasetStatus() {
   const meta = REAL_MLS_DATA_META || {};
-  const ready = !!(meta.ready && Array.isArray(REAL_MLS_PLAYERS) && REAL_MLS_PLAYERS.length);
+  const playerCount = Array.isArray(REAL_MLS_PLAYERS) ? REAL_MLS_PLAYERS.length : 0;
+  const ready = typeof meta.ready === "boolean"
+    ? !!meta.ready && playerCount > 0
+    : playerCount > 0;
   return {
     ready,
-    playerCount: Array.isArray(REAL_MLS_PLAYERS) ? REAL_MLS_PLAYERS.length : 0,
+    playerCount,
     source: meta.source || 'unknown',
     seasons: Array.isArray(meta.seasons) ? meta.seasons : [],
-    note: meta.note || (ready ? 'Dataset loaded.' : 'Real MLS dataset is unavailable.'),
-    builtAt: meta.builtAt || null,
+    note: meta.note || meta.notes || (ready ? 'Dataset loaded.' : 'Real MLS dataset is unavailable.'),
+    builtAt: meta.builtAt || meta.generatedAt || null,
   };
 }
 
