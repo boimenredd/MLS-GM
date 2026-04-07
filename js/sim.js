@@ -1780,6 +1780,22 @@ export function setPlayerDesignation(state, playerId, designation) {
   return { ok: true };
 }
 
+function estimateTradeDirection(team, standingsRow) {
+  const ppg = standingsRow ? standingsRow.points / Math.max(1, standingsRow.played) : 1.2;
+  if (team._rebuildMode) return 'rebuild';
+  if (ppg >= 1.65) return 'contend';
+  if (ppg <= 1.05) return 'rebuild';
+  return 'balanced';
+}
+
+function mlsAssetTradeValue(team, { gam = 0, tam = 0, intl = 0 }, direction = 'balanced') {
+  const capTight = team?.budgetRoom != null && team.budgetRoom < 0;
+  const gamWeight = direction === 'rebuild' ? 1.05 : direction === 'contend' ? 0.94 : 1.0;
+  const tamWeight = direction === 'contend' ? 1.04 : 0.92;
+  const intlBase = 320000 + Math.max(0, ((team?.internationalSlots || 8) - 8) * 15000);
+  return (gam * gamWeight) + (tam * tamWeight) + (intl * intlBase * (capTight ? 1.08 : 1));
+}
+
 export function proposeTrade(state, proposal) {
   const userTeam = state.teams.find(t => t.id === state.userTeamId);
   const partner = state.teams.find(t => t.id === proposal.partnerTeamId);
@@ -1812,50 +1828,74 @@ export function proposeTrade(state, proposal) {
   if (userTeam.internationalSlots < outgoingIntlSlots) return { ok: false, reason: "Not enough international slots to send." };
   if (partner.internationalSlots < incomingIntlSlots) return { ok: false, reason: `${partner.name} does not have that many international slots.` };
 
-  const userRosterCount = getTeamPlayers(state, userTeam.id).length;
-  const partnerRosterCount = getTeamPlayers(state, partner.id).length;
+  const userRoster = getTeamPlayers(state, userTeam.id);
+  const partnerRoster = getTeamPlayers(state, partner.id);
+  const userRosterCount = userRoster.length;
+  const partnerRosterCount = partnerRoster.length;
   if (userRosterCount - outgoingPlayers.length + incomingPlayers.length > 30) return { ok: false, reason: "Your roster would exceed 30 players." };
   if (partnerRosterCount - incomingPlayers.length + outgoingPlayers.length > 30) return { ok: false, reason: `${partner.name}'s roster would exceed 30 players.` };
 
+  const partnerStandings = state.standings[partner.conference]?.find(r => r.teamId === partner.id);
+  const direction = estimateTradeDirection(partner, partnerStandings);
+  const contender = direction === 'contend';
+  const rebuild = direction === 'rebuild';
+
+  const partnerPosCount = pos => partnerRoster.filter(p => p.position === pos).length;
+  const partnerIntlUsed = partnerRoster.filter(p => !p.domestic && !p.hasGreenCard && p.nationality !== 'USA' && p.nationality !== 'Canada').length;
+  const incomingIntlPlayers = incomingPlayers.filter(p => !p.domestic && !p.hasGreenCard && p.nationality !== 'USA' && p.nationality !== 'Canada').length;
+  const outgoingIntlPlayers = outgoingPlayers.filter(p => !p.domestic && !p.hasGreenCard && p.nationality !== 'USA' && p.nationality !== 'Canada').length;
+  const projectedPartnerIntlSlots = partner.internationalSlots + outgoingIntlSlots - incomingIntlSlots;
+  const projectedPartnerIntlUsed = partnerIntlUsed - outgoingIntlPlayers + incomingIntlPlayers;
+  if (projectedPartnerIntlUsed > projectedPartnerIntlSlots) {
+    return { ok: false, reason: `${partner.name} would be over the international-slot limit.` };
+  }
+
   const valueOfPlayers = players => players.reduce((sum, p) => {
-    const contractBonus = Math.max(-220000, ((p.contract?.yearsLeft || 1) - 1) * 75000);
-    const ageCurve = p.age <= 23 ? 160000 : p.age <= 28 ? 90000 : p.age <= 31 ? 0 : -150000;
-    return sum + playerTradeValue(p) + contractBonus + ageCurve;
+    const contractBonus = Math.max(-250000, ((p.contract?.yearsLeft || 1) - 1) * 85000);
+    const ageCurve = p.age <= 22 ? 210000 : p.age <= 26 ? 110000 : p.age <= 30 ? 0 : -180000;
+    const statusBonus = p.designation === 'DP' ? 280000 : p.designation === 'U22' ? 140000 : p.designation === 'TAM' ? 75000 : 0;
+    return sum + playerTradeValue(p) + contractBonus + ageCurve + statusBonus;
   }, 0);
 
-  const userOutgoingValue = valueOfPlayers(outgoingPlayers) + outgoingPicks.reduce((sum, p) => sum + draftPickValue(p, state.season.year), 0) + outgoingGAM + outgoingTAM * 0.92 + outgoingIntlSlots * 260000;
-  const userIncomingValue = valueOfPlayers(incomingPlayers) + incomingPicks.reduce((sum, p) => sum + draftPickValue(p, state.season.year), 0) + incomingGAM + incomingTAM * 0.92 + incomingIntlSlots * 260000;
+  const partnerOutgoingAssetValue = valueOfPlayers(incomingPlayers)
+    + incomingPicks.reduce((sum, p) => sum + draftPickValue(p, state.season.year), 0)
+    + mlsAssetTradeValue(partner, { gam: incomingGAM, tam: incomingTAM, intl: incomingIntlSlots }, direction);
 
-  const partnerPlayers = getTeamPlayers(state, partner.id);
-  const posCount = pos => partnerPlayers.filter(p => p.position === pos).length;
-  const partnerStandings = state.standings[partner.conference]?.find(r => r.teamId === partner.id);
-  const contending = partnerStandings ? partnerStandings.points / Math.max(1, partnerStandings.played) > 1.55 : false;
+  const partnerIncomingAssetValue = valueOfPlayers(outgoingPlayers)
+    + outgoingPicks.reduce((sum, p) => sum + draftPickValue(p, state.season.year), 0)
+    + mlsAssetTradeValue(partner, { gam: outgoingGAM, tam: outgoingTAM, intl: outgoingIntlSlots }, direction);
 
   let fitBonus = 0;
-  for (const p of incomingPlayers) {
-    if (p.position === "GK" && posCount("GK") < 2) fitBonus += 260000;
-    if (["CB"].includes(p.position) && posCount("CB") < 3) fitBonus += 220000;
-    if (["LB","RB"].includes(p.position) && posCount(p.position) < 2) fitBonus += 180000;
-    if (["CDM","CM","CAM"].includes(p.position) && posCount(p.position) < 2) fitBonus += 130000;
-    if (["LW","RW","ST"].includes(p.position) && posCount(p.position) < 2) fitBonus += 175000;
-    if (contending && p.overall >= 72) fitBonus += 120000;
-    if (!contending && p.age <= 23 && p.potential >= p.overall + 6) fitBonus += 90000;
+  for (const p of outgoingPlayers) {
+    if (p.position === 'GK' && partnerPosCount('GK') < 2) fitBonus += 320000;
+    if (p.position === 'CB' && partnerPosCount('CB') < 3) fitBonus += 260000;
+    if (['LB','RB'].includes(p.position) && partnerPosCount(p.position) < 2) fitBonus += 220000;
+    if (['CDM','CM','CAM'].includes(p.position) && partnerPosCount(p.position) < 2) fitBonus += 175000;
+    if (['LW','RW','ST'].includes(p.position) && partnerPosCount(p.position) < 2) fitBonus += 210000;
+    if (contender && p.overall >= 73) fitBonus += 160000;
+    if (rebuild && p.age <= 23 && p.potential >= p.overall + 6) fitBonus += 180000;
   }
 
   let outgoingPenalty = 0;
-  for (const p of outgoingPlayers) {
-    if (contending && p.overall >= 71) outgoingPenalty += 180000;
-    if (!contending && p.age <= 24 && p.potential >= p.overall + 7) outgoingPenalty += 160000;
-    if (p.position === "GK" && posCount("GK") <= 2) outgoingPenalty += 240000;
-    if (["CB"].includes(p.position) && posCount("CB") <= 3) outgoingPenalty += 200000;
+  for (const p of incomingPlayers) {
+    if (contender && p.overall >= 74) outgoingPenalty += 220000;
+    if (rebuild && p.age <= 24 && p.potential >= p.overall + 7) outgoingPenalty += 260000;
+    if (p.position === 'GK' && partnerPosCount('GK') <= 2) outgoingPenalty += 320000;
+    if (p.position === 'CB' && partnerPosCount('CB') <= 3) outgoingPenalty += 260000;
+    if (['LB','RB'].includes(p.position) && partnerPosCount(p.position) <= 1) outgoingPenalty += 180000;
+    if ((p.designation === 'DP' || (p.contract?.salary || 0) >= 1700000) && contender) outgoingPenalty += 240000;
   }
 
-  const salarySwing = incomingPlayers.reduce((sum, p) => sum + (p.contract?.salary || 0), 0) - outgoingPlayers.reduce((sum, p) => sum + (p.contract?.salary || 0), 0);
-  const salaryPenalty = contending && salarySwing > 650000 ? salarySwing * 0.28 : salarySwing > 1100000 ? salarySwing * 0.2 : 0;
+  const salarySwing = outgoingPlayers.reduce((sum, p) => sum + (p.contract?.salary || 0), 0)
+    - incomingPlayers.reduce((sum, p) => sum + (p.contract?.salary || 0), 0);
+  const salaryPenalty = contender && salarySwing < -700000 ? Math.abs(salarySwing) * 0.3 : Math.abs(salarySwing) > 1300000 ? Math.abs(salarySwing) * 0.15 : 0;
+  const scarceIntlPenalty = incomingIntlSlots > outgoingIntlSlots && projectedPartnerIntlSlots <= projectedPartnerIntlUsed + 1
+    ? (incomingIntlSlots - outgoingIntlSlots) * 260000
+    : 0;
 
-  const demandedReturn = userOutgoingValue + outgoingPenalty + salaryPenalty;
-  const offeredReturn = userIncomingValue + fitBonus;
-  const strictness = contending ? randFloat(1.04, 1.16) : randFloat(0.98, 1.10);
+  const demandedReturn = partnerOutgoingAssetValue + outgoingPenalty + salaryPenalty + scarceIntlPenalty;
+  const offeredReturn = partnerIncomingAssetValue + fitBonus;
+  const strictness = contender ? randFloat(1.08, 1.2) : rebuild ? randFloat(1.02, 1.14) : randFloat(1.0, 1.12);
 
   if (offeredReturn < demandedReturn * strictness) {
     return {
@@ -1867,6 +1907,8 @@ export function proposeTrade(state, proposal) {
         fitBonus,
         outgoingPenalty: Math.round(outgoingPenalty),
         salaryPenalty: Math.round(salaryPenalty),
+        scarceIntlPenalty: Math.round(scarceIntlPenalty),
+        direction,
       },
     };
   }
@@ -1898,7 +1940,16 @@ export function proposeTrade(state, proposal) {
   if (incomingIntlSlots) recvBits.push(`${incomingIntlSlots} INTL slot${incomingIntlSlots === 1 ? "" : "s"}`);
   const text = `${userTeam.name} traded ${sentBits.join(" + ") || "nothing"} to ${partner.name} for ${recvBits.join(" + ") || "nothing"}.`;
   addTransaction(state, "Trade", text);
-  return { ok: true, text, evaluation: { demandedReturn: Math.round(demandedReturn * strictness), offeredReturn: Math.round(offeredReturn), fitBonus } };
+  return {
+    ok: true,
+    text,
+    evaluation: {
+      demandedReturn: Math.round(demandedReturn * strictness),
+      offeredReturn: Math.round(offeredReturn),
+      fitBonus,
+      direction,
+    }
+  };
 }
 
 // ─── Offseason ────────────────────────────────────────────────────────────────

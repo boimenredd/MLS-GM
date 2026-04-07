@@ -382,6 +382,17 @@ function buildRouteHref(type, id) {
   return `${location.pathname}${location.search}#${params.toString()}`;
 }
 
+
+function roundMarketValue(value, step = 50000) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.round(n / step) * step;
+}
+
+function formatMarketValue(value) {
+  return formatMoney(roundMarketValue(value));
+}
+
 function playerLink(id, label) {
   const text = label || byPlayerId(id)?.name || "Unknown Player";
   return `<a href="${escapeAttr(buildRouteHref('player', id))}" class="text-link player-link" data-id="${id}">${escapeHtml(text)}</a>`;
@@ -790,6 +801,12 @@ function getPlayerTag(p) {
   if (isUSOrCanadian(p)) return "DOM";
   if (p.hasGreenCard)    return "GC";
   return "INTL";
+}
+
+
+function positionSortValue(pos) {
+  const order = { GK: 1, LB: 2, CB: 3, RB: 4, CDM: 5, CM: 6, CAM: 7, LW: 8, RW: 9, ST: 10 };
+  return order[pos] || 99;
 }
 
 // ── Sim speed / pause ────────────────────────────────────────────────────────
@@ -1790,7 +1807,7 @@ function openPlayerProfile(playerId) {
             <div class="player-info-item"><span>Age</span><strong>${p.age}</strong></div>
             <div class="player-info-item"><span>Preferred foot</span><strong>${escapeHtml(p.preferredFoot || "Right")}</strong></div>
             <div class="player-info-item"><span>Country</span><strong>${escapeHtml(country)}</strong></div>
-            <div class="player-info-item"><span>Transfer value</span><strong>${formatMoney(marketSeries[marketSeries.length - 1])}</strong></div>
+            <div class="player-info-item"><span>Transfer value</span><strong>${formatMarketValue(marketSeries[marketSeries.length - 1])}</strong></div>
             <div class="player-info-item"><span>Contract end</span><strong>${p.contract?.expiresYear || (state.season.year + (p.contract?.yearsLeft || 0))}</strong></div>
           </div>
           <div class="player-position-board">
@@ -1817,7 +1834,7 @@ function openPlayerProfile(playerId) {
 
       <div class="player-profile-grid">
         <div class="panel">
-          <div class="panel-head"><h3>Transfer value: ${formatMoney(marketSeries[marketSeries.length - 1])}</h3><span>Highest: ${formatMoney(highest)}</span></div>
+          <div class="panel-head"><h3>Transfer value: ${formatMarketValue(marketSeries[marketSeries.length - 1])}</h3><span>Highest: ${formatMarketValue(highest)}</span></div>
           <div class="market-graph">${marketSeries.map(v => `<div class="market-bar"><i style="height:${Math.max(8, Math.round((v / highest) * 100))}%"></i></div>`).join("")}</div>
           <div class="market-years">${years.map(y => `<span>${y}</span>`).join("")}</div>
         </div>
@@ -1861,6 +1878,10 @@ function openPlayerProfile(playerId) {
   document.querySelectorAll("#playerProfileOverlay .team-link").forEach(el => {
     el.oncontextmenu = e => { e.preventDefault(); armOpenInNewTab(el, "team", el.dataset.id); };
     el.onclick = async e => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
+        await persist();
+        return;
+      }
       e.preventDefault();
       document.getElementById("playerProfileOverlay")?.remove();
       if (shouldOpenInNewTab("team", el.dataset.id)) return openInNewTab("team", el.dataset.id);
@@ -2526,6 +2547,47 @@ function renderDraft() {
 }
 
 
+function renderRoster() {
+  const team = getUserTeam(state);
+  const rows = getTeamPlayers(state, team.id).map(p => ({
+    ...p,
+    positionOrder: positionSortValue(p.position),
+    salary: p.contract?.salary || 0,
+    expiry: p.contract?.expiresYear || (state.season.year + (p.contract?.yearsLeft || 0)),
+    nationality: p.nationality || "Unknown",
+  }));
+  const sorted = sortRows(rows, tableSortState.roster);
+  const rosterSize = rows.length;
+  const intlUsed = rows.filter(p => takesIntlSlot(p)).length;
+  return `${pageHead("Roster", `${escapeHtml(team.name)} · ${rosterSize} players · ${intlUsed}/${team.internationalSlots} international slots used`)}
+  <div class="panel roster-panel-clean">
+    <div class="panel-head"><h3>First Team Roster</h3><span>Sortable roster board</span></div>
+    <div class="table-scroll"><table class="roster-clean-table"><thead><tr>
+      ${makeSortableTh("Name","roster","name")}
+      ${makeSortableTh("Pos","roster","position")}
+      ${makeSortableTh("Age","roster","age","num")}
+      ${makeSortableTh("OVR","roster","overall","num")}
+      ${makeSortableTh("POT","roster","potential","num")}
+      ${makeSortableTh("Status","roster","designation")}
+      ${makeSortableTh("Country","roster","nationality")}
+      ${makeSortableTh("Salary","roster","salary","num")}
+      ${makeSortableTh("Exp","roster","expiry","num")}
+    </tr></thead><tbody>
+      ${sorted.map(p => `<tr>
+        <td>${playerLink(p.id, p.name)}</td>
+        <td><span class="roster-pos-pill">${escapeHtml(p.position)}</span></td>
+        <td class="num">${p.age}</td>
+        <td class="num">${p.overall}</td>
+        <td class="num">${p.potential}</td>
+        <td>${escapeHtml(p.designation || (takesIntlSlot(p) ? 'INTL' : 'Standard'))}</td>
+        <td>${escapeHtml(p.nationality || 'Unknown')}</td>
+        <td class="num">${formatMoney(p.salary)}</td>
+        <td class="num">${p.expiry}</td>
+      </tr>`).join('')}
+    </tbody></table></div>
+  </div>`;
+}
+
 function renderTeamPage() {
   const team = byTeamId(selectedTeamId || state.userTeamId) || getUserTeam(state);
   const players = getTeamPlayers(state, team.id).sort((a,b)=>b.overall-a.overall);
@@ -2533,6 +2595,7 @@ function renderTeamPage() {
   const upcoming = state.schedule.filter(m => !m.played && (m.homeTeamId===team.id || m.awayTeamId===team.id)).slice(0,5);
   const topPlayers = players.slice(0,8);
   const cap = getCapSummary(state, team.id);
+  const coach = getTeamCoach(team.id);
 
   return `${pageHead(team.name, `${team.conference} Conference club page`)}
   <div class="club-hero-simple">
@@ -2540,7 +2603,7 @@ function renderTeamPage() {
       ${teamLogoMark(team, "club-hero-logo")}
       <div>
         <div class="club-hero-name">${escapeHtml(team.name)}</div>
-        <div class="club-hero-sub">${record ? `${record.wins}-${record.draws}-${record.losses} · ${record.points} pts` : team.conference}</div>
+        <div class="club-hero-sub">${record ? `${record.wins}-${record.draws}-${record.losses} · ${record.points} pts` : team.conference}${coach ? ` · Coach: ${coachLink(coach.id, coach.name)}` : ""}</div>
       </div>
     </div>
     <div class="club-hero-actions">
@@ -2941,10 +3004,13 @@ function bindPageEvents() {
   }));
 
   $$(".team-link[data-id]").forEach(el => {
-    if (el.tagName !== "A") {
-      el.oncontextmenu = e => { e.preventDefault(); armOpenInNewTab(el, "team", el.dataset.id); };
-    }
+    el.oncontextmenu = e => { e.preventDefault(); armOpenInNewTab(el, "team", el.dataset.id); };
     el.onclick = async e => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
+        await persist();
+        clearPendingNewTabTarget();
+        return;
+      }
       e.preventDefault();
       if (shouldOpenInNewTab("team", el.dataset.id)) return openInNewTab("team", el.dataset.id);
       clearPendingNewTabTarget();
@@ -2994,17 +3060,28 @@ function bindPageEvents() {
   }));
 
   $$(".coach-link[data-id]").forEach(el => {
-    el.onclick = e => {
+    el.oncontextmenu = e => { e.preventDefault(); armOpenInNewTab(el, "coach", el.dataset.id); };
+    el.onclick = async e => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
+        await persist();
+        clearPendingNewTabTarget();
+        return;
+      }
       e.preventDefault();
+      if (shouldOpenInNewTab("coach", el.dataset.id)) return openInNewTab("coach", el.dataset.id);
+      clearPendingNewTabTarget();
       renderCoachProfile(el.dataset.id);
     };
   });
 
   $$(".player-link[data-id]").forEach(el => {
-    if (el.tagName !== "A") {
-      el.oncontextmenu = e => { e.preventDefault(); armOpenInNewTab(el, "player", el.dataset.id); };
-    }
+    el.oncontextmenu = e => { e.preventDefault(); armOpenInNewTab(el, "player", el.dataset.id); };
     el.onclick = async e => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) {
+        await persist();
+        clearPendingNewTabTarget();
+        return;
+      }
       e.preventDefault();
       if (shouldOpenInNewTab("player", el.dataset.id)) return openInNewTab("player", el.dataset.id);
       clearPendingNewTabTarget();

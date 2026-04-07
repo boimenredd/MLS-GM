@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700;800&display=swap");
 :root {
   --bg: #0b1020;
   --bg2: #10172b;
@@ -12,8 +13,8 @@
   --yellow: #f1c75b;
   --red: #ff6b7c;
   --shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --sans: Inter, system-ui, sans-serif;
+  --mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: "DM Sans", Inter, system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -2247,3 +2248,220 @@ html[data-theme="light"] .text-link { color: #1452a8; }
 .sidebar-fbgm #simToExtensionsBtn,
 .sidebar-fbgm #simToFABtn,
 .sidebar-fbgm #simYearBtn { display:block !important; }
+
+
+/* --- v11 player profile alignment cleanup --- */
+.player-profile-grid { align-items: stretch; }
+.player-profile-grid > .panel { min-width: 0; }
+.player-hero-grid {
+  display:grid;
+  grid-template-columns: minmax(0,1.15fr) minmax(220px,.7fr) minmax(0,1fr);
+  gap: 0;
+  align-items: stretch;
+}
+.player-info-list {
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  align-content: stretch;
+}
+.player-info-item {
+  min-height: 92px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+}
+.player-info-item span { letter-spacing: .06em; }
+.player-info-item strong,
+.player-mini-metrics strong,
+.season-stat strong { font-variant-numeric: tabular-nums; }
+.player-position-board,
+.player-traits-card { display:flex; flex-direction:column; justify-content:flex-start; }
+.player-position-board { min-height: 100%; }
+.trait-radar-placeholder { min-height: 108px; }
+.player-mini-metrics { align-items: stretch; }
+.player-mini-metrics div { min-height: 78px; display:flex; flex-direction:column; justify-content:center; }
+.player-season-stat-strip {
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  align-items: stretch;
+}
+.season-stat {
+  min-height: 96px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap: 6px;
+}
+.player-career-panel .career-item {
+  align-items: center;
+}
+.player-career-panel .career-item strong,
+.player-career-panel .career-item span,
+.player-career-panel .career-item em {
+  min-width: 0;
+}
+.player-career-panel .career-item em { text-align:right; }
+.tight-table td, .tight-table th { vertical-align: middle; }
+.tight-table td.num, .tight-table th.num { font-variant-numeric: tabular-nums; }
+.roster-clean-table td, .roster-clean-table th { white-space: nowrap; }
+.roster-pos-pill {
+  display:inline-flex; align-items:center; justify-content:center; min-width:42px; padding:3px 8px;
+  border-radius:999px; background: color-mix(in srgb, var(--accent) 18%, var(--bg3));
+  color: var(--text); font-family: var(--mono); font-size: 11px; font-weight: 600;
+}
+.club-hero-sub .coach-link { color: inherit; font-weight: 700; }
+html[data-theme="light"] .player-info-item,
+html[data-theme="light"] .player-position-board,
+html[data-theme="light"] .player-traits-card,
+html[data-theme="light"] .trait-pill { color: #fff; }
+html[data-theme="light"] #playerProfileOverlay .panel,
+html[data-theme="light"] #playerProfileOverlay .season-stat,
+html[data-theme="light"] #playerProfileOverlay .player-mini-metrics div,
+html[data-theme="light"] #playerProfileOverlay .pp-info-box,
+html[data-theme="light"] #playerProfileOverlay .tight-table,
+html[data-theme="light"] #playerProfileOverlay .tight-table * { color: var(--text); }
+
+/* --- v11 live sim / EuroSim styling pass --- */
+#match-sim-overlay,
+#goal-replay-overlay,
+#var-overlay {
+  font-family: var(--sans);
+}
+#match-sim-box,
+#goal-replay-inner,
+#var-broadcast {
+  background: linear-gradient(180deg, #13161b 0%, #0d0f12 100%);
+  border: 1px solid #2a3040;
+  box-shadow: 0 28px 80px rgba(0,0,0,.58);
+}
+#msim-header,
+#sim-minute,
+#msim-control-bar,
+#goal-replay-badge,
+#var-main-label,
+#var-brand-sub,
+#var-scanning-text,
+.msim-section-title,
+.msim-stat-label,
+#sim-score-sub,
+.msim-control-right,
+#goal-replay-scorer,
+.goal-replay-stat-label,
+#var-desc {
+  font-family: var(--mono);
+}
+#match-sim-box { padding: 18px 22px 14px; }
+#msim-header {
+  background: #13161b;
+  border: 1px solid #2a3040;
+  border-radius: 0;
+  padding: 10px 14px;
+}
+#sim-minute {
+  background: #1a1e25;
+  border: 1px solid #3a4558;
+  color: #e2e8f0;
+}
+.fc-scoreboard {
+  background: #13161b;
+  border: 1px solid #2a3040;
+  border-radius: 0;
+}
+.match-team,
+.msim-team-text,
+.week-team-name-strong,
+#sim-home-name,
+#sim-away-name,
+.msim-lineup-name,
+.match-events,
+#msim-live-ratings,
+#msim-live-stats,
+#goal-replay-title,
+.goal-replay-stat-val,
+#var-brand-text,
+#var-decision-badge {
+  font-family: var(--sans);
+}
+.match-score {
+  color: #3bdef3;
+  text-shadow: none;
+  font-weight: 800;
+}
+#msim-fc-layout {
+  grid-template-columns: 220px minmax(620px, 1fr) 220px;
+}
+.msim-side-panel {
+  background: #13161b;
+  border: 1px solid #2a3040;
+  border-radius: 0;
+  min-height: 620px;
+}
+.msim-side-tab,
+.msim-tab-btn,
+.sim-speed-opt,
+#sim-pause-btn,
+#sim-skip-btn {
+  font-family: var(--sans);
+}
+.msim-side-tab.active,
+.msim-tab-btn.active,
+.sim-speed-opt.active {
+  background: #3b82f6;
+  color: #fff;
+}
+#msim-pitch-wrap {
+  border: 1px solid #2a3040;
+  border-radius: 0;
+  background: linear-gradient(180deg, #07242d 0%, #092b37 100%);
+}
+#msim-pitch-hud .msim-possession-chip,
+#msim-pitch-hud .msim-attack-chip {
+  border-radius: 999px;
+  background: rgba(13,15,18,.82);
+  border: 1px solid #2a3040;
+}
+#msim-live-stats .msim-stat-row,
+#msim-live-ratings .msim-rating-row,
+#msim-home-lineup .msim-lineup-row,
+#msim-away-lineup .msim-lineup-row {
+  font-variant-numeric: tabular-nums;
+}
+.msim-rating-row span:first-child,
+.msim-lineup-name {
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.msim-position-tag {
+  display:inline-flex;
+  min-width: 34px;
+  justify-content:center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #1a1e25;
+  border: 1px solid #2a3040;
+  color: #8896a8;
+  font-size: 10px;
+  font-family: var(--mono);
+}
+#goal-replay-inner,
+#var-broadcast {
+  border-radius: 0;
+}
+#goal-replay-pitch-wrap,
+#var-screen,
+#var-ref-panel,
+#goal-replay-side,
+#var-right-col > * {
+  border-radius: 0 !important;
+}
+#goal-replay-title,
+#var-brand-text { letter-spacing: 0; }
+#var-brand-text { font-family: var(--sans); font-size: 40px; }
+#goal-replay-close { font-family: var(--sans); }
+@media (max-width: 1280px) {
+  #msim-fc-layout { grid-template-columns: 1fr; }
+  .msim-side-panel { min-height: auto; }
+  .player-hero-grid,
+  .player-profile-grid,
+  .player-season-stat-strip { grid-template-columns: 1fr; }
+}
