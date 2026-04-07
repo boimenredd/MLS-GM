@@ -25,6 +25,20 @@ import {
 
 import { REAL_MLS_PLAYERS, REAL_MLS_DATA_META } from "./real-mls-data.js";
 
+
+export function getRealMlsDatasetStatus() {
+  const meta = REAL_MLS_DATA_META || {};
+  const ready = !!(meta.ready && Array.isArray(REAL_MLS_PLAYERS) && REAL_MLS_PLAYERS.length);
+  return {
+    ready,
+    playerCount: Array.isArray(REAL_MLS_PLAYERS) ? REAL_MLS_PLAYERS.length : 0,
+    source: meta.source || 'unknown',
+    seasons: Array.isArray(meta.seasons) ? meta.seasons : [],
+    note: meta.note || (ready ? 'Dataset loaded.' : 'Real MLS dataset is unavailable.'),
+    builtAt: meta.builtAt || null,
+  };
+}
+
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
 function clubCountry(name) {
@@ -673,7 +687,7 @@ function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
       gp: 0, gs: 0, min: 0, goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, xg: 0,
       yellows: 0, reds: 0, cleanSheets: 0, ga: 0, motm: 0,
     },
-    source: "real-mls-fbref",
+    source: "real-mls-csv",
     realPlayer: true,
   }, seasonYear);
 }
@@ -2480,7 +2494,7 @@ export function createNewState(options) {
   if (leagueMode === "real") {
     const ds = getRealMlsDatasetStatus();
     if (!ds.ready) {
-      throw new Error(ds.note || "Real MLS players + FBref ratings is not available in this build yet.");
+      throw new Error(ds.note || "Real MLS players is not available in this build yet.");
     }
   }
   const teams = [];
