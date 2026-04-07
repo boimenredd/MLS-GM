@@ -393,6 +393,126 @@ function formatMarketValue(value) {
   return formatMoney(roundMarketValue(value));
 }
 
+
+function clampRating(value, min = 1, max = 99) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.round(n)));
+}
+
+function averageRatings(values) {
+  const nums = values.map(v => Number(v)).filter(v => Number.isFinite(v));
+  if (!nums.length) return 0;
+  return Math.round(nums.reduce((a, b) => a + b, 0) / nums.length);
+}
+
+function parseHeightInches(heightText) {
+  if (!heightText) return null;
+  const m = String(heightText).match(/(\d+)\s*'\s*(\d+)/);
+  if (!m) return null;
+  return Number(m[1]) * 12 + Number(m[2]);
+}
+
+function heightToRating(heightText) {
+  const inches = parseHeightInches(heightText);
+  if (!inches) return 60;
+  return clampRating(48 + (inches - 62) * 2.35, 40, 95);
+}
+
+function getPlayerStatProfile(player) {
+  const a = player?.attributes || {};
+  const d = player?.detailed || {};
+  const physical = d.physical || {};
+  const technical = d.technical || {};
+  const defending = d.defending || {};
+  const goalkeeping = d.goalkeeping || {};
+  const basePass = Number(a.passing || 60);
+  const baseShoot = Number(a.shooting || 55);
+  const baseDrib = Number(a.dribbling || 58);
+  const baseDef = Number(a.defense || 45);
+  const basePhys = Number(a.physical || 58);
+  const basePace = Number(a.pace || 60);
+
+  const stats = {
+    physical: {
+      Height: heightToRating(player?.height),
+      Strength: clampRating(physical.strength ?? basePhys),
+      'Sprint Speed': clampRating(physical.sprintSpeed ?? basePace),
+      Acceleration: clampRating(physical.acceleration ?? basePace),
+      Endurance: clampRating(physical.stamina ?? ((basePhys + basePace) / 2)),
+    },
+    passing: {
+      Vision: clampRating(technical.vision ?? basePass),
+      Power: clampRating(((technical.shortPassing ?? basePass) + (physical.strength ?? basePhys)) / 2),
+      Accuracy: clampRating(technical.shortPassing ?? basePass),
+      Crossing: clampRating(technical.crossing ?? ((basePass + baseDrib) / 2)),
+      'Long Passing': clampRating(((technical.vision ?? basePass) + (technical.shortPassing ?? basePass) + (technical.setPieces ?? basePass)) / 3),
+    },
+    shooting: {
+      'Shot Power': clampRating(technical.longShots ?? baseShoot),
+      'Heading Accuracy': clampRating(defending.heading ?? ((baseDef + basePhys) / 2)),
+      Volleys: clampRating(((technical.finishing ?? baseShoot) + (technical.firstTouch ?? baseDrib)) / 2),
+      'Free Kick Accuracy': clampRating(technical.setPieces ?? ((basePass + baseShoot) / 2)),
+      Curve: clampRating(((technical.setPieces ?? basePass) + (technical.crossing ?? basePass) + (technical.vision ?? basePass)) / 3),
+    },
+    skill: {
+      Dribbling: clampRating(technical.dribbling ?? baseDrib),
+      'Ball Control': clampRating(technical.firstTouch ?? ((baseDrib + basePass) / 2)),
+      'Skill Moves': clampRating(((technical.dribbling ?? baseDrib) + (physical.acceleration ?? basePace)) / 2),
+    },
+    mentality: {
+      Aggression: clampRating(((physical.strength ?? basePhys) + (defending.tackling ?? baseDef)) / 2),
+      Positioning: clampRating(player?.position === 'GK'
+        ? (goalkeeping.command ?? baseDef)
+        : (((technical.finishing ?? baseShoot) + (technical.vision ?? basePass) + (defending.positioning ?? baseDef)) / 3)),
+      Penalties: clampRating(((technical.finishing ?? baseShoot) + (technical.setPieces ?? basePass)) / 2),
+      Composure: clampRating(((technical.firstTouch ?? baseDrib) + (technical.vision ?? basePass) + (physical.strength ?? basePhys)) / 3),
+    },
+    defense: {
+      Awareness: clampRating(((defending.marking ?? baseDef) + (defending.positioning ?? baseDef)) / 2),
+      'Standing Tackle': clampRating(defending.tackling ?? baseDef),
+      'Sliding Tackle': clampRating((defending.tackling ?? baseDef) - 4),
+      Interceptions: clampRating(defending.interceptions ?? baseDef),
+    },
+    goalkeeping: {
+      Diving: clampRating(((goalkeeping.reflexes ?? 12) + (goalkeeping.oneOnOnes ?? 12)) / 2),
+      Handling: clampRating(goalkeeping.handling ?? 12),
+      Kicking: clampRating(goalkeeping.kicking ?? 12),
+      Positioning: clampRating(goalkeeping.command ?? 12),
+      Reflexes: clampRating(goalkeeping.reflexes ?? 12),
+    },
+  };
+
+  const categoryRatings = Object.fromEntries(Object.entries(stats).map(([key, group]) => [key, averageRatings(Object.values(group))]));
+  const weightsByPos = {
+    GK: { goalkeeping: 0.62, physical: 0.14, mentality: 0.12, passing: 0.08, defense: 0.04 },
+    CB: { defense: 0.42, physical: 0.26, mentality: 0.12, passing: 0.1, skill: 0.05, shooting: 0.05 },
+    LB: { defense: 0.26, physical: 0.22, passing: 0.18, skill: 0.16, mentality: 0.1, shooting: 0.08 },
+    RB: { defense: 0.26, physical: 0.22, passing: 0.18, skill: 0.16, mentality: 0.1, shooting: 0.08 },
+    CDM: { defense: 0.26, passing: 0.22, physical: 0.18, mentality: 0.16, skill: 0.12, shooting: 0.06 },
+    CM: { passing: 0.24, skill: 0.22, mentality: 0.18, physical: 0.16, defense: 0.12, shooting: 0.08 },
+    CAM: { passing: 0.26, skill: 0.24, mentality: 0.16, shooting: 0.16, physical: 0.1, defense: 0.08 },
+    LM: { skill: 0.24, passing: 0.2, physical: 0.18, shooting: 0.16, mentality: 0.12, defense: 0.1 },
+    RM: { skill: 0.24, passing: 0.2, physical: 0.18, shooting: 0.16, mentality: 0.12, defense: 0.1 },
+    LW: { skill: 0.26, shooting: 0.2, passing: 0.18, physical: 0.16, mentality: 0.12, defense: 0.08 },
+    RW: { skill: 0.26, shooting: 0.2, passing: 0.18, physical: 0.16, mentality: 0.12, defense: 0.08 },
+    ST: { shooting: 0.32, skill: 0.2, physical: 0.18, mentality: 0.14, passing: 0.1, defense: 0.06 },
+  };
+  const weights = weightsByPos[player?.position] || { physical: .17, passing: .17, shooting: .17, skill: .17, mentality: .16, defense: .16 };
+  const positionRating = clampRating(Object.entries(weights).reduce((sum, [key, wt]) => sum + (categoryRatings[key] || 0) * wt, 0));
+  return { stats, categoryRatings, positionRating };
+}
+
+function renderPlayerStatCard(title, rating, statMap) {
+  const rows = Object.entries(statMap).map(([label, value]) => `
+    <div class="player-stat-row">
+      <span class="player-stat-label">${escapeHtml(label)}</span>
+      <div class="player-stat-bar"><i style="width:${Math.max(0, Math.min(100, Number(value) || 0))}%"></i></div>
+      <strong class="player-stat-value">${Math.round(Number(value) || 0)}</strong>
+    </div>`).join('');
+  return `<section class="panel player-stat-card"><div class="panel-head"><h3>${escapeHtml(title)}</h3><span>${rating}</span></div><div class="player-stat-list">${rows}</div></section>`;
+}
+
 function playerLink(id, label) {
   const text = label || byPlayerId(id)?.name || "Unknown Player";
   return `<a href="${escapeAttr(buildRouteHref('player', id))}" class="text-link player-link" data-id="${id}">${escapeHtml(text)}</a>`;
@@ -1765,103 +1885,125 @@ function pageHead(title, sub) {
 
 // ── Player profile modal ─────────────────────────────────────────────────────
 
+
 function openPlayerProfile(playerId) {
   const p = byPlayerId(playerId);
   if (!p) return;
   const team = p.clubId ? byTeamId(p.clubId) : null;
-  const d = p.detailed || {};
   const s = p.stats || {};
   const country = p.nationality || "Unknown";
+  const profile = getPlayerStatProfile(p);
+  const categoryOrder = [
+    ["Physical", profile.stats.physical],
+    ["Passing", profile.stats.passing],
+    ["Shooting", profile.stats.shooting],
+    ["Skill", profile.stats.skill],
+    ["Mentality", profile.stats.mentality],
+    ["Defense", profile.stats.defense],
+    ["Goalkeeping", profile.stats.goalkeeping],
+  ];
   const years = [];
-  for (let y = Math.max(2023, (state.season.year || 2026) - 5); y <= (state.season.year || 2026); y++) years.push(y);
-  const marketSeries = years.map((year, idx) => {
+  for (let y = Math.max(2023, (state.season.year || 2026) - 3); y <= (state.season.year || 2026); y++) years.push(y);
+  const marketSeriesRaw = years.map((year, idx) => {
     const ageAdj = p.age <= 20 ? 1.05 : p.age <= 24 ? 1.12 : p.age <= 29 ? 1 : p.age <= 32 ? 0.92 : 0.82;
-    return Math.max(350000, Math.round((p.contract?.salary || 100000) * (0.65 + idx * 0.11) * ageAdj * (0.8 + ((p.overall || 60) - 55) / 80)));
+    return Math.max(350000, Math.round((p.contract?.salary || 100000) * (0.7 + idx * 0.12) * ageAdj * (0.84 + ((profile.positionRating || p.overall || 60) - 55) / 78)));
   });
+  const marketSeries = marketSeriesRaw.map(v => roundMarketValue(v));
   const highest = Math.max(...marketSeries);
   const statTiles = p.position === "GK"
-    ? [["Clean sheets", s.cleanSheets || 0], ["Goals against", s.ga || 0], ["Matches", s.gp || 0], ["Rating", getLivePlayerRating(p, 1).toFixed(2)]]
+    ? [["Clean sheets", s.cleanSheets || 0], ["Goals against", s.ga || 0], ["Matches", s.gp || 0], ["Rating", getLivePlayerRating(p, 1).toFixed(2)], ["Minutes", formatNumber(s.min || 0)], ["Saves", s.saves || 0]]
     : [["Goals", s.goals || 0], ["Assists", s.assists || 0], ["Started", s.gs || 0], ["Matches", s.gp || 0], ["Minutes", formatNumber(s.min || 0)], ["Rating", getLivePlayerRating(p, 1).toFixed(2)], ["Yellow cards", s.yellows || 0], ["Red cards", s.reds || 0]];
-  const traits = (p.traits || []).slice(0, 6);
+  const traits = (p.traits || []).slice(0, 5);
+  const traitHtml = traits.length ? traits.map(t => `<span class="trait-pill">${escapeHtml(t)}</span>`).join("") : `<span class="trait-pill">Balanced profile</span>`;
   const secondaryPosition = p.position === "LB" ? "LM"
     : p.position === "RB" ? "RM"
     : p.position === "CB" ? "CDM"
     : p.position === "ST" ? "CAM"
     : p.position === "CAM" ? "CM"
     : "Versatile";
-  const html = `<div id="playerProfileOverlay" class="pp-overlay">
-    <div class="pp-modal pp-player-shell">
-      <button class="pp-close" id="ppClose">×</button>
-      <div class="player-hero-card">
-        <div class="player-hero-top">
-          <div class="player-avatar">${escapeHtml((p.name || "P").split(" ").map(x => x[0]).slice(0, 2).join(""))}</div>
-          <div>
-            <div class="player-hero-name">${escapeHtml(p.name)}</div>
-            <div class="player-hero-sub">${team ? teamLink(team.id, team.name) : "Free Agent"}</div>
-          </div>
-          <button class="ghost-btn">Follow</button>
-        </div>
-        <div class="player-hero-grid">
-          <div class="player-info-list">
-            <div class="player-info-item"><span>Height</span><strong>${escapeHtml(p.height || "5'10\"")}</strong></div>
-            <div class="player-info-item"><span>Age</span><strong>${p.age}</strong></div>
-            <div class="player-info-item"><span>Preferred foot</span><strong>${escapeHtml(p.preferredFoot || "Right")}</strong></div>
-            <div class="player-info-item"><span>Country</span><strong>${escapeHtml(country)}</strong></div>
-            <div class="player-info-item"><span>Transfer value</span><strong>${formatMarketValue(marketSeries[marketSeries.length - 1])}</strong></div>
-            <div class="player-info-item"><span>Contract end</span><strong>${p.contract?.expiresYear || (state.season.year + (p.contract?.yearsLeft || 0))}</strong></div>
-          </div>
-          <div class="player-position-board">
-            <div class="pp-section-title">Position</div>
-            <div class="position-primary">${escapeHtml(p.position)}</div>
-            <div class="note">Primary</div>
-            <div class="player-pos-chip">${escapeHtml(p.position)}</div>
-            <div class="note">${escapeHtml(secondaryPosition)}</div>
-          </div>
-          <div class="player-traits-card">
-            <div class="pp-section-title">Player traits</div>
-            <div class="trait-radar-placeholder">
-              ${traits.map(t => `<span class="trait-pill">${escapeHtml(t)}</span>`).join("") || `<span class="trait-pill">Balanced profile</span>`}
-            </div>
-            <div class="trait-grid-mini">
-              <div><span>Touches</span><strong>${Math.min(99, Math.max(12, Math.round(((d.technical?.shortPassing || p.attributes.passing || 60) + (d.technical?.dribbling || p.attributes.dribbling || 60)) / 2)))}%</strong></div>
-              <div><span>Chances created</span><strong>${Math.min(99, Math.max(6, Math.round((d.technical?.vision || p.attributes.passing || 60) * 0.8)))}%</strong></div>
-              <div><span>Aerial duels</span><strong>${Math.min(99, Math.max(5, Math.round((d.defending?.heading || p.attributes.physical || 60) * 0.75)))}%</strong></div>
-              <div><span>Defensive contribution</span><strong>${Math.min(99, Math.max(4, Math.round((d.defending?.marking || p.attributes.defense || 60) * 0.82)))}%</strong></div>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div class="player-profile-grid">
-        <div class="panel">
-          <div class="panel-head"><h3>Transfer value: ${formatMarketValue(marketSeries[marketSeries.length - 1])}</h3><span>Highest: ${formatMarketValue(highest)}</span></div>
-          <div class="market-graph">${marketSeries.map(v => `<div class="market-bar"><i style="height:${Math.max(8, Math.round((v / highest) * 100))}%"></i></div>`).join("")}</div>
-          <div class="market-years">${years.map(y => `<span>${y}</span>`).join("")}</div>
-        </div>
-        <div class="panel player-career-panel">
-          <div class="panel-head"><h3>Career</h3><span>${team ? "Senior career" : "Free agent"}</span></div>
-          <div class="career-list">
-            <div class="career-item"><strong>${team ? escapeHtml(team.name) : "Free Agent"}</strong><span>${state.season.year - (p.contract?.yearsLeft || 0)} — now</span><em>${formatNumber(s.gp || 0)} apps</em></div>
-            ${(p.homegrown ? `<div class="career-item"><strong>Youth career</strong><span>Academy pathway</span><em>Homegrown</em></div>` : "")}
+  const html = `<div id="playerProfileOverlay" class="pp-overlay">
+    <div class="pp-modal pp-player-shell player-profile-clean-shell">
+      <button class="pp-close" id="ppClose">×</button>
+      <div class="player-hero-card player-hero-card-clean">
+        <div class="player-hero-top player-hero-top-clean">
+          <div class="player-hero-id-block">
+            <div class="player-avatar">${escapeHtml((p.name || "P").split(" ").map(x => x[0]).slice(0, 2).join(""))}</div>
+            <div>
+              <div class="player-hero-name">${escapeHtml(p.name)}</div>
+              <div class="player-hero-sub">${team ? teamLink(team.id, team.name) : "Free Agent"} · ${escapeHtml(country)}</div>
+            </div>
           </div>
-          <div class="subtle-divider"></div>
-          <div class="player-mini-metrics">
+          <div class="player-hero-metrics-clean">
             <div><span>Overall</span><strong>${p.overall}</strong></div>
             <div><span>Potential</span><strong>${p.potential}</strong></div>
-            <div><span>Salary</span><strong>${formatMoney(p.contract?.salary || 0)}</strong></div>
-            <div><span>Country</span><strong>${escapeHtml(country)}</strong></div>
+            <div><span>${escapeHtml(p.position)} rating</span><strong>${profile.positionRating}</strong></div>
+            <div><span>Market value</span><strong>${formatMarketValue(marketSeries[marketSeries.length - 1])}</strong></div>
           </div>
         </div>
       </div>
 
-      <div class="panel">
-        <div class="panel-head"><h3>${state.season.year} / ${state.season.year + 1}</h3><span>${escapeHtml(team?.name || "Player season stats")}</span></div>
-        <div class="player-season-stat-strip">${statTiles.map(([k,v]) => `<div class="season-stat"><strong>${v}</strong><span>${escapeHtml(k)}</span></div>`).join("")}</div>
+      <div class="player-profile-top-grid-clean">
+        <section class="panel player-summary-panel-clean">
+          <div class="panel-head"><h3>Overview</h3><span>${team ? teamLink(team.id, team.name) : "Free Agent"}</span></div>
+          <div class="player-summary-grid-clean">
+            <div class="pp-info-box"><span class="pp-info-lbl">Height</span><strong class="pp-info-val">${escapeHtml(p.height || `5'10"`)}</strong></div>
+            <div class="pp-info-box"><span class="pp-info-lbl">Age</span><strong class="pp-info-val">${p.age}</strong></div>
+            <div class="pp-info-box"><span class="pp-info-lbl">Preferred foot</span><strong class="pp-info-val">${escapeHtml(p.preferredFoot || "Right")}</strong></div>
+            <div class="pp-info-box"><span class="pp-info-lbl">Country</span><strong class="pp-info-val">${escapeHtml(country)}</strong></div>
+            <div class="pp-info-box"><span class="pp-info-lbl">Transfer value</span><strong class="pp-info-val">${formatMarketValue(marketSeries[marketSeries.length - 1])}</strong></div>
+            <div class="pp-info-box"><span class="pp-info-lbl">Contract end</span><strong class="pp-info-val">${p.contract?.expiresYear || (state.season.year + (p.contract?.yearsLeft || 0))}</strong></div>
+          </div>
+          <div class="player-overview-split-clean">
+            <div class="player-position-box-clean">
+              <div class="pp-section-title">Position</div>
+              <div class="position-primary">${escapeHtml(p.position)}</div>
+              <div class="note">Primary</div>
+              <div class="player-pos-chip">${escapeHtml(p.position)}</div>
+              <div class="note" style="margin-top:10px;">${escapeHtml(secondaryPosition)}</div>
+            </div>
+            <div class="player-traits-card-clean">
+              <div class="pp-section-title">Player traits</div>
+              <div class="trait-radar-placeholder">${traitHtml}</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel player-career-panel-clean">
+          <div class="panel-head"><h3>Career</h3><span>${team ? "Senior career" : "Free agent"}</span></div>
+          <div class="career-list">
+            <div class="career-item"><strong>${team ? escapeHtml(team.name) : "Free Agent"}</strong><span>${Math.max(2023, state.season.year - (p.contract?.yearsLeft || 0) - 1)} — now</span><em>${formatNumber(s.gp || 0)} apps</em></div>
+            ${p.homegrown ? `<div class="career-item"><strong>Youth career</strong><span>Academy pathway</span><em>Homegrown</em></div>` : ""}
+          </div>
+          <div class="subtle-divider"></div>
+          <div class="player-mini-metrics player-mini-metrics-clean">
+            <div><span>Salary</span><strong>${formatMoney(p.contract?.salary || 0)}</strong></div>
+            <div><span>Country</span><strong>${escapeHtml(country)}</strong></div>
+            <div><span>Position rating</span><strong>${profile.positionRating}</strong></div>
+            <div><span>Potential</span><strong>${p.potential}</strong></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="player-ratings-grid-clean">
+        ${categoryOrder.map(([title, group]) => renderPlayerStatCard(title, profile.categoryRatings[title.toLowerCase()] || averageRatings(Object.values(group)), group)).join('')}
+      </div>
+
+      <div class="player-profile-bottom-grid-clean">
+        <section class="panel">
+          <div class="panel-head"><h3>Transfer value</h3><span>Highest: ${formatMarketValue(highest)}</span></div>
+          <div class="market-graph market-graph-clean">${marketSeries.map(v => `<div class="market-bar"><i style="height:${Math.max(12, Math.round((v / highest) * 100))}%"></i></div>`).join("")}</div>
+          <div class="market-years">${years.map(y => `<span>${y}</span>`).join("")}</div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h3>${state.season.year} / ${state.season.year + 1}</h3><span>${escapeHtml(team?.name || "Season stats")}</span></div>
+          <div class="player-season-stat-strip player-season-stat-strip-clean">${statTiles.map(([k,v]) => `<div class="season-stat"><strong>${v}</strong><span>${escapeHtml(k)}</span></div>`).join("")}</div>
+        </section>
       </div>
 
       <div class="panel">
         <div class="panel-head"><h3>Match stats</h3><span>Sim season log</span></div>
-        <table class="tight-table"><thead><tr><th>Category</th><th class="num">Value</th><th>Category</th><th class="num">Value</th></tr></thead><tbody>
+        <table class="tight-table player-match-table-clean"><thead><tr><th>Category</th><th class="num">Value</th><th>Category</th><th class="num">Value</th></tr></thead><tbody>
           <tr><td>Goals</td><td class="num">${s.goals || 0}</td><td>Assists</td><td class="num">${s.assists || 0}</td></tr>
           <tr><td>Shots</td><td class="num">${s.shots || 0}</td><td>On target</td><td class="num">${s.shotsOnTarget || 0}</td></tr>
           <tr><td>xG</td><td class="num">${(s.xg || 0).toFixed(1)}</td><td>Minutes</td><td class="num">${formatNumber(s.min || 0)}</td></tr>

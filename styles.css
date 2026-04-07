@@ -2465,3 +2465,195 @@ html[data-theme="light"] #playerProfileOverlay .tight-table * { color: var(--tex
   .player-profile-grid,
   .player-season-stat-strip { grid-template-columns: 1fr; }
 }
+
+
+/* --- v12 player profile rebuild --- */
+.player-profile-clean-shell {
+  width: min(1260px, calc(100vw - 30px));
+  padding: 0 0 18px;
+}
+.player-hero-card-clean {
+  border-radius: 18px 18px 0 0;
+  margin-bottom: 16px;
+}
+.player-hero-top-clean {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 18px;
+  align-items: center;
+}
+.player-hero-id-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.player-hero-metrics-clean {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.player-hero-metrics-clean div {
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,.34);
+  border-radius: 12px;
+  background: rgba(0,0,0,.14);
+}
+.player-hero-metrics-clean span {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: rgba(255,255,255,.8);
+}
+.player-hero-metrics-clean strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 28px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.player-profile-top-grid-clean,
+.player-profile-bottom-grid-clean {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) 400px;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.player-summary-grid-clean {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.player-overview-split-clean {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+.player-position-box-clean,
+.player-traits-card-clean {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg3) 86%, var(--bg2));
+  padding: 14px;
+  min-width: 0;
+}
+.player-position-box-clean {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+.player-ratings-grid-clean {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.player-stat-card {
+  min-width: 0;
+}
+.player-stat-list {
+  display: grid;
+  gap: 10px;
+}
+.player-stat-row {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) 42px;
+  gap: 10px;
+  align-items: center;
+}
+.player-stat-label {
+  font-size: 13px;
+  color: var(--text);
+}
+.player-stat-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg4) 82%, #000 18%);
+  overflow: hidden;
+}
+.player-stat-bar i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent) 0%, #22c55e 100%);
+}
+.player-stat-value {
+  text-align: right;
+  font-size: 14px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.player-mini-metrics-clean {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.market-graph-clean {
+  min-height: 190px;
+}
+.player-season-stat-strip-clean {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.player-match-table-clean th,
+.player-match-table-clean td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.player-match-table-clean td.num,
+.player-match-table-clean th.num,
+.player-hero-metrics-clean strong,
+.pp-info-val,
+.player-stat-value,
+.season-stat strong {
+  font-variant-numeric: tabular-nums;
+}
+#playerProfileOverlay .panel,
+#playerProfileOverlay .pp-info-box,
+#playerProfileOverlay .season-stat,
+#playerProfileOverlay .player-stat-card,
+#playerProfileOverlay .player-position-box-clean,
+#playerProfileOverlay .player-traits-card-clean {
+  box-shadow: none;
+}
+html[data-theme="light"] #playerProfileOverlay .player-position-box-clean,
+html[data-theme="light"] #playerProfileOverlay .player-traits-card-clean,
+html[data-theme="light"] #playerProfileOverlay .player-stat-card,
+html[data-theme="light"] #playerProfileOverlay .pp-info-box,
+html[data-theme="light"] #playerProfileOverlay .season-stat,
+html[data-theme="light"] #playerProfileOverlay .panel {
+  color: var(--text);
+}
+@media (max-width: 1180px) {
+  .player-hero-top-clean,
+  .player-profile-top-grid-clean,
+  .player-profile-bottom-grid-clean,
+  .player-overview-split-clean,
+  .player-ratings-grid-clean {
+    grid-template-columns: 1fr;
+  }
+  .player-summary-grid-clean {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 720px) {
+  .player-summary-grid-clean,
+  .player-hero-metrics-clean,
+  .player-season-stat-strip-clean {
+    grid-template-columns: 1fr;
+  }
+  .player-stat-row {
+    grid-template-columns: 1fr;
+  }
+  .player-stat-value { text-align: left; }
+}
+
+.market-years { grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); }
+.player-career-panel-clean .career-item { align-items: center; }
+.player-career-panel-clean .career-item strong,
+.player-career-panel-clean .career-item span,
+.player-career-panel-clean .career-item em { min-width: 0; }
+.player-career-panel-clean .career-item em { text-align: right; }
