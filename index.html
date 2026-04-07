@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <title>MLS GM 2026</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="homeScreen" class="home-screen">
+    <div class="hero-bg"></div>
+    <div class="home-card">
+      <div class="eyebrow">MLS FRONT OFFICE SIM</div>
+      <h1>Build your club.<br />Run your league.</h1>
+      <p class="home-sub">Browser-based MLS management sim with roster rules, academy development, SuperDraft, playoffs, free agency, youth progression, full tactics editor, and detailed player profiles.</p>
+      <div class="home-actions">
+        <button id="showCreateLeagueBtn" class="primary-btn big-btn">Create League</button>
+        <button id="showLoadLeagueBtn" class="ghost-btn big-btn">Load Save</button>
+      </div>
+      <div class="home-features">
+        <div class="feature-pill">30 MLS clubs</div>
+        <div class="feature-pill">Academy &amp; callups</div>
+        <div class="feature-pill">SuperDraft</div>
+        <div class="feature-pill">MLS roster rules</div>
+        <div class="feature-pill">Tactics &amp; lineups</div>
+        <div class="feature-pill">Player profiles</div>
+        <div class="feature-pill">Green card system</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="setupOverlay" class="overlay">
+    <div class="modal setup-modal">
+      <div class="modal-head"><h2>Create New League</h2><button id="closeSetupBtn" class="icon-btn" type="button">x</button></div>
+      <div class="setup-grid">
+        <div class="panel-lite">
+          <label for="saveSlotInput">Save Slot</label><input id="saveSlotInput" type="text" value="slot1" />
+          <label for="userTeamSelect">Your Club</label><select id="userTeamSelect">
+            <option value="Atlanta United">Atlanta United</option>
+            <option value="Austin FC">Austin FC</option>
+            <option value="Charlotte FC">Charlotte FC</option>
+            <option value="Chicago Fire FC">Chicago Fire FC</option>
+            <option value="FC Cincinnati">FC Cincinnati</option>
+            <option value="Colorado Rapids">Colorado Rapids</option>
+            <option value="Columbus Crew">Columbus Crew</option>
+            <option value="D.C. United">D.C. United</option>
+            <option value="FC Dallas">FC Dallas</option>
+            <option value="Houston Dynamo FC">Houston Dynamo FC</option>
+            <option value="Sporting Kansas City">Sporting Kansas City</option>
+            <option value="LA Galaxy">LA Galaxy</option>
+            <option value="Los Angeles FC">Los Angeles FC</option>
+            <option value="Inter Miami CF">Inter Miami CF</option>
+            <option value="Minnesota United FC">Minnesota United FC</option>
+            <option value="CF Montréal">CF Montréal</option>
+            <option value="Nashville SC">Nashville SC</option>
+            <option value="New England Revolution">New England Revolution</option>
+            <option value="New York City FC">New York City FC</option>
+            <option value="New York Red Bulls">New York Red Bulls</option>
+            <option value="Orlando City SC">Orlando City SC</option>
+            <option value="Philadelphia Union">Philadelphia Union</option>
+            <option value="Portland Timbers">Portland Timbers</option>
+            <option value="Real Salt Lake">Real Salt Lake</option>
+            <option value="San Diego FC">San Diego FC</option>
+            <option value="San Jose Earthquakes">San Jose Earthquakes</option>
+            <option value="Seattle Sounders FC">Seattle Sounders FC</option>
+            <option value="St. Louis CITY SC">St. Louis CITY SC</option>
+            <option value="Toronto FC">Toronto FC</option>
+            <option value="Vancouver Whitecaps FC">Vancouver Whitecaps FC</option>
+          </select>
+          <label for="leagueModeSelect">League Type</label>
+          <select id="leagueModeSelect">
+            <option value="real">Real MLS players + CSV ratings</option>
+            <option value="generated" selected>Auto-generated players</option>
+          </select>
+          <div id="realModeHint" style="font-size:12px;color:#94a3b8;margin:6px 0 10px;line-height:1.35;">Real-player mode now uses the bundled MLS player CSV dataset in this build.</div>
+          <label for="salaryCapInput">Salary Cap</label><input id="salaryCapInput" type="number" value="6425000" />
+          <label for="gamInput">Starting GAM</label><input id="gamInput" type="number" value="3280000" />
+          <label for="tamInput">Starting TAM</label><input id="tamInput" type="number" value="2125000" />
+          <label for="academyInput">Academy Prospects Per Team</label><input id="academyInput" type="number" value="8" min="4" max="14" />
+        </div>
+        <div class="panel-lite">
+          <div class="setup-preview-title">League Setup</div>
+          <ul class="setup-list">
+            <li>30 clubs &mdash; all MLS 2026</li>
+            <li>Choose real MLS rosters or a full fictional universe</li>
+            <li>34-match regular season</li>
+            <li>Top 9 per conference qualify</li>
+            <li>Play-in + best-of-3 Round One</li>
+            <li>Free agency + SuperDraft</li>
+            <li>Youth academy + senior callups</li>
+            <li>Full tactics &amp; lineup editor</li>
+            <li>Green card / intl slot tracking</li>
+          </ul>
+          <div class="setup-actions"><button id="createLeagueBtn" class="primary-btn" type="button">Start League</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="loadOverlay" class="overlay">
+    <div class="modal load-modal">
+      <div class="modal-head"><h2>Load Save</h2><button id="closeLoadBtn" class="icon-btn" type="button">x</button></div>
+      <div id="saveSlotsList" class="save-slots-list"></div>
+    </div>
+  </div>
+
+  <div id="appShell" class="app-shell hidden">
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="brand-block">
+          <div class="brand-title">MLS GM 2026</div>
+          <div class="brand-sub">Front office simulator</div>
+        </div>
+        <div class="play-menu-wrap">
+          <button id="playMenuBtn" class="play-menu-btn" type="button">Play ▾</button>
+          <div id="playMenuDropdown" class="play-menu-dropdown hidden">
+            <button class="play-menu-item" data-sim-action="week">One week</button>
+            <button class="play-menu-item" data-sim-action="weeklive">One week (live)</button>
+            <button class="play-menu-item" data-sim-action="month">One month</button>
+            <button class="play-menu-item" data-sim-action="tradeDeadline">Until draft</button>
+            <button class="play-menu-item" data-sim-action="playoffs">Until playoffs</button>
+            <button class="play-menu-item" data-sim-action="extensions">Until extensions</button>
+            <button class="play-menu-item" data-sim-action="freeAgency">Until free agency</button>
+            <button class="play-menu-item" data-sim-action="nextSeason">To next season</button>
+          </div>
+        </div>
+      </div>
+      <div class="top-meta">
+        <div class="meta-box"><span>Club</span><strong id="metaClub">&#8212;</strong></div>
+        <div class="meta-box"><span>Season</span><strong id="metaSeason">&#8212;</strong></div>
+        <div class="meta-box"><span>Phase</span><strong id="metaPhase">&#8212;</strong></div>
+        <div class="meta-box"><span>Week</span><strong id="metaWeek">&#8212;</strong></div>
+      </div>
+      <div class="top-actions">
+        <button id="saveBtn" class="ghost-btn">Save</button>
+        <button id="exportBtn" class="ghost-btn">Export</button>
+        <label class="ghost-btn file-label">Import<input id="importInput" type="file" accept="application/json" hidden /></label>
+        <button id="themeToggleBtn" class="ghost-btn">Light</button>
+        <button id="backHomeBtn" class="ghost-btn">Home</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar sidebar-fbgm">
+        <button class="nav-btn active nav-dashboard-btn" data-page="dashboard">Dashboard</button>
+
+        <div class="side-group">
+          <div class="side-section-title">League</div>
+          <button class="nav-btn" data-page="standings">Standings</button>
+          <button class="nav-btn" data-page="playoffs">Playoffs</button>
+          <button class="nav-btn" data-page="openCup">US Open Cup</button>
+          <button class="nav-btn" data-page="weekly">Weekly Schedule</button>
+          <button class="nav-btn" data-page="leagueFinances">Finances</button>
+          <button class="nav-btn" data-page="leagueHistory">League History</button>
+          <button class="nav-btn" data-page="power">Power Rankings</button>
+          <button class="nav-btn" data-page="transactions">Transactions</button>
+          <button class="nav-btn" data-page="news">News Feed</button>
+        </div>
+
+        <div class="side-group">
+          <div class="side-section-title">Team</div>
+          <button class="nav-btn" data-page="roster">Roster</button>
+          <button class="nav-btn" data-page="tactics">Tactics</button>
+          <button class="nav-btn" data-page="teamSchedule">Team Schedule</button>
+          <button class="nav-btn" data-page="budget">Budget</button>
+        </div>
+
+        <div class="side-group">
+          <div class="side-section-title">Players</div>
+          <button class="nav-btn" data-page="freeAgents">Free Agents</button>
+          <button class="nav-btn" data-page="trade">Trade</button>
+          <button class="nav-btn" data-page="proposals">Trade Proposals</button>
+          <button class="nav-btn" data-page="draft">Draft</button>
+        </div>
+
+        <div class="side-group">
+          <div class="side-section-title">Stats</div>
+          <button class="nav-btn" data-page="leaders">League Leaders</button>
+          <button class="nav-btn" data-page="ratings">Player Ratings</button>
+          <button class="nav-btn" data-page="injuries">Injuries</button>
+          <button class="nav-btn" data-page="awards">Live Award Race</button>
+        </div>
+
+        <div class="side-group side-group-sim">
+          <div class="side-section-title">Play</div>
+          <button id="simOneBtn" class="action-btn">Sim Next Match</button>
+          <button id="simWeekBtn" class="action-btn">Sim 1 Week</button>
+          <button id="simMonthBtn" class="action-btn">Sim 1 Month</button>
+          <button id="simSeasonBtn" class="action-btn">Sim To End of Season</button>
+          <button id="simToDraftBtn" class="action-btn">Sim To Draft</button>
+          <button id="simToExtensionsBtn" class="action-btn">Sim To Extensions</button>
+          <button id="simToFABtn" class="action-btn">Sim To Free Agency</button>
+          <button id="simYearBtn" class="action-btn">Sim To Next Season</button>
+        </div>
+      </aside>
+
+      <main id="pageRoot" class="page-root"></main>
+    </div>
+  </div>
+
+  <div id="toastWrap" class="toast-wrap"></div>
+
+  <!-- Live match overlay -->
+  <div id="match-sim-overlay">
+    <div id="match-sim-box">
+      <div id="msim-header">
+        <div id="msim-comp-badge">MLS</div>
+        <div id="sim-minute">0'</div>
+        <div id="msim-weather-badge">&#9728;&#65039; Clear</div>
+      </div>
+      <div class="match-scoreboard fc-scoreboard">
+        <div class="match-teams">
+          <div class="match-team" id="sim-home-name">Home</div>
+          <div class="match-score-wrap">
+            <div class="match-score" id="sim-score">0 &#8211; 0</div>
+            <div class="match-score-sub" id="sim-score-sub">Regular Season Broadcast</div>
+          </div>
+          <div class="match-team away" id="sim-away-name">Away</div>
+        </div>
+        <div class="match-progress"><div class="match-progress-fill" id="sim-progress-fill" style="width:0%"></div></div>
+      </div>
+
+      <div id="msim-fc-layout">
+        <aside class="msim-side-panel" id="msim-left-rail">
+          <div class="msim-side-switcher"><button class="msim-side-tab active" data-side-view="home">Starting XI</button><button class="msim-side-tab" data-side-view="events">Commentary</button></div>
+          <div class="msim-side-scroll">
+            <div class="msim-section-title" id="msim-home-lineup-title">HOME</div>
+            <div id="msim-home-lineup"></div>
+            <div id="sim-events-wrap" class="hidden"><div class="msim-section-title">Commentary</div><div class="match-events" id="sim-events"></div></div>
+          </div>
+        </aside>
+
+        <section id="msim-center-stage">
+          <div id="msim-pitch-wrap">
+            <canvas id="msim-pitch-canvas" width="1080" height="620"></canvas>
+            <div id="msim-pitch-hud">
+              <div class="msim-possession-chip" id="msim-possession-chip">Balanced</div>
+              <div class="msim-attack-chip" id="msim-attack-chip">Build-up play</div>
+            </div>
+          </div>
+          <div id="msim-tabbar">
+            <button class="msim-tab-btn active" data-view="fitness">Fitness</button>
+            <button class="msim-tab-btn" data-view="ratings">Ratings</button>
+            <button class="msim-tab-btn" data-view="stats">Stats</button>
+            <button class="msim-tab-btn" data-view="gameplan">Gameplan</button>
+          </div>
+          <div id="msim-detail-row">
+            <div id="msim-live-stats"></div>
+          </div>
+        </section>
+
+        <aside class="msim-side-panel" id="msim-right-rail">
+          <div class="msim-side-switcher"><button class="msim-side-tab active" data-side-view="away">Starting XI</button><button class="msim-side-tab" data-side-view="bench">Bench</button></div>
+          <div class="msim-side-scroll">
+            <div class="msim-section-title" id="msim-away-lineup-title">AWAY</div>
+            <div id="msim-away-lineup"></div>
+          </div>
+        </aside>
+      </div>
+
+      <div id="msim-control-bar">
+        <div class="msim-control-left">
+          <button class="small-btn sim-speed-opt" data-speed="slow">Slow</button>
+          <button class="small-btn sim-speed-opt active" data-speed="normal">Normal</button>
+          <button class="small-btn sim-speed-opt" data-speed="fast">Fast</button>
+          <button class="small-btn sim-speed-opt" data-speed="turbo">Turbo</button>
+        </div>
+        <div class="msim-control-center">
+          <button class="small-btn" id="sim-pause-btn">Pause</button>
+          <button class="small-btn" id="sim-skip-btn">Skip Match</button>
+        </div>
+        <div class="msim-control-right"><span id="msim-control-hint">Live match simulation</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="goal-replay-overlay">
+    <div id="goal-replay-inner">
+      <div id="goal-replay-header">
+        <div><div id="goal-replay-title">GOAL REPLAY</div><div id="goal-replay-scorer"></div></div>
+        <div id="goal-replay-badge">REPLAY</div>
+      </div>
+      <div id="goal-replay-body">
+        <div id="goal-replay-pitch-wrap"><canvas id="goal-replay-canvas" width="820" height="460"></canvas></div>
+        <div id="goal-replay-side">
+          <div class="goal-replay-stat-box"><div class="goal-replay-stat-label">Minute</div><div class="goal-replay-stat-val" id="goal-replay-minute">0'</div></div>
+          <div class="goal-replay-stat-box"><div class="goal-replay-stat-label">Assist</div><div class="goal-replay-stat-val" id="goal-replay-assist">&#8212;</div></div>
+        </div>
+      </div>
+      <button id="goal-replay-close">Continue</button>
+    </div>
+  </div>
+
+  <div id="var-overlay">
+    <div id="var-broadcast">
+      <div id="var-main-panel"><div id="var-main-label">VAR REVIEW</div><div id="var-screen"></div></div>
+      <div id="var-right-col">
+        <div id="var-brand-block"><div id="var-brand-text">VAR</div><div id="var-brand-sub">Video Review</div></div>
+        <div id="var-footer"><div id="var-decision-badge"></div><div id="var-desc"></div><div id="var-scanning-text"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script>
+(function () {
+  const TEAM_OPTIONS = ["Atlanta United","Austin FC","Charlotte FC","Chicago Fire FC","FC Cincinnati","Colorado Rapids","Columbus Crew","D.C. United","FC Dallas","Houston Dynamo FC","Sporting Kansas City","LA Galaxy","Los Angeles FC","Inter Miami CF","Minnesota United FC","CF Montréal","Nashville SC","New England Revolution","New York City FC","New York Red Bulls","Orlando City SC","Philadelphia Union","Portland Timbers","Real Salt Lake","San Diego FC","San Jose Earthquakes","Seattle Sounders FC","St. Louis CITY SC","Toronto FC","Vancouver Whitecaps FC"];
+  const open = id => document.getElementById(id)?.classList.add("open");
+  const close = id => document.getElementById(id)?.classList.remove("open");
+  const ensureTeams = () => {
+    const sel = document.getElementById("userTeamSelect");
+    if (!sel) return;
+    if (sel.options.length) return;
+    sel.innerHTML = TEAM_OPTIONS.map(name => `<option value="${name}">${name}</option>`).join("");
+  };
+  const bindOnce = (id, fn) => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.boundFallback === '1') return;
+    el.dataset.boundFallback = '1';
+    el.addEventListener('click', fn);
+  };
+  const bind = () => {
+    ensureTeams();
+    bindOnce("showCreateLeagueBtn", () => { ensureTeams(); (window.__mlsgmOpenSetup ? window.__mlsgmOpenSetup() : open("setupOverlay")); });
+    bindOnce("closeSetupBtn", () => { window.__mlsgmCloseSetup ? window.__mlsgmCloseSetup() : close("setupOverlay"); });
+    bindOnce("showLoadLeagueBtn", () => { if (window.__mlsgmOpenLoad) return window.__mlsgmOpenLoad(); open("loadOverlay"); });
+    bindOnce("closeLoadBtn", () => { window.__mlsgmCloseLoad ? window.__mlsgmCloseLoad() : close("loadOverlay"); });
+    bindOnce("createLeagueBtn", async () => {
+      ensureTeams();
+      if (window.__mlsgmCreateLeague) return window.__mlsgmCreateLeague();
+      try {
+        const mod = await import('./js/app-main-v18.js?v=18fallback');
+        if (window.__mlsgmCreateLeague) return window.__mlsgmCreateLeague();
+      } catch (err) {
+        console.error('Fallback module import failed:', err);
+      }
+    });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, { once: true });
+  else bind();
+})();
+</script>
+<script type="module" src="./js/app-main-v18.js?v=18"></script>
+</body>
+</html>
