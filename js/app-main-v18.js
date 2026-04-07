@@ -30,7 +30,7 @@ import {
   autoAssignAllDesignations,
   ensureOpenCupState,
   getRealMlsDatasetStatus,
-} from "./sim.js";
+} from "./sim-v18.js";
 import { CONFERENCES, TEAM_LOGOS, TEAM_COLORS } from "./data.js";
 
 let state       = null;
@@ -3496,25 +3496,48 @@ function bindNav() {
 
 // ── League creation ──────────────────────────────────────────────────────────
 
+let createLeagueInFlight = false;
+
 async function createLeagueFromForm() {
-  const opts = {
-    saveSlot:       $("#saveSlotInput").value.trim()||"slot1",
-    userTeamName:   $("#userTeamSelect").value,
-    leagueMode:     $("#leagueModeSelect")?.value || "generated",
-    salaryBudget:   Number($("#salaryCapInput").value)||6425000,
-    gamAnnual:      Number($("#gamInput").value)||3280000,
-    tamAnnual:      Number($("#tamInput").value)||2125000,
-    academyPerTeam: Number($("#academyInput").value)||8,
-  };
-  state = normalizeState(createNewState(opts));
-  initGreenCards(state);
-  await persist();
-  closeOverlay($("#setupOverlay"));
-  setAppVisible(true);
-  currentPage = "dashboard";
-  $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page==="dashboard"));
-  await renderPage();
-  toast(`League created — ${opts.saveSlot} (${opts.leagueMode === "real" ? "Real MLS Players" : "Auto-generated"}).`,"success");
+  if (createLeagueInFlight) return;
+  createLeagueInFlight = true;
+  try {
+    const opts = {
+      saveSlot:       $("#saveSlotInput")?.value?.trim() || "slot1",
+      userTeamName:   $("#userTeamSelect")?.value || "Atlanta United",
+      leagueMode:     $("#leagueModeSelect")?.value || "generated",
+      salaryBudget:   Number($("#salaryCapInput")?.value) || 6425000,
+      gamAnnual:      Number($("#gamInput")?.value) || 3280000,
+      tamAnnual:      Number($("#tamInput")?.value) || 2125000,
+      academyPerTeam: Number($("#academyInput")?.value) || 8,
+    };
+    if (opts.leagueMode === "real") {
+      const ds = getRealMlsDatasetStatus();
+      if (!ds.ready) {
+        toast(ds.note || "Real MLS players is not available in this build yet.", "warn");
+        return;
+      }
+    }
+    state = normalizeState(createNewState(opts));
+    initGreenCards(state);
+    closeOverlay($("#setupOverlay"));
+    setAppVisible(true);
+    currentPage = "dashboard";
+    $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page === "dashboard"));
+    await renderPage();
+    try {
+      await persist();
+      toast(`League created — ${opts.saveSlot} (${opts.leagueMode === "real" ? "Real MLS Players" : "Auto-generated"}).`, "success");
+    } catch (persistErr) {
+      console.warn("Persist failed, continuing with in-memory save:", persistErr);
+      toast("League created. Auto-save was unavailable in this browser context.", "warn");
+    }
+  } catch (err) {
+    console.error("Create league failed:", err);
+    toast(`League creation failed: ${err?.message || err}`, "error");
+  } finally {
+    createLeagueInFlight = false;
+  }
 }
 
 async function openLoadModal() {
@@ -3672,4 +3695,38 @@ async function boot() {
   if (!launched) setAppVisible(false);
 }
 
-boot();
+function bindHomeFallbacks() {
+  const setupOverlay = document.getElementById("setupOverlay");
+  const loadOverlay = document.getElementById("loadOverlay");
+  document.getElementById("showCreateLeagueBtn")?.addEventListener("click", () => {
+    setupOverlay?.classList.add("open");
+  });
+  document.getElementById("closeSetupBtn")?.addEventListener("click", () => {
+    setupOverlay?.classList.remove("open");
+  });
+  document.getElementById("showLoadLeagueBtn")?.addEventListener("click", () => {
+    loadOverlay?.classList.add("open");
+  });
+  document.getElementById("closeLoadBtn")?.addEventListener("click", () => {
+    loadOverlay?.classList.remove("open");
+  });
+}
+
+window.__mlsgmCreateLeague = () => createLeagueFromForm();
+window.__mlsgmOpenLoad = () => openLoadModal();
+window.__mlsgmOpenSetup = () => openOverlay($("#setupOverlay"));
+window.__mlsgmCloseSetup = () => closeOverlay($("#setupOverlay"));
+window.__mlsgmCloseLoad = () => closeOverlay($("#loadOverlay"));
+
+const __runBoot = () => {
+  bindHomeFallbacks();
+  boot().catch(err => {
+    console.error("Boot failed:", err);
+  });
+};
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", __runBoot, { once: true });
+} else {
+  __runBoot();
+}

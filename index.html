@@ -72,9 +72,10 @@
           </select>
           <label for="leagueModeSelect">League Type</label>
           <select id="leagueModeSelect">
-            <option value="real">Real MLS players + FBref-ready ratings</option>
+            <option value="real">Real MLS players + CSV ratings</option>
             <option value="generated" selected>Auto-generated players</option>
           </select>
+          <div id="realModeHint" style="font-size:12px;color:#94a3b8;margin:6px 0 10px;line-height:1.35;">Real-player mode now uses the bundled MLS player CSV dataset in this build.</div>
           <label for="salaryCapInput">Salary Cap</label><input id="salaryCapInput" type="number" value="6425000" />
           <label for="gamInput">Starting GAM</label><input id="gamInput" type="number" value="3280000" />
           <label for="tamInput">Starting TAM</label><input id="tamInput" type="number" value="2125000" />
@@ -331,7 +332,7 @@
       ensureTeams();
       if (window.__mlsgmCreateLeague) return window.__mlsgmCreateLeague();
       try {
-        const mod = await import('./js/app-main-v16.js?v=16fallback');
+        const mod = await import('./js/app-main-v18.js?v=18fallback');
         if (window.__mlsgmCreateLeague) return window.__mlsgmCreateLeague();
       } catch (err) {
         console.error('Fallback module import failed:', err);
@@ -342,6 +343,6 @@
   else bind();
 })();
 </script>
-<script type="module" src="./js/app-main-v16.js?v=16"></script>
+<script type="module" src="./js/app-main-v18.js?v=18"></script>
 </body>
 </html>
