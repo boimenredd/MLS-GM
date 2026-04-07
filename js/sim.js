@@ -648,10 +648,12 @@ function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
   const attributes = profile.attributes;
   const displayedOvr = profile.overallRating;
   const potential = realPotentialFromOverall(displayedOvr, age);
-  let salary = estimateSalaryByProfile(position, displayedOvr, age, rosterRole);
-  if (displayedOvr >= 82) salary = Math.max(salary, randInt(4500000, 12000000));
-  else if (displayedOvr >= 78) salary = Math.max(salary, randInt(2200000, 6500000));
-  else if (displayedOvr >= 74) salary = Math.max(salary, randInt(1200000, 3200000));
+  let salary = Number(row.wageUSD || 0) > 0 ? Number(row.wageUSD || 0) : estimateSalaryByProfile(position, displayedOvr, age, rosterRole);
+  if (!Number(row.wageUSD || 0)) {
+    if (displayedOvr >= 82) salary = Math.max(salary, randInt(4500000, 12000000));
+    else if (displayedOvr >= 78) salary = Math.max(salary, randInt(2200000, 6500000));
+    else if (displayedOvr >= 74) salary = Math.max(salary, randInt(1200000, 3200000));
+  }
 
   return hydratePlayer({
     id: uuid("p"),
@@ -681,12 +683,14 @@ function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
     injuryMeta: null,
     attributes,
     detailed: profile.detailed,
+    categoryRatings: profile.categoryRatings || row.categoryRatings || {},
     overall: displayedOvr,
     potential,
     stats: {
       gp: 0, gs: 0, min: 0, goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, xg: 0,
       yellows: 0, reds: 0, cleanSheets: 0, ga: 0, motm: 0,
     },
+    traits: Array.isArray(row.traits) ? row.traits : [],
     source: "real-mls-csv",
     realPlayer: true,
   }, seasonYear);

@@ -606,7 +606,8 @@ function getPlayerStatProfile(player) {
   };
 
   const stats = tuneStatsForPosition(player, rawStats);
-  const categoryRatings = Object.fromEntries(Object.entries(stats).map(([key, group]) => [key, averageRatings(Object.values(group))]));
+  const computedCategoryRatings = Object.fromEntries(Object.entries(stats).map(([key, group]) => [key, averageRatings(Object.values(group))]));
+  const categoryRatings = player?.categoryRatings && Object.keys(player.categoryRatings).length ? player.categoryRatings : computedCategoryRatings;
   const weightsByPos = {
     GK: { goalkeeping: 0.72, physical: 0.12, mentality: 0.08, passing: 0.06, defense: 0.02 },
     CB: { defense: 0.44, physical: 0.24, mentality: 0.12, passing: 0.1, skill: 0.05, shooting: 0.05 },
@@ -622,7 +623,8 @@ function getPlayerStatProfile(player) {
     ST: { shooting: 0.34, skill: 0.2, physical: 0.18, mentality: 0.14, passing: 0.1, defense: 0.04 },
   };
   const weights = weightsByPos[player?.position] || { physical: .17, passing: .17, shooting: .17, skill: .17, mentality: .16, defense: .16 };
-  const positionRating = clampRating(Math.round(Object.entries(weights).reduce((sum, [key, wt]) => sum + (categoryRatings[key] || 0) * wt, 0)));
+  const computedPositionRating = clampRating(Math.round(Object.entries(weights).reduce((sum, [key, wt]) => sum + (categoryRatings[key] || 0) * wt, 0)));
+  const positionRating = Number.isFinite(Number(player?.overall)) ? clampRating(Number(player.overall)) : computedPositionRating;
   return { stats, categoryRatings, positionRating };
 }
 
@@ -636,9 +638,17 @@ function renderPlayerStatCard(title, rating, statMap) {
   return `<section class="panel player-stat-card"><div class="panel-head"><h3>${escapeHtml(title)}</h3><span>${rating}</span></div><div class="player-stat-list">${rows}</div></section>`;
 }
 
+function playerPhoto(player, cls = "player-photo-inline") {
+  const initials = escapeHtml((player?.name || "P").split(" ").map(x => x[0]).slice(0,2).join(""));
+  const src = player?.photoUrl;
+  if (src) return `<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls}" loading="lazy" referrerpolicy="no-referrer" />`;
+  return `<span class="${cls} player-photo-fallback">${initials}</span>`;
+}
+
 function playerLink(id, label) {
-  const text = label || byPlayerId(id)?.name || "Unknown Player";
-  return `<a href="${escapeAttr(buildRouteHref('player', id))}" class="text-link player-link" data-id="${id}">${escapeHtml(text)}</a>`;
+  const player = byPlayerId(id);
+  const text = label || player?.name || "Unknown Player";
+  return `<a href="${escapeAttr(buildRouteHref('player', id))}" class="text-link player-link" data-id="${id}"><span class="player-link-identity">${playerPhoto(player, 'player-photo-inline')}<span class="player-link-text">${escapeHtml(text)}</span></span></a>`;
 }
 
 function coachLink(coachId, label) {
@@ -2085,7 +2095,7 @@ function openPlayerProfile(playerId) {
   const s = p.stats || {};
   const country = p.nationality || "Unknown";
   const profile = getPlayerStatProfile(p);
-  const displayOverall = profile.positionRating;
+  const displayOverall = Number.isFinite(Number(p.overall)) ? Number(p.overall) : profile.positionRating;
   const displayPotential = Math.max(displayOverall, Number(p.potential || displayOverall));
   const categoryOrder = [
     ["Physical", profile.stats.physical],
@@ -2115,7 +2125,7 @@ function openPlayerProfile(playerId) {
       <div class="player-hero-card player-hero-card-clean player-hero-card-minimal">
         <div class="player-hero-top-clean player-hero-top-tabs">
           <div class="player-hero-id-block">
-            <div class="player-avatar">${escapeHtml((p.name || "P").split(" ").map(x => x[0]).slice(0, 2).join(""))}</div>
+            ${playerPhoto(p, 'player-photo-hero')}
             <div>
               <div class="player-hero-name">${escapeHtml(p.name)}</div>
               <div class="player-hero-sub">${team ? teamLink(team.id, team.name) : "Free Agent"} · ${escapeHtml(country)}</div>

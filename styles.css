@@ -2923,3 +2923,51 @@ html[data-theme="dark"] .week-mini-meta .team-link {
   .week-mini-team.away { justify-content: flex-start; }
   .week-mini-copy.align-right { text-align: left; }
 }
+
+
+/* --- v21 CSV player photos + ratings wiring --- */
+.player-link-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  vertical-align: middle;
+}
+.player-link-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.player-photo-inline,
+.player-photo-fallback.player-photo-inline {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 24px;
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.12);
+}
+.player-photo-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #fff;
+  background: rgba(255,255,255,.18);
+}
+.player-photo-hero,
+.player-photo-fallback.player-photo-hero {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex: 0 0 72px;
+  background: rgba(255,255,255,.12);
+  border: 2px solid rgba(255,255,255,.16);
+}
+html[data-theme="light"] .player-photo-inline,
+html[data-theme="light"] .player-photo-hero {
+  border-color: rgba(20,30,50,.12);
+}
