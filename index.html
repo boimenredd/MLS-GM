@@ -93,7 +93,7 @@
             <li>Full tactics &amp; lineup editor</li>
             <li>Green card / intl slot tracking</li>
           </ul>
-          <div class="setup-actions"><button id="createLeagueBtn" class="primary-btn">Start League</button></div>
+          <div class="setup-actions"><button id="createLeagueBtn" class="primary-btn" type="button">Start League</button></div>
         </div>
       </div>
     </div>
@@ -315,12 +315,28 @@
     if (sel.options.length) return;
     sel.innerHTML = TEAM_OPTIONS.map(name => `<option value="${name}">${name}</option>`).join("");
   };
+  const bindOnce = (id, fn) => {
+    const el = document.getElementById(id);
+    if (!el || el.dataset.boundFallback === '1') return;
+    el.dataset.boundFallback = '1';
+    el.addEventListener('click', fn);
+  };
   const bind = () => {
     ensureTeams();
-    document.getElementById("showCreateLeagueBtn")?.addEventListener("click", () => { ensureTeams(); open("setupOverlay"); });
-    document.getElementById("closeSetupBtn")?.addEventListener("click", () => close("setupOverlay"));
-    document.getElementById("showLoadLeagueBtn")?.addEventListener("click", () => open("loadOverlay"));
-    document.getElementById("closeLoadBtn")?.addEventListener("click", () => close("loadOverlay"));
+    bindOnce("showCreateLeagueBtn", () => { ensureTeams(); (window.__mlsgmOpenSetup ? window.__mlsgmOpenSetup() : open("setupOverlay")); });
+    bindOnce("closeSetupBtn", () => { window.__mlsgmCloseSetup ? window.__mlsgmCloseSetup() : close("setupOverlay"); });
+    bindOnce("showLoadLeagueBtn", () => { if (window.__mlsgmOpenLoad) return window.__mlsgmOpenLoad(); open("loadOverlay"); });
+    bindOnce("closeLoadBtn", () => { window.__mlsgmCloseLoad ? window.__mlsgmCloseLoad() : close("loadOverlay"); });
+    bindOnce("createLeagueBtn", async () => {
+      ensureTeams();
+      if (window.__mlsgmCreateLeague) return window.__mlsgmCreateLeague();
+      try {
+        const mod = await import('./js/app-main-v15.js?v=15fallback');
+        if (window.__mlsgmCreateLeague) return window.__mlsgmCreateLeague();
+      } catch (err) {
+        console.error('Fallback module import failed:', err);
+      }
+    });
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, { once: true });
   else bind();

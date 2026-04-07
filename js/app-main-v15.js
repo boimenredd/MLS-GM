@@ -3495,29 +3495,40 @@ function bindNav() {
 
 // ── League creation ──────────────────────────────────────────────────────────
 
+let createLeagueInFlight = false;
+
 async function createLeagueFromForm() {
+  if (createLeagueInFlight) return;
+  createLeagueInFlight = true;
   try {
     const opts = {
-      saveSlot:       $("#saveSlotInput").value.trim()||"slot1",
-      userTeamName:   $("#userTeamSelect").value,
+      saveSlot:       $("#saveSlotInput")?.value?.trim() || "slot1",
+      userTeamName:   $("#userTeamSelect")?.value || "Atlanta United",
       leagueMode:     $("#leagueModeSelect")?.value || "generated",
-      salaryBudget:   Number($("#salaryCapInput").value)||6425000,
-      gamAnnual:      Number($("#gamInput").value)||3280000,
-      tamAnnual:      Number($("#tamInput").value)||2125000,
-      academyPerTeam: Number($("#academyInput").value)||8,
+      salaryBudget:   Number($("#salaryCapInput")?.value) || 6425000,
+      gamAnnual:      Number($("#gamInput")?.value) || 3280000,
+      tamAnnual:      Number($("#tamInput")?.value) || 2125000,
+      academyPerTeam: Number($("#academyInput")?.value) || 8,
     };
     state = normalizeState(createNewState(opts));
     initGreenCards(state);
-    await persist();
     closeOverlay($("#setupOverlay"));
     setAppVisible(true);
     currentPage = "dashboard";
-    $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page==="dashboard"));
+    $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page === "dashboard"));
     await renderPage();
-    toast(`League created — ${opts.saveSlot} (${opts.leagueMode === "real" ? "Real MLS Players" : "Auto-generated"}).`,"success");
+    try {
+      await persist();
+      toast(`League created — ${opts.saveSlot} (${opts.leagueMode === "real" ? "Real MLS Players" : "Auto-generated"}).`, "success");
+    } catch (persistErr) {
+      console.warn("Persist failed, continuing with in-memory save:", persistErr);
+      toast("League created. Auto-save was unavailable in this browser context.", "warn");
+    }
   } catch (err) {
     console.error("Create league failed:", err);
-    toast("League creation failed. Open the console for details.", "error");
+    toast(`League creation failed: ${err?.message || err}`, "error");
+  } finally {
+    createLeagueInFlight = false;
   }
 }
 
@@ -3692,6 +3703,12 @@ function bindHomeFallbacks() {
     loadOverlay?.classList.remove("open");
   });
 }
+
+window.__mlsgmCreateLeague = () => createLeagueFromForm();
+window.__mlsgmOpenLoad = () => openLoadModal();
+window.__mlsgmOpenSetup = () => openOverlay($("#setupOverlay"));
+window.__mlsgmCloseSetup = () => closeOverlay($("#setupOverlay"));
+window.__mlsgmCloseLoad = () => closeOverlay($("#loadOverlay"));
 
 const __runBoot = () => {
   bindHomeFallbacks();
