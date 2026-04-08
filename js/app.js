@@ -1841,10 +1841,12 @@ function buildAuxMatchEvents(match, result) {
 
 
 function liveEventSummaryForPlayer(playerId) {
-  const items = (livePitchScene?.eventLog || []).filter(ev => ev.playerId === playerId || ev.assistId === playerId);
+  const items = (livePitchScene?.eventLog || []).filter(ev =>
+    ev.playerId === playerId || ev.scorerId === playerId || ev.assistId === playerId
+  );
   let goals = 0, assists = 0, yellows = 0, reds = 0;
   for (const ev of items) {
-    if (ev.type === 'goal' && ev.playerId === playerId) goals++;
+    if (ev.type === 'goal' && (ev.playerId === playerId || ev.scorerId === playerId)) goals++;
     if (ev.type === 'goal' && ev.assistId === playerId) assists++;
     if (ev.type === 'yellow' && ev.playerId === playerId) yellows++;
     if (ev.type === 'red' && ev.playerId === playerId) reds++;
@@ -1911,7 +1913,8 @@ function renderFotmobScorers() {
   if (!homeWrap || !awayWrap) return;
   const events = (livePitchScene?.eventLog || []).filter(ev => ev.type === 'goal').sort((a,b) => (a.minute||0) - (b.minute||0));
   const rows = side => events.filter(ev => ev.side === side).map(ev => {
-    const scorer = ev.playerId ? byPlayerId(ev.playerId) : null;
+    const scorerId = ev.scorerId || ev.playerId || null;
+    const scorer = scorerId ? byPlayerId(scorerId) : null;
     return `<div>${escapeHtml(scorer?.name || 'Unknown')} ${ev.minute || 0}'</div>`;
   }).join('');
   homeWrap.innerHTML = rows('home');
@@ -1988,20 +1991,124 @@ function applySubstitutionToPack(pack, playerId) {
   return { incoming, outgoing };
 }
 
+
+function liveMinuteTargetValue(total, minute, boost = 1) {
+  const progress = Math.max(0, Math.min(1, minute / 90));
+  const eased = Math.pow(progress, 0.94) * boost;
+  return Math.min(total || 0, Math.round((total || 0) * eased));
+}
+
+function liveMinuteTargetFloat(total, minute, boost = 1) {
+  const progress = Math.max(0, Math.min(1, minute / 90));
+  const eased = Math.pow(progress, 0.95) * boost;
+  const value = Math.min(total || 0, (total || 0) * eased);
+  return Number(value.toFixed(2));
+}
+
+function updateLiveSceneState(match, result, minute) {
+  if (!livePitchScene || !result) return;
+  const score = livePitchScene.score || { home: 0, away: 0 };
+  const scoreDelta = score.home - score.away;
+  let momentum = 'balanced';
+  if (scoreDelta >= 2) momentum = 'homeAttack';
+  else if (scoreDelta <= -2) momentum = 'awayAttack';
+  else if (minute % 9 <= 3) momentum = 'homeAttack';
+  else if (minute % 9 >= 6) momentum = 'awayAttack';
+  livePitchScene.phase = minute / 7;
+  livePitchScene.momentum = momentum;
+  livePitchScene.ballOwner = momentum === 'awayAttack' ? 'away' : 'home';
+  livePitchScene.lastEventText = momentum === 'homeAttack' ? 'Home side building pressure' : momentum === 'awayAttack' ? 'Away side turning the screw' : 'Midfield battle';
+  const possessionSwing = Math.round(Math.sin(minute / 5.5) * 3);
+  const homePoss = Math.max(34, Math.min(66, Math.round((result.homePoss ?? 50) + possessionSwing)));
+  const awayPoss = 100 - homePoss;
+  livePitchScene.liveStats = {
+    homeShots: liveMinuteTargetValue(result.homeShots, minute, 1 + ((momentum === 'homeAttack') ? 0.04 : 0)),
+    awayShots: liveMinuteTargetValue(result.awayShots, minute, 1 + ((momentum === 'awayAttack') ? 0.04 : 0)),
+    homeSot: liveMinuteTargetValue(result.homeSot, minute),
+    awaySot: liveMinuteTargetValue(result.awaySot, minute),
+    homeXg: liveMinuteTargetFloat(result.homeXg, minute, 1 + ((momentum === 'homeAttack') ? 0.03 : 0)),
+    awayXg: liveMinuteTargetFloat(result.awayXg, minute, 1 + ((momentum === 'awayAttack') ? 0.03 : 0)),
+    homePoss,
+    awayPoss,
+    homeYellows: Math.min(result.homeYellows || 0, (livePitchScene.eventLog || []).filter(ev => ev.type === 'yellow' && ev.side === 'home').length),
+    awayYellows: Math.min(result.awayYellows || 0, (livePitchScene.eventLog || []).filter(ev => ev.type === 'yellow' && ev.side === 'away').length),
+    homeReds: Math.min(result.homeReds || 0, (livePitchScene.eventLog || []).filter(ev => ev.type === 'red' && ev.side === 'home').length),
+    awayReds: Math.min(result.awayReds || 0, (livePitchScene.eventLog || []).filter(ev => ev.type === 'red' && ev.side === 'away').length),
+  };
+}
+
+function getLiveStatsForDisplay(result, minute = 1) {
+  if (livePitchScene?.liveStats) return livePitchScene.liveStats;
+  return {
+    homeShots: liveMinuteTargetValue(result?.homeShots, minute),
+    awayShots: liveMinuteTargetValue(result?.awayShots, minute),
+    homeSot: liveMinuteTargetValue(result?.homeSot, minute),
+    awaySot: liveMinuteTargetValue(result?.awaySot, minute),
+    homeXg: liveMinuteTargetFloat(result?.homeXg, minute),
+    awayXg: liveMinuteTargetFloat(result?.awayXg, minute),
+    homePoss: result?.homePoss ?? 50,
+    awayPoss: result?.awayPoss ?? 50,
+    homeYellows: result?.homeYellows ?? 0,
+    awayYellows: result?.awayYellows ?? 0,
+    homeReds: result?.homeReds ?? 0,
+    awayReds: result?.awayReds ?? 0,
+  };
+}
+
+function pickLiveCommentaryPlayer(side, fallbackPack = null) {
+  const pack = fallbackPack || (side === 'home' ? livePitchScene?.homePack : livePitchScene?.awayPack);
+  const starters = (pack?.xi || []).map(entry => entry.player).filter(Boolean);
+  if (!starters.length) return null;
+  const sorted = starters.slice().sort((a, b) => (b.overall || 0) - (a.overall || 0));
+  const pool = Math.random() < 0.65 ? sorted.slice(0, 5) : starters;
+  return pool[Math.floor(Math.random() * pool.length)] || starters[0];
+}
+
+function buildAmbientLiveCommentary(match, minute) {
+  const ht = byTeamId(match.homeTeamId);
+  const at = byTeamId(match.awayTeamId);
+  const momentum = livePitchScene?.momentum || 'balanced';
+  if (momentum === 'homeAttack') {
+    const player = pickLiveCommentaryPlayer('home');
+    return [
+      `${escapeHtml(ht.shortName || ht.name)} are pushing the tempo through <b>${escapeHtml(player?.name || 'their midfield')}</b>.`,
+      `${escapeHtml(ht.shortName || ht.name)} recycle possession and probe for a gap down the left.`,
+      `Half-chance for ${escapeHtml(ht.shortName || ht.name)} — the move stays alive around the box.`,
+      `${escapeHtml(ht.shortName || ht.name)} pin the visitors back and keep the pressure on.`,
+    ][Math.floor(Math.random() * 4)];
+  }
+  if (momentum === 'awayAttack') {
+    const player = pickLiveCommentaryPlayer('away');
+    return [
+      `${escapeHtml(at.shortName || at.name)} break forward with purpose through <b>${escapeHtml(player?.name || 'their attack')}</b>.`,
+      `${escapeHtml(at.shortName || at.name)} shift the ball quickly and look dangerous between the lines.`,
+      `A threatening spell for ${escapeHtml(at.shortName || at.name)} forces the back line to retreat.`,
+      `${escapeHtml(at.shortName || at.name)} enjoy a neat passing sequence in the final third.`,
+    ][Math.floor(Math.random() * 4)];
+  }
+  return [
+    'Both sides settle into a midfield exchange with neither giving much away.',
+    'The tempo dips for a moment as shape and spacing take over.',
+    'A scrappy phase in the center of the park breaks up the rhythm.',
+    'Patient circulation from both teams as they wait for the next opening.',
+  ][Math.floor(Math.random() * 4)];
+}
+
+
 async function playLiveMatch(match) {
-  const overlay = document.getElementById("match-sim-overlay");
-  const box = document.getElementById("match-sim-box");
-  if (!overlay || !box) { console.error("match sim overlay not found"); return; }
+  const overlay = document.getElementById('match-sim-overlay');
+  const box = document.getElementById('match-sim-box');
+  if (!overlay || !box) { console.error('match sim overlay not found'); return; }
 
   simInProgress = true;
   simPaused = false;
   simSkipped = false;
   simAbortRequested = false;
-  simSpeedKey = "normal";
+  simSpeedKey = 'normal';
   box.innerHTML = buildFotmobLiveShell(match);
-  overlay.classList.add("open");
+  overlay.classList.add('open');
   bindOverlayButtons();
-  setSimSpeed("normal");
+  setSimSpeed('normal');
 
   const ht = byTeamId(match.homeTeamId);
   const at = byTeamId(match.awayTeamId);
@@ -2009,6 +2116,11 @@ async function playLiveMatch(match) {
   livePitchScene.lastMatch = match;
   livePitchScene.score = { home: 0, away: 0 };
   livePitchScene.eventLog = [];
+  livePitchScene.liveStats = {
+    homeShots: 0, awayShots: 0, homeSot: 0, awaySot: 0,
+    homeXg: 0, awayXg: 0, homePoss: 50, awayPoss: 50,
+    homeYellows: 0, awayYellows: 0, homeReds: 0, awayReds: 0,
+  };
   refreshFotmobLive(match, 1);
   addSimEvent(0, `<b>Kickoff</b> · ${escapeHtml(ht.name)} vs ${escapeHtml(at.name)}`);
   await sleep(120);
@@ -2022,56 +2134,79 @@ async function playLiveMatch(match) {
   };
 
   let hg = 0, ag = 0, ei = 0;
-  const timelineEvents = [...(result.events || []).map(ev => ({ ...ev, type: 'goal' })), ...buildAuxMatchEvents(match, result)].sort((a, b) => a.minute - b.minute || ((a.type === 'goal') ? -1 : 1));
-  const commentary = [
-    "Patient spell of possession in midfield.",
-    "Promising overload in the half-space.",
-    "The ball is recycled through the back line.",
-    "A dangerous delivery is half-cleared.",
-    "The crowd senses an opening.",
-    "The tempo drops as both teams regroup.",
-    "A switch of play opens the far side.",
-    "The goalkeeper slows things down.",
-    "A tactical foul stops the break.",
-    "A loose pass hands possession back.",
-  ];
+  const timelineEvents = [
+    ...(result.events || []).map(ev => ({ ...ev, type: 'goal', playerId: ev.playerId || ev.scorerId || null })),
+    ...buildAuxMatchEvents(match, result)
+  ].sort((a, b) => a.minute - b.minute || ((a.type === 'goal') ? -1 : 1));
+
+  const chanceTemplates = {
+    home: [
+      'Big switch of play creates room on the overlap.',
+      'A low cross flashes through the six-yard box.',
+      'The shot is blocked after a sharp one-two around the area.',
+      'A clever run behind nearly unlocks the back line.',
+    ],
+    away: [
+      'A quick counter opens space in transition.',
+      'The visitors work it wide and whip in a dangerous ball.',
+      'A cutback finds space at the edge of the box.',
+      'A driven run through midfield puts the defense under stress.',
+    ],
+  };
 
   for (let minute = 1; minute <= 90; minute++) {
     if (simAbortRequested) break;
     while (simPaused && !simAbortRequested) await sleep(100);
     if (simSkipped || simAbortRequested) break;
 
+    updateLiveSceneState(match, result, minute);
+
     Object.keys(livePitchScene.playerRatings || {}).forEach(pid => {
-      livePitchScene.playerRatings[pid] = Math.max(5.3, Math.min(9.7, livePitchScene.playerRatings[pid] + (Math.random() * 0.018 - 0.006)));
+      livePitchScene.playerRatings[pid] = Math.max(5.3, Math.min(9.7, livePitchScene.playerRatings[pid] + (Math.random() * 0.03 - 0.011)));
     });
-    if (Math.random() < 0.16) addSimEvent(minute, commentary[Math.floor(Math.random() * commentary.length)]);
+
+    const attackingSide = livePitchScene.momentum === 'awayAttack' ? 'away' : livePitchScene.momentum === 'homeAttack' ? 'home' : (minute % 2 ? 'home' : 'away');
+    const focalPlayer = pickLiveCommentaryPlayer(attackingSide);
+    if (focalPlayer?.id) bumpLiveRating(focalPlayer.id, 0.02);
+
+    if (minute === 45) addSimEvent(45, '<b>Half-time whistle.</b> Both teams head in for the break.', 'color:var(--muted);font-weight:700;');
+    if (Math.random() < 0.48) {
+      addSimEvent(minute, buildAmbientLiveCommentary(match, minute));
+    } else if (Math.random() < 0.18) {
+      addSimEvent(
+        minute,
+        `Chance for <b>${escapeHtml(focalPlayer?.name || (attackingSide === 'home' ? ht.shortName || ht.name : at.shortName || at.name))}</b> — ${escapeHtml(chanceTemplates[attackingSide][Math.floor(Math.random() * chanceTemplates[attackingSide].length)])}`
+      );
+      bumpLiveRating(focalPlayer?.id, 0.07);
+    }
 
     while (ei < timelineEvents.length && timelineEvents[ei].minute <= minute) {
       const ev = timelineEvents[ei];
       livePitchScene.eventLog.push(ev);
-      if (ev.type === "goal") {
-        const scorer = ev.scorerId ? byPlayerId(ev.scorerId) : null;
+      if (ev.type === 'goal') {
+        const scorer = (ev.scorerId || ev.playerId) ? byPlayerId(ev.scorerId || ev.playerId) : null;
         const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
-        if (ev.side === "home") hg++; else ag++;
+        if (ev.side === 'home') hg++; else ag++;
         livePitchScene.score = { home: hg, away: ag };
         bumpLiveRating(scorer?.id, 0.95);
         bumpLiveRating(assist?.id, 0.35);
-        addSimEvent(minute, `⚽ <b>${escapeHtml(scorer?.name || 'Unknown')}</b>${assist ? ` <span class="sim-event-assist">👟 ${escapeHtml(assist.name)}</span>` : ''}`, "background:rgba(34,197,94,0.08);border-left:3px solid var(--green);padding-left:6px;border-radius:3px;");
-      } else if (ev.type === "yellow") {
+        addSimEvent(minute, `⚽ <b>${escapeHtml(scorer?.name || 'Unknown')}</b>${assist ? ` <span class="sim-event-assist">👟 ${escapeHtml(assist.name)}</span>` : ''} — clinical finish and the ratings jump immediately.`, 'background:rgba(34,197,94,0.08);border-left:3px solid var(--green);padding-left:6px;border-radius:3px;');
+      } else if (ev.type === 'yellow') {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
         bumpLiveRating(player?.id, -0.18);
         addSimEvent(minute, `🟨 ${escapeHtml(player?.name || 'Player')} booked.`);
-      } else if (ev.type === "red") {
+      } else if (ev.type === 'red') {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
         bumpLiveRating(player?.id, -0.65);
-        addSimEvent(minute, `🟥 ${escapeHtml(player?.name || 'Player')} sent off.`, "color:var(--red);font-weight:700;");
-      } else if (ev.type === "sub") {
+        addSimEvent(minute, `🟥 ${escapeHtml(player?.name || 'Player')} sent off.`, 'color:var(--red);font-weight:700;');
+      } else if (ev.type === 'sub') {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
         if (ev.side === 'home') applySubstitutionToPack(livePitchScene.homePack, ev.playerId); else applySubstitutionToPack(livePitchScene.awayPack, ev.playerId);
         livePitchScene.recentSub = { minute, team: ev.side === 'home' ? ht.name : at.name, playerIn: player?.name || 'Substitution' };
         addSimEvent(minute, `🔁 ${escapeHtml(player?.name || 'Substitute')} enters the match.`);
         bumpLiveRating(player?.id, 0.08);
       }
+      updateLiveSceneState(match, result, minute);
       ei++;
     }
 
@@ -2084,19 +2219,20 @@ async function playLiveMatch(match) {
       const ev = timelineEvents[ei];
       const minute = ev.minute || 90;
       livePitchScene.eventLog.push(ev);
-      if (ev.type === "goal") {
-        const scorer = ev.scorerId ? byPlayerId(ev.scorerId) : null;
+      if (ev.type === 'goal') {
+        const scorerId = ev.scorerId || ev.playerId || null;
+        const scorer = scorerId ? byPlayerId(scorerId) : null;
         const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
-        if (ev.side === "home") hg++; else ag++;
+        if (ev.side === 'home') hg++; else ag++;
         livePitchScene.score = { home: hg, away: ag };
         addSimEvent(minute, `⚽ <b>${escapeHtml(scorer?.name || 'Unknown')}</b>${assist ? ` <span class="sim-event-assist">👟 ${escapeHtml(assist.name)}</span>` : ''}`);
-      } else if (ev.type === "yellow") {
+      } else if (ev.type === 'yellow') {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
         addSimEvent(minute, `🟨 ${escapeHtml(player?.name || 'Player')} booked.`);
-      } else if (ev.type === "red") {
+      } else if (ev.type === 'red') {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
         addSimEvent(minute, `🟥 ${escapeHtml(player?.name || 'Player')} sent off.`);
-      } else if (ev.type === "sub") {
+      } else if (ev.type === 'sub') {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
         if (ev.side === 'home') applySubstitutionToPack(livePitchScene.homePack, ev.playerId); else applySubstitutionToPack(livePitchScene.awayPack, ev.playerId);
         livePitchScene.recentSub = { minute, team: ev.side === 'home' ? ht.name : at.name, playerIn: player?.name || 'Substitution' };
@@ -2104,19 +2240,22 @@ async function playLiveMatch(match) {
       }
     }
     livePitchScene.score = { home: result.homeGoals, away: result.awayGoals };
+    updateLiveSceneState(match, result, 90);
     refreshFotmobLive(match, 90);
   }
 
   simInProgress = false;
   if (simAbortRequested) {
-    overlay.classList.remove("open");
+    overlay.classList.remove('open');
     livePitchScene = null;
     return;
   }
 
+  updateLiveSceneState(match, result, 90);
   const minuteEl = document.getElementById('sim-minute'); if (minuteEl) minuteEl.textContent = 'FT';
   const metaEl = document.getElementById('fotmob-commentary-meta'); if (metaEl) metaEl.textContent = 'Full time';
-  addSimEvent(90, `<b>Full Time.</b> ${escapeHtml(ht.name)} ${result.homeGoals}–${result.awayGoals} ${escapeHtml(at.name)}`, "color:var(--accent);font-weight:700;");
+  addSimEvent(90, `<b>Full Time.</b> ${escapeHtml(ht.name)} ${result.homeGoals}–${result.awayGoals} ${escapeHtml(at.name)}`, 'color:var(--accent);font-weight:700;');
+  refreshFotmobLive(match, 90);
   await sleep(450);
   livePitchScene = null;
 }
