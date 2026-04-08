@@ -1210,10 +1210,6 @@ function getLiveFormation(teamId) {
   return teamId === state?.userTeamId ? (tactics?.formation || "4-3-3") : defaultLiveFormation(teamId);
 }
 
-function avg(values = []) {
-  return values.length ? values.reduce((sum, value) => sum + (Number(value) || 0), 0) / values.length : 0;
-}
-
 function normalizePosition(pos) {
   return String(pos || '').toUpperCase().trim();
 }
