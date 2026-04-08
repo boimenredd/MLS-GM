@@ -1178,10 +1178,114 @@ function getLiveFormation(teamId) {
   return teamId === state?.userTeamId ? (tactics?.formation || "4-3-3") : defaultLiveFormation(teamId);
 }
 
+function avg(values = []) {
+  return values.length ? values.reduce((sum, value) => sum + (Number(value) || 0), 0) / values.length : 0;
+}
+
+function normalizePosition(pos) {
+  return String(pos || '').toUpperCase().trim();
+}
+
+function playerPositionCandidates(player) {
+  const primary = normalizePosition(player?.position);
+  const set = new Set([primary]);
+  const add = (...items) => items.filter(Boolean).forEach(item => set.add(normalizePosition(item)));
+  switch (primary) {
+    case 'GK': add('GK'); break;
+    case 'LB': add('LWB','LM','CB'); break;
+    case 'RB': add('RWB','RM','CB'); break;
+    case 'CB': add('LB','RB','CDM'); break;
+    case 'CDM': add('CM','CB','CAM'); break;
+    case 'CM': add('CDM','CAM','LM','RM'); break;
+    case 'CAM': add('CM','ST','LW','RW'); break;
+    case 'LM': add('LW','CM','LB'); break;
+    case 'RM': add('RW','CM','RB'); break;
+    case 'LW': add('LM','ST','RW','CAM'); break;
+    case 'RW': add('RM','ST','LW','CAM'); break;
+    case 'ST': add('CAM','LW','RW'); break;
+    default: break;
+  }
+  return [...set].filter(Boolean);
+}
+
+function lineupFitScore(player, targetPosition) {
+  if (!player) return -9999;
+  const primary = normalizePosition(player.position);
+  const target = normalizePosition(targetPosition);
+  const overall = Number(player.overall) || 0;
+  if (primary === target) return overall + 40;
+  const candidates = playerPositionCandidates(player);
+  const idx = candidates.indexOf(target);
+  if (idx >= 0) return overall + Math.max(22 - idx * 6, 2);
+
+  const groups = {
+    GK: ['GK'],
+    DEF: ['LB','RB','CB','LWB','RWB'],
+    MID: ['CDM','CM','CAM','LM','RM'],
+    ATT: ['LW','RW','ST']
+  };
+  const groupOf = pos => Object.entries(groups).find(([, vals]) => vals.includes(pos))?.[0] || 'OTHER';
+  const sameGroup = groupOf(primary) === groupOf(target);
+  return overall - (sameGroup ? 12 : 28);
+}
+
+function buildAutoLineup(players, positions, benchCount = 7) {
+  const pool = [...(players || [])].filter(Boolean);
+  const openSlots = positions.map((position, idx) => ({ position, idx }));
+  const lineup = new Array(positions.length).fill(null);
+  const usedIds = new Set();
+
+  const sortedPlayers = [...pool].sort((a, b) => {
+    const aBest = Math.max(...openSlots.map(slot => lineupFitScore(a, slot.position)));
+    const bBest = Math.max(...openSlots.map(slot => lineupFitScore(b, slot.position)));
+    return bBest - aBest || (b.overall || 0) - (a.overall || 0) || (b.potential || 0) - (a.potential || 0);
+  });
+
+  for (const player of sortedPlayers) {
+    const choices = openSlots
+      .filter(slot => !lineup[slot.idx])
+      .map(slot => ({ slot, score: lineupFitScore(player, slot.position) }))
+      .sort((a, b) => b.score - a.score || a.slot.idx - b.slot.idx);
+    if (!choices.length) continue;
+    const best = choices[0];
+    if (best.score < -10 && lineup.filter(Boolean).length >= positions.length) continue;
+    lineup[best.slot.idx] = {
+      playerId: player.id,
+      role: (ROLES[best.slot.position] || [best.slot.position])[0],
+      fitScore: best.score,
+    };
+    usedIds.add(player.id);
+    if (lineup.filter(Boolean).length >= positions.length) break;
+  }
+
+  if (lineup.some(slot => !slot)) {
+    const leftovers = sortedPlayers.filter(player => !usedIds.has(player.id));
+    lineup.forEach((slot, idx) => {
+      if (!slot && leftovers.length) {
+        const player = leftovers.shift();
+        lineup[idx] = {
+          playerId: player.id,
+          role: (ROLES[positions[idx]] || [positions[idx]])[0],
+          fitScore: lineupFitScore(player, positions[idx]),
+        };
+        usedIds.add(player.id);
+      }
+    });
+  }
+
+  const bench = [...pool]
+    .filter(player => !usedIds.has(player.id))
+    .sort((a, b) => (b.overall || 0) - (a.overall || 0) || (b.potential || 0) - (a.potential || 0))
+    .slice(0, benchCount)
+    .map(player => player.id);
+
+  return { lineup, bench };
+}
+
 function getLineupForFormation(teamId, formation, benchCount = 7) {
   const players = [...getTeamPlayers(state, teamId)].sort((a, b) => (b.overall - a.overall) || (b.potential - a.potential));
   const positions = FORMATIONS[formation] || FORMATIONS["4-3-3"];
-  const autoPack = globalThis.buildAutoLineup(players, positions, benchCount);
+  const autoPack = buildAutoLineup(players, positions, benchCount);
   const xi = positions.map((pos, idx) => ({ position: pos, player: players.find(player => player.id === autoPack.lineup[idx]?.playerId) || null }));
   return { xi, bench: autoPack.bench };
 }
@@ -1942,7 +2046,7 @@ function renderFotmobPitch(match, minute = 1) {
       <div class="fotmob-player-rating ${side === 'home' ? 'home' : 'away'}">${rating}</div>
       <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar')}</div>
       ${iconHtml ? `<div class="fotmob-player-icons">${iconHtml}</div>` : ''}
-      <div class="fotmob-player-name">${escapeHtml(player.number || player.jerseyNumber || '')} ${escapeHtml(player.name)}</div>
+      <div class="fotmob-player-name">${escapeHtml(player.number || player.jerseyNumber || '')} ${escapeHtml((player.name || '').split(' ').slice(-1)[0] || player.name || '')}</div>
     </div>`;
   }).join('');
   pitch.innerHTML = `<div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, 'home')}${renderSide(ap?.xi || [], awayLayout, 'away')}`;
@@ -3335,170 +3439,6 @@ const FORMATION_LAYOUT = {
   "3-4-3":   [{x:0.50,y:0.87},{x:0.25,y:0.70},{x:0.50,y:0.70},{x:0.75,y:0.70},{x:0.20,y:0.50},{x:0.80,y:0.50},{x:0.14,y:0.22},{x:0.86,y:0.22},{x:0.50,y:0.45},{x:0.35,y:0.18},{x:0.65,y:0.18}],
 };
 
-
-function getPlayerPositionPool(player) {
-  const positions = new Set();
-  const add = (pos) => {
-    if (!pos) return;
-    const clean = String(pos).trim().toUpperCase();
-    if (clean) positions.add(clean);
-  };
-  add(player?.position);
-  for (const pos of Array.isArray(player?.otherPositions) ? player.otherPositions : []) add(pos);
-  return [...positions];
-}
-
-function getDetailedStat(player, group, key, fallback = null) {
-  if (player?.detailed?.[group]?.[key] != null) return Number(player.detailed[group][key]) || 0;
-  if (fallback != null) return fallback;
-  return 0;
-}
-
-function getPositionalFitScore(player, targetPos) {
-  if (!player || !targetPos) return -9999;
-  const pos = String(targetPos).toUpperCase();
-  const baseOverall = Number(player.overall || player.overallRating || 55);
-  const primary = String(player.position || '').toUpperCase();
-  const pool = getPlayerPositionPool(player);
-  const has = (p) => pool.includes(p);
-  const attrs = player?.attributes || {};
-  const pace = Number(attrs.pace ?? 55);
-  const pass = Number(attrs.passing ?? 55);
-  const drib = Number(attrs.dribbling ?? 55);
-  const defense = Number(attrs.defense ?? 55);
-  const physical = Number(attrs.physical ?? 55);
-  const shooting = Number(attrs.shooting ?? 55);
-  const stamina = getDetailedStat(player, 'physical', 'stamina', physical);
-  const crossing = getDetailedStat(player, 'technical', 'crossing', pass);
-  const longPassing = getDetailedStat(player, 'technical', 'longPassing', pass);
-  const shortPassing = getDetailedStat(player, 'technical', 'shortPassing', pass);
-  const finishing = getDetailedStat(player, 'technical', 'finishing', shooting);
-  const firstTouch = getDetailedStat(player, 'technical', 'firstTouch', drib);
-  const heading = getDetailedStat(player, 'defending', 'heading', getDetailedStat(player, 'technical', 'headingAccuracy', physical));
-  const interceptions = getDetailedStat(player, 'defending', 'interceptions', defense);
-  const tackling = getDetailedStat(player, 'defending', 'tackling', defense);
-  const sliding = getDetailedStat(player, 'defending', 'slidingTackle', defense);
-  const positioning = getDetailedStat(player, 'mentality', 'positioning', baseOverall);
-  const vision = getDetailedStat(player, 'technical', 'vision', pass);
-  const composure = getDetailedStat(player, 'mentality', 'composure', baseOverall);
-  const gk = player?.detailed?.goalkeeping || {};
-  const gkScore = (Number(gk.diving || 0) + Number(gk.handling || 0) + Number(gk.positioning || 0) + Number(gk.reflexes || 0) + Number(gk.kicking || 0)) / 5;
-
-  let score = baseOverall;
-  if (primary === pos) score += 18;
-  else if (has(pos)) score += 12;
-
-  const sidePenalty = () => {
-    if ((pos === 'LB' || pos === 'LM' || pos === 'LW') && primary === 'RB') return 5;
-    if ((pos === 'RB' || pos === 'RM' || pos === 'RW') && primary === 'LB') return 5;
-    if ((pos === 'LB' || pos === 'LM' || pos === 'LW') && primary === 'RW') return 8;
-    if ((pos === 'RB' || pos === 'RM' || pos === 'RW') && primary === 'LW') return 8;
-    return 0;
-  };
-
-  switch (pos) {
-    case 'GK':
-      score = gkScore + (primary === 'GK' ? 28 : -45);
-      break;
-    case 'CB':
-      score += defense * 0.38 + physical * 0.22 + interceptions * 0.18 + tackling * 0.16 + heading * 0.12 + composure * 0.06;
-      if (!has('CB') && !['LB','RB','CDM'].includes(primary)) score -= 18;
-      break;
-    case 'LB':
-    case 'RB':
-      score += pace * 0.24 + defense * 0.25 + crossing * 0.14 + stamina * 0.14 + tackling * 0.14 + drib * 0.09;
-      score -= sidePenalty();
-      if (!has(pos) && !['LB','RB','LM','RM','LW','RW','CB'].includes(primary)) score -= 14;
-      break;
-    case 'CDM':
-      score += defense * 0.28 + shortPassing * 0.18 + longPassing * 0.18 + composure * 0.12 + stamina * 0.10 + physical * 0.10 + interceptions * 0.14;
-      if (!has('CDM') && !['CM','CB'].includes(primary)) score -= 12;
-      break;
-    case 'CM':
-      score += shortPassing * 0.20 + longPassing * 0.15 + stamina * 0.14 + drib * 0.10 + vision * 0.14 + defense * 0.10 + composure * 0.10 + positioning * 0.07;
-      break;
-    case 'CAM':
-      score += vision * 0.22 + shortPassing * 0.16 + drib * 0.18 + firstTouch * 0.12 + shooting * 0.10 + finishing * 0.08 + composure * 0.10 + positioning * 0.12;
-      if (!has('CAM') && !['CM','LW','RW','ST'].includes(primary)) score -= 12;
-      break;
-    case 'LM':
-    case 'RM':
-      score += pace * 0.20 + drib * 0.18 + crossing * 0.18 + stamina * 0.16 + pass * 0.12 + positioning * 0.08 + defense * 0.08;
-      score -= sidePenalty();
-      break;
-    case 'LW':
-    case 'RW':
-      score += pace * 0.22 + drib * 0.22 + finishing * 0.12 + crossing * 0.10 + firstTouch * 0.12 + positioning * 0.12 + shooting * 0.10;
-      score -= sidePenalty();
-      if (!has(pos) && !['LM','RM','ST','CAM'].includes(primary)) score -= 12;
-      break;
-    case 'ST':
-      score += finishing * 0.24 + shooting * 0.22 + pace * 0.14 + positioning * 0.16 + physical * 0.12 + firstTouch * 0.12 + heading * 0.08;
-      if (!has('ST') && !['LW','RW','CAM'].includes(primary)) score -= 12;
-      break;
-    default:
-      break;
-  }
-
-  if (primary !== pos && !has(pos)) score -= 6;
-  return Number(score.toFixed(3));
-}
-
-globalThis.buildAutoLineup = function buildAutoLineup(players, positions, benchCount = 7) {
-  const roster = [...(players || [])].filter(Boolean);
-  const slots = [...(positions || [])];
-  const assigned = Array(slots.length).fill(null);
-  const used = new Set();
-  const scarcityOrder = { GK: 0, CB: 1, LB: 2, RB: 3, ST: 4, CDM: 5, CAM: 6, CM: 7, LM: 8, RM: 9, LW: 10, RW: 11 };
-  const slotIndices = slots.map((pos, index) => ({ pos, index })).sort((a, b) => {
-    const ac = roster.filter(p => getPositionalFitScore(p, a.pos) > 70).length;
-    const bc = roster.filter(p => getPositionalFitScore(p, b.pos) > 70).length;
-    if (ac !== bc) return ac - bc;
-    return (scarcityOrder[a.pos] ?? 99) - (scarcityOrder[b.pos] ?? 99);
-  });
-
-  for (const slot of slotIndices) {
-    const candidate = roster
-      .filter(player => !used.has(player.id))
-      .map(player => ({ player, fit: getPositionalFitScore(player, slot.pos) }))
-      .sort((a, b) => (b.fit - a.fit) || ((b.player.overall || 0) - (a.player.overall || 0)) || ((a.player.age || 99) - (b.player.age || 99)))[0];
-    if (!candidate?.player) continue;
-    assigned[slot.index] = { playerId: candidate.player.id, role: (ROLES[slot.pos] || [slot.pos])[0], fitScore: candidate.fit };
-    used.add(candidate.player.id);
-  }
-
-  let improved = true;
-  while (improved) {
-    improved = false;
-    for (let i = 0; i < assigned.length; i++) {
-      for (let j = i + 1; j < assigned.length; j++) {
-        const a = assigned[i];
-        const b = assigned[j];
-        if (!a?.playerId || !b?.playerId) continue;
-        const pa = roster.find(p => p.id === a.playerId);
-        const pb = roster.find(p => p.id === b.playerId);
-        if (!pa || !pb) continue;
-        const current = getPositionalFitScore(pa, slots[i]) + getPositionalFitScore(pb, slots[j]);
-        const swapped = getPositionalFitScore(pa, slots[j]) + getPositionalFitScore(pb, slots[i]);
-        if (swapped > current + 6) {
-          assigned[i] = { ...a, playerId: pb.id, fitScore: getPositionalFitScore(pb, slots[i]) };
-          assigned[j] = { ...b, playerId: pa.id, fitScore: getPositionalFitScore(pa, slots[j]) };
-          improved = true;
-        }
-      }
-    }
-  }
-
-  const bench = roster
-    .filter(player => !used.has(player.id))
-    .map(player => ({ player, benchScore: Math.max(...getPlayerPositionPool(player).concat([player.position]).filter(Boolean).map(pos => getPositionalFitScore(player, pos))) + (player.overall || 0) * 0.35 }))
-    .sort((a, b) => (b.benchScore - a.benchScore) || ((b.player.overall || 0) - (a.player.overall || 0)))
-    .slice(0, benchCount)
-    .map(row => row.player);
-
-  return { lineup: assigned.map((slot, idx) => slot || { playerId: null, role: (ROLES[slots[idx]] || [slots[idx]])[0], fitScore: -9999 }), bench };
-}
-
 function renderTactics() {
   if (!tactics.formation) tactics.formation = "4-3-3";
   const team      = getUserTeam(state);
@@ -3508,7 +3448,7 @@ function renderTactics() {
   const W = 480, H = 320;
 
   if (!tactics.lineup || tactics.lineup.length !== positions.length) {
-    tactics.lineup = globalThis.buildAutoLineup(players, positions, 7).lineup;
+    tactics.lineup = buildAutoLineup(players, positions, 7).lineup;
   }
 
   const dots = positions.map((pos, i) => {
@@ -3862,7 +3802,7 @@ function bindPageEvents() {
       const team = getUserTeam(state);
       const plrs = getTeamPlayers(state, team.id);
       const poss = FORMATIONS[tactics.formation]||FORMATIONS["4-3-3"];
-      tactics.lineup = globalThis.buildAutoLineup(plrs, poss, 7).lineup;
+      tactics.lineup = buildAutoLineup(plrs, poss, 7).lineup;
       renderPage(); toast("Auto-selected best XI.","success");
     });
   }
