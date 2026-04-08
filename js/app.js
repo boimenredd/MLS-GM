@@ -1076,6 +1076,7 @@ function runGreenCardOffseason(st) {
 
 function getPlayerTag(p) {
   if (p.designation) return p.designation;
+  if (p.generationAdidas) return "GA";
   if (p.homegrown)   return "HG";
   if (isUSOrCanadian(p)) return "DOM";
   if (p.hasGreenCard)    return "GC";
@@ -1180,25 +1181,9 @@ function getLiveFormation(teamId) {
 function getLineupForFormation(teamId, formation, benchCount = 7) {
   const players = [...getTeamPlayers(state, teamId)].sort((a, b) => (b.overall - a.overall) || (b.potential - a.potential));
   const positions = FORMATIONS[formation] || FORMATIONS["4-3-3"];
-  const used = new Set();
-  const xi = positions.map(pos => {
-    let player = players.find(p => !used.has(p.id) && p.position === pos);
-    if (!player) {
-      const fallbackMap = {
-        LB: ["LM", "CB", "RB"], RB: ["RM", "CB", "LB"],
-        LM: ["LW", "CM", "LB"], RM: ["RW", "CM", "RB"],
-        CDM: ["CM", "CB"], CM: ["CDM", "CAM", "LM", "RM"], CAM: ["CM", "ST", "LW", "RW"],
-        LW: ["LM", "RW", "ST"], RW: ["RM", "LW", "ST"], ST: ["CAM", "LW", "RW"], CB: ["CDM", "LB", "RB"], GK: []
-      };
-      const fallbacks = fallbackMap[pos] || [];
-      player = players.find(p => !used.has(p.id) && fallbacks.includes(p.position));
-    }
-    if (!player) player = players.find(p => !used.has(p.id));
-    if (player) used.add(player.id);
-    return { position: pos, player };
-  });
-  const bench = players.filter(p => !used.has(p.id)).slice(0, benchCount);
-  return { xi, bench };
+  const autoPack = buildAutoLineup(players, positions, benchCount);
+  const xi = positions.map((pos, idx) => ({ position: pos, player: players.find(player => player.id === autoPack.lineup[idx]?.playerId) || null }));
+  return { xi, bench: autoPack.bench };
 }
 
 function getLivePlayerEnergy(player, minute) {
@@ -2224,10 +2209,9 @@ function openPlayerProfile(playerId) {
               <div class="player-hero-sub">${team ? teamLink(team.id, team.name) : "Free Agent"} · ${escapeHtml(country)}</div>
             </div>
           </div>
-          <div class="player-hero-metrics-clean player-hero-metrics-three roomy-player-hero-metrics">
+          <div class="player-hero-metrics-clean roomy-player-hero-metrics">
             <div><span>Overall</span><strong>${displayOverall}</strong></div>
             <div><span>Potential</span><strong>${displayPotential}</strong></div>
-            <div><span>${escapeHtml(p.position)} rating</span><strong>${displayOverall}</strong></div>
           </div>
         </div>
         <div class="player-profile-tabbar roomy-tabbar">
@@ -2274,7 +2258,6 @@ function openPlayerProfile(playerId) {
             <div class="player-mini-metrics player-mini-metrics-clean roomy-mini-metrics">
               <div><span>Average rating</span><strong>${avgLabel}</strong></div>
               <div><span>Country</span><strong>${escapeHtml(country)}</strong></div>
-              <div><span>Position rating</span><strong>${displayOverall}</strong></div>
               <div><span>Potential</span><strong>${displayPotential}</strong></div>
             </div>
           </section>
@@ -3045,7 +3028,7 @@ function renderRoster() {
         <td class="num">${p.age}</td>
         <td class="num">${p.overall}</td>
         <td class="num">${p.potential}</td>
-        <td>${escapeHtml(p.designation || (takesIntlSlot(p) ? 'INTL' : 'Standard'))}</td>
+        <td>${escapeHtml(getPlayerTag(p) || 'Standard')}</td>
         <td>${escapeHtml(p.nationality || 'Unknown')}</td>
         <td class="num">${formatMoney(p.salary)}</td>
         <td class="num">${p.expiry}</td>
@@ -3222,13 +3205,7 @@ function renderTactics() {
   const W = 480, H = 320;
 
   if (!tactics.lineup || tactics.lineup.length !== positions.length) {
-    const used = new Set();
-    tactics.lineup = positions.map(pos => {
-      const best = players.find(p => p.position === pos && !used.has(p.id))
-                || players.find(p => !used.has(p.id));
-      if (best) used.add(best.id);
-      return { playerId: best?.id||null, role: ROLES[pos]?.[0]||pos, position: pos };
-    });
+    tactics.lineup = buildAutoLineup(players, positions, 7).lineup;
   }
 
   const dots = positions.map((pos, i) => {
@@ -3582,12 +3559,7 @@ function bindPageEvents() {
       const team = getUserTeam(state);
       const plrs = getTeamPlayers(state, team.id);
       const poss = FORMATIONS[tactics.formation]||FORMATIONS["4-3-3"];
-      const used = new Set();
-      tactics.lineup = poss.map(pos => {
-        const best = plrs.find(p=>p.position===pos&&!used.has(p.id)) || plrs.find(p=>!used.has(p.id));
-        if (best) used.add(best.id);
-        return { playerId: best?.id||null, role: ROLES[pos]?.[0]||pos, position: pos };
-      });
+      tactics.lineup = buildAutoLineup(plrs, poss, 7).lineup;
       renderPage(); toast("Auto-selected best XI.","success");
     });
   }

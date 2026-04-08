@@ -24,6 +24,7 @@ import {
 } from "./assets.js";
 
 import { REAL_MLS_PLAYERS, REAL_MLS_DATA_META } from "./real-mls-data.js";
+import { getPlayerRosterProfile, getSalaryReleaseEntry, getTeamRosterProfile } from "./mls-roster-profiles.js";
 
 
 export function getRealMlsDatasetStatus() {
@@ -230,6 +231,56 @@ function normalizeRealNation(nation) {
     "Côte d'Ivoire": "Ivory Coast",
   };
   return map[nation] || nation || "USA";
+}
+
+function isNorthAmericanDomesticNation(nationality, teamCountry) {
+  return domesticForTeam(normalizeRealNation(nationality), teamCountry || "USA");
+}
+
+function applyTeamRosterProfile(team) {
+  if (!team) return null;
+  const teamProfile = getTeamRosterProfile(team.name);
+  if (!teamProfile) return null;
+  if (Number.isFinite(Number(teamProfile.internationalSlots))) team.internationalSlots = Number(teamProfile.internationalSlots);
+  if (Number.isFinite(Number(teamProfile.dpSlots))) team.dpSlots = Math.max(Number(team.dpSlots || 3), Number(teamProfile.dpSlots || 3));
+  if (Number.isFinite(Number(teamProfile.u22Slots))) team.u22Slots = Math.max(Number(team.u22Slots || 3), Number(teamProfile.u22Slots || 3));
+  return teamProfile;
+}
+
+function applyRosterProfileMetadata(player, team) {
+  if (!player || !team) return player;
+  const teamProfile = applyTeamRosterProfile(team);
+  const rosterMeta = getPlayerRosterProfile(team.name, player.name);
+  const salaryMeta = getSalaryReleaseEntry(team.name, player.name);
+
+  if (salaryMeta?.guaranteedComp || salaryMeta?.baseSalary) {
+    const salary = Number(salaryMeta.guaranteedComp || salaryMeta.baseSalary || 0);
+    if (salary > 0) {
+      player.contract ||= {};
+      player.contract.salary = salary;
+      player.salarySource = 'mls-salary-release';
+    }
+  }
+
+  if (rosterMeta) {
+    if (rosterMeta.designation) {
+      player.designation = rosterMeta.designation;
+      player.designationMode = 'manual';
+    }
+    if (rosterMeta.homegrown) player.homegrown = true;
+    if (rosterMeta.generationAdidas) player.generationAdidas = true;
+    if (rosterMeta.international === true) {
+      player.domestic = false;
+      player.hasGreenCard = false;
+    } else if (teamProfile) {
+      const domesticNation = isNorthAmericanDomesticNation(player.nationality, team.country);
+      player.domestic = true;
+      player.hasGreenCard = domesticNation ? false : true;
+    }
+    player.rosterProfileSource = 'mls-club-roster-profiles';
+  }
+
+  return player;
 }
 
 function mean(values) {
@@ -668,14 +719,15 @@ function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
   const attributes = profile.attributes;
   const displayedOvr = profile.overallRating;
   const potential = realPotentialFromOverall(displayedOvr, age);
-  let salary = Number(row.wageUSD || 0) > 0 ? Number(row.wageUSD || 0) : estimateSalaryByProfile(position, displayedOvr, age, rosterRole);
-  if (!Number(row.wageUSD || 0)) {
+  const salaryRelease = getSalaryReleaseEntry(team.name, row.name);
+  let salary = Number(salaryRelease?.guaranteedComp || salaryRelease?.baseSalary || 0) || estimateSalaryByProfile(position, displayedOvr, age, rosterRole);
+  if (!salaryRelease) {
     if (displayedOvr >= 82) salary = Math.max(salary, randInt(4500000, 12000000));
     else if (displayedOvr >= 78) salary = Math.max(salary, randInt(2200000, 6500000));
     else if (displayedOvr >= 74) salary = Math.max(salary, randInt(1200000, 3200000));
   }
 
-  return hydratePlayer({
+  const player = hydratePlayer({
     id: uuid("p"),
     name: row.name,
     age,
@@ -691,10 +743,12 @@ function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
     importedPotential: Number(row.potential || profile.overallRating || row.overallRating || row.overall || 0) || null,
     clubId: team.id,
     position,
+    otherPositions: Array.isArray(row.otherPositions) ? row.otherPositions.map(pos => normalizeGeneratedPosition(pos || "", row.preferredFoot || "Right")).filter(Boolean) : [],
     rosterRole,
     designation: null,
     designationMode: "auto",
     homegrown: false,
+    generationAdidas: false,
     contract: {
       yearsLeft: contractYearsForAge(age),
       salary,
@@ -717,6 +771,9 @@ function makeRealMlsPlayer(team, row, idx, seasonYear = 2026) {
     source: "real-mls-csv",
     realPlayer: true,
   }, seasonYear);
+
+  applyRosterProfileMetadata(player, team);
+  return player;
 }
 
 function buildRealMlsPlayerPool(teams, seasonYear = 2026) {
@@ -1198,19 +1255,32 @@ export function getCapSummary(state, teamId) {
 
 function seedFreeAgents(state) {
   const freeAgents = [];
-  for (let i = 0; i < 110; i++) {
-    const fakeClub = { id: null, marketRating: randInt(52, 73), country: "USA" };
-    const p = makePlayer(fakeClub, i, pick(POSITIONS));
-    p.clubId            = null;
-    p.contract.status   = "Free Agent";
-    p.contract.salary   = clamp(
-      Math.round(p.contract.salary * randFloat(0.6, 1.15)),
+  const total = 135;
+  for (let i = 0; i < total; i++) {
+    const fakeClub = { id: null, marketRating: randInt(45, 60), country: "USA" };
+    const p = makePlayer(fakeClub, 28 + i, pick(POSITIONS));
+    p.clubId = null;
+    p.contract.status = "Free Agent";
+    p.contract.yearsLeft = randInt(1, 2);
+    p.contract.expiresYear = state.season.year + p.contract.yearsLeft;
+    p.contract.salary = clamp(
+      Math.round(p.contract.salary * randFloat(0.52, 0.88)),
       88025,
-      1200000
+      i < 8 ? 950000 : 550000
     );
+    if (p.overall > 69) {
+      const drop = randInt(2, 6);
+      p.overall = Math.max(56, p.overall - drop);
+      p.potential = Math.max(p.overall, Math.min(p.potential || p.overall, p.overall + randInt(2, 7)));
+      for (const key of Object.keys(p.attributes || {})) {
+        p.attributes[key] = clamp((p.attributes[key] || 0) - drop, 20, 99);
+      }
+      hydratePlayer(p, state.season.year);
+    }
+    if (i > 20) p.age = randInt(22, 33);
     freeAgents.push(p);
   }
-  state.freeAgents = freeAgents;
+  state.freeAgents = freeAgents.sort((a, b) => (b.overall - a.overall) || (a.age - b.age));
 }
 
 // ─── Schedule builder (guaranteed 34 per team) ───────────────────────────────
@@ -2552,6 +2622,8 @@ export function createNewState(options) {
     }
   }
 
+  teams.forEach(team => applyTeamRosterProfile(team));
+
   const players = leagueMode === "real"
     ? buildRealMlsPlayerPool(teams, MLS_RULES.seasonStartYear)
     : (() => {
@@ -2625,7 +2697,7 @@ export function createNewState(options) {
   autoAssignAllDesignations(state);
   makeSchedule(state);
   ensureOpenCupState(state);
-  if (leagueMode !== "real") seedFreeAgents(state);
+  seedFreeAgents(state);
   ensureDraftPickLedger(state, state.season.year + 1, 3);
   addTransaction(state, "League", `League initialized for ${state.season.year}.`);
   return state;
