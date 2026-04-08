@@ -643,13 +643,15 @@ function renderPlayerStatCard(title, rating, statMap) {
   return `<section class="panel player-stat-card"><div class="panel-head"><h3>${escapeHtml(title)}</h3><span>${rating}</span></div><div class="player-stat-list">${rows}</div></section>`;
 }
 
+const brokenPhotoUrls = new Set();
 function playerPhoto(player, cls = "player-photo-inline") {
   const initials = escapeHtml((player?.name || "P").split(" ").map(x => x[0]).slice(0,2).join(""));
   const src = player?.photoUrl;
   const fallback = `<span class="${cls} player-photo-fallback">${initials}</span>`;
-  if (src) {
-    return `<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="eager" referrerpolicy="no-referrer" onerror="this.outerHTML=${JSON.stringify(fallback)}" />`;
+  if (src && !brokenPhotoUrls.has(src)) {
+    return `<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="eager" referrerpolicy="no-referrer" onerror="window.__mlsgmBrokenPhotoUrls=window.__mlsgmBrokenPhotoUrls||new Set();window.__mlsgmBrokenPhotoUrls.add(this.getAttribute('src')||'');this.outerHTML=${JSON.stringify(fallback)}" />`;
   }
+  if (src && typeof window !== 'undefined' && window.__mlsgmBrokenPhotoUrls?.has(src)) brokenPhotoUrls.add(src);
   return fallback;
 }
 
@@ -1280,39 +1282,54 @@ function buildAutoLineup(players, positions, benchCount = 7) {
   const pool = [...(players || [])].filter(Boolean).sort((a,b)=>(b.overall||0)-(a.overall||0)||(b.potential||0)-(a.potential||0));
   const lineup = new Array(positions.length).fill(null);
   const assigned = new Set();
-  const lockedCore = new Set(pool.slice(0, Math.min(pool.length, positions.length + 2)).map(p => p.id));
-
   const slots = positions.map((position, idx) => ({ position, idx }));
-  slots.sort((a,b) => {
-    const aPool = pool.filter(p => lineupFitScore(p, a.position) > (a.position === 'GK' ? 80 : 72)).length;
-    const bPool = pool.filter(p => lineupFitScore(p, b.position) > (b.position === 'GK' ? 80 : 72)).length;
-    return aPool - bPool;
-  });
 
-  for (const slot of slots) {
-    const best = pool.filter(p => !assigned.has(p.id)).map(player => ({ player, score: lineupFitScore(player, slot.position) }))
-      .sort((a,b)=> (b.score-a.score) || ((lockedCore.has(b.player.id)?1:0)-(lockedCore.has(a.player.id)?1:0)) || ((b.player.overall||0)-(a.player.overall||0)))[0];
-    if (!best) continue;
-    lineup[slot.idx] = { playerId: best.player.id, role: (ROLES[slot.position] || [slot.position])[0], fitScore: best.score };
-    assigned.add(best.player.id);
+  // Lock the strongest goalkeeper first.
+  const gkSlot = slots.find(s => normalizePosition(s.position) === 'GK');
+  if (gkSlot) {
+    const bestGk = pool.filter(p => normalizePosition(p.position) === 'GK').sort((a,b)=>lineupFitScore(b,'GK')-lineupFitScore(a,'GK')||(b.overall||0)-(a.overall||0))[0];
+    if (bestGk) {
+      lineup[gkSlot.idx] = { playerId: bestGk.id, role: (ROLES[gkSlot.position] || [gkSlot.position])[0], fitScore: lineupFitScore(bestGk, gkSlot.position) };
+      assigned.add(bestGk.id);
+    }
   }
 
-  const unassignedTop = pool.filter(p => !assigned.has(p.id));
-  for (const elite of unassignedTop.slice(0, 6)) {
-    let weakestIdx = -1, weakestGap = 0;
-    positions.forEach((pos, idx) => {
-      const current = pool.find(p => p.id === lineup[idx]?.playerId);
-      if (!current || current.id === elite.id) return;
-      const eliteScore = lineupFitScore(elite, pos);
-      const currentScore = lineupFitScore(current, pos);
-      const gap = elite.overall - current.overall;
-      if ((eliteScore >= currentScore - 3 && gap >= 4) || eliteScore > currentScore + 4) {
-        if (gap > weakestGap) { weakestGap = gap; weakestIdx = idx; }
+  const outfieldSlots = slots.filter(s => normalizePosition(s.position) !== 'GK');
+  // Fill scarce positions first so CB/FB/wingback spots do not get ruined.
+  outfieldSlots.sort((a,b) => {
+    const ap = pool.filter(p => !assigned.has(p.id) && lineupFitScore(p, a.position) >= 78).length;
+    const bp = pool.filter(p => !assigned.has(p.id) && lineupFitScore(p, b.position) >= 78).length;
+    return ap - bp;
+  });
+
+  for (const slot of outfieldSlots) {
+    const choice = pool
+      .filter(p => !assigned.has(p.id) && normalizePosition(p.position) !== 'GK')
+      .map(player => ({ player, fit: lineupFitScore(player, slot.position), overall: player.overall || 0 }))
+      .sort((a,b) => (b.fit-a.fit) || (b.overall-a.overall))[0];
+    if (!choice) continue;
+    lineup[slot.idx] = { playerId: choice.player.id, role: (ROLES[slot.position] || [slot.position])[0], fitScore: choice.fit };
+    assigned.add(choice.player.id);
+  }
+
+  // Force elite outfielders into the XI if they have any playable slot.
+  const eliteOutfield = pool.filter(p => normalizePosition(p.position) !== 'GK').slice(0, Math.min(12, pool.length));
+  for (const elite of eliteOutfield) {
+    if (assigned.has(elite.id)) continue;
+    let bestSwap = null;
+    for (const slot of outfieldSlots) {
+      const current = pool.find(p => p.id === lineup[slot.idx]?.playerId);
+      if (!current) continue;
+      const eliteFit = lineupFitScore(elite, slot.position);
+      const currFit = lineupFitScore(current, slot.position);
+      const value = (elite.overall || 0) - (current.overall || 0) + (eliteFit - currFit) * 0.9;
+      if (eliteFit >= 72 && (!bestSwap || value > bestSwap.value)) {
+        bestSwap = { slot, value, eliteFit, current };
       }
-    });
-    if (weakestIdx >= 0) {
-      assigned.delete(lineup[weakestIdx].playerId);
-      lineup[weakestIdx] = { playerId: elite.id, role: (ROLES[positions[weakestIdx]] || [positions[weakestIdx]])[0], fitScore: lineupFitScore(elite, positions[weakestIdx]) };
+    }
+    if (bestSwap && (bestSwap.value >= 6 || (elite.overall || 0) >= ((bestSwap.current?.overall || 0) + 4))) {
+      assigned.delete(bestSwap.current.id);
+      lineup[bestSwap.slot.idx] = { playerId: elite.id, role: (ROLES[bestSwap.slot.position] || [bestSwap.slot.position])[0], fitScore: bestSwap.eliteFit };
       assigned.add(elite.id);
     }
   }
@@ -1320,15 +1337,19 @@ function buildAutoLineup(players, positions, benchCount = 7) {
   const bench = [];
   const benchNeed = Math.max(benchCount || 0, 0);
   const benchPool = pool.filter(p => !assigned.has(p.id));
-  const benchTargets = ['GK', 'CB', 'FB', 'DM', 'AM', 'W', 'ST'];
-  const matchBench = (target, p) => ({GK:['GK'],CB:['CB'],FB:['LB','RB','LWB','RWB'],DM:['CDM'],AM:['CM','CAM'],W:['LM','RM','LW','RW'],ST:['ST']})[target]?.includes(normalizePosition(p.position));
-  for (const target of benchTargets) {
+  const groups = [
+    p => normalizePosition(p.position) === 'GK',
+    p => ['CB','LB','RB','LWB','RWB'].includes(normalizePosition(p.position)),
+    p => ['CDM','CM','CAM'].includes(normalizePosition(p.position)),
+    p => ['LW','RW','LM','RM'].includes(normalizePosition(p.position)),
+    p => normalizePosition(p.position) === 'ST',
+  ];
+  for (const matcher of groups) {
     if (bench.length >= benchNeed) break;
-    const idx = benchPool.findIndex(p => matchBench(target, p));
+    const idx = benchPool.findIndex(matcher);
     if (idx >= 0) bench.push(benchPool.splice(idx,1)[0].id);
   }
   while (bench.length < benchNeed && benchPool.length) bench.push(benchPool.shift().id);
-
   return { lineup, bench };
 }
 
@@ -2005,10 +2026,10 @@ function buildAuxMatchEvents(match, result) {
   for (let i = 0; i < (result.awayYellows || 0); i++) extra.push({ minute: 20 + i * 9 + Math.floor(Math.random()*12), type: 'yellow', side: 'away', playerId: randomStarterId(awayPack, p => p.position !== 'GK') });
   for (let i = 0; i < (result.homeReds || 0); i++) extra.push({ minute: 62 + Math.floor(Math.random()*18), type: 'red', side: 'home', playerId: randomStarterId(homePack, p => p.position !== 'GK') });
   for (let i = 0; i < (result.awayReds || 0); i++) extra.push({ minute: 62 + Math.floor(Math.random()*18), type: 'red', side: 'away', playerId: randomStarterId(awayPack, p => p.position !== 'GK') });
-  const plans = [{ minute: 58, chance: 0.65 }, { minute: 67, chance: 0.78 }, { minute: 77, chance: 0.72 }, { minute: 84, chance: 0.42 }];
+  const plans = [{ minute: 60, chance: 0.45 }, { minute: 68, chance: 0.62 }, { minute: 77, chance: 0.58 }, { minute: 85, chance: 0.22 }];
   plans.forEach((plan, idx) => {
-    const homeBench = benchSubCandidates(homePack);
-    const awayBench = benchSubCandidates(awayPack);
+    const homeBench = benchSubCandidates(homePack).filter(p => (p.overall || 0) >= 58);
+    const awayBench = benchSubCandidates(awayPack).filter(p => (p.overall || 0) >= 58);
     if (homeBench[idx] && Math.random() < plan.chance) extra.push({ minute: plan.minute + Math.floor(Math.random()*4), type: 'sub', side: 'home', playerId: homeBench[idx].id });
     if (awayBench[idx] && Math.random() < plan.chance) extra.push({ minute: plan.minute + 1 + Math.floor(Math.random()*4), type: 'sub', side: 'away', playerId: awayBench[idx].id });
   });
@@ -2047,7 +2068,7 @@ function buildFotmobLiveShell(match) {
         <button class="fotmob-tab" data-live-tab="facts" type="button">Facts</button>
         <button class="fotmob-tab" data-live-tab="commentary" type="button">Commentary</button>
         <button class="fotmob-tab active" data-live-tab="lineup" type="button">Lineup</button>
-              </div>
+      </div>
       <section class="fotmob-live-panel hidden" data-live-panel="facts"><div id="fotmob-facts"></div></section>
       <section class="fotmob-live-panel hidden" data-live-panel="commentary"><div class="fotmob-commentary-card commentary-only"><div class="panel-head"><h3>Commentary</h3><span id="fotmob-commentary-meta-alt">Live feed</span></div><div class="match-events fotmob-commentary-list commentary-big" id="sim-events-alt"></div></div></section>
       <section class="fotmob-live-panel active" data-live-panel="lineup">
@@ -2130,28 +2151,35 @@ function renderFotmobPitch(match, minute = 1) {
   const hp = livePitchScene.homePack; const ap = livePitchScene.awayPack;
   const homeLayout = FORMATION_LAYOUT[livePitchScene.homeFormation] || FORMATION_LAYOUT['4-3-3'];
   const awayLayout = FORMATION_LAYOUT[livePitchScene.awayFormation] || FORMATION_LAYOUT['4-3-3'];
+  const makeCoords = (slot, side) => {
+    const progression = Math.max(0, Math.min(1, 1 - (slot?.y ?? 0.5)));
+    const lane = Math.max(0, Math.min(1, slot?.x ?? 0.5));
+    const leftPct = side === 'home'
+      ? (5 + progression * 41)
+      : (95 - progression * 41);
+    const topPct = 12 + lane * 68;
+    return { left: `${leftPct}%`, top: `${topPct}%` };
+  };
   const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
     const player = entry.player;
     if (!player) return '';
     const slot = layout[idx] || { x:.5, y:.5 };
-    const leftBase = slot.x * 41 + 9;
-    const topBase = slot.y * 76 + 11;
-    const left = side === 'home' ? `${leftBase}%` : `${100 - leftBase}%`;
-    const top = `${topBase}%`;
+    const pos = makeCoords(slot, side);
     const rating = getLivePlayerRating(player, minute).toFixed(1);
     const icons = liveEventSummaryForPlayer(player.id);
-    const iconHtml = [
-      icons.goals ? `<span class="event-chip goal">⚽</span>` : '',
-      icons.assists ? `<span class="event-chip assist">👟</span>` : '',
-      icons.yellows ? `<span class="event-chip yellow">🟨</span>` : '',
-      icons.reds ? `<span class="event-chip red">🟥</span>` : '',
-      icons.subOn ? `<span class="event-chip sub">↩</span>` : '',
-      icons.subOff ? `<span class="event-chip sub-off">↪</span>` : ''
-    ].join('');
-    return `<div class="fotmob-player fotmob-player-${side}" style="left:${left};top:${top};">
+    const leftStack = [];
+    const rightStack = [];
+    if (icons.goals) leftStack.push(`<span class="event-chip goal">⚽</span>`);
+    if (icons.assists) leftStack.push(`<span class="event-chip assist">👟</span>`);
+    if (icons.yellows) rightStack.push(`<span class="event-chip yellow">🟨</span>`);
+    if (icons.reds) rightStack.push(`<span class="event-chip red">🟥</span>`);
+    if (icons.subOn) rightStack.push(`<span class="event-chip sub">↩</span>`);
+    if (icons.subOff) rightStack.push(`<span class="event-chip sub-off">↪</span>`);
+    return `<div class="fotmob-player fotmob-player-${side}" style="left:${pos.left};top:${pos.top};">
+      ${leftStack.length ? `<div class="fotmob-player-event-stack ${side}">${leftStack.join('')}</div>` : ''}
       <div class="fotmob-player-rating ${side === 'home' ? 'home' : 'away'}">${rating}</div>
       <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar')}</div>
-      ${iconHtml ? `<div class="fotmob-player-icons">${iconHtml}</div>` : ''}
+      ${rightStack.length ? `<div class="fotmob-player-icons">${rightStack.join('')}</div>` : ''}
       <div class="fotmob-player-name"><span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(getShortPlayerName(player))}</div>
     </div>`;
   }).join('');

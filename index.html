@@ -228,7 +228,7 @@
           <div class="msim-side-scroll">
             <div class="msim-section-title" id="msim-home-lineup-title">HOME</div>
             <div id="msim-home-lineup"></div>
-            <div id="sim-events-wrap" class="hidden"><div class="msim-section-title">Commentary</div><div class="match-events" id="sim-events"></div></div>
+            <div id="sim-events-wrap" class="hidden"></div>
           </div>
         </aside>
 
@@ -304,44 +304,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script>
-(function () {
-  const TEAM_OPTIONS = ["Atlanta United","Austin FC","Charlotte FC","Chicago Fire FC","FC Cincinnati","Colorado Rapids","Columbus Crew","D.C. United","FC Dallas","Houston Dynamo FC","Sporting Kansas City","LA Galaxy","Los Angeles FC","Inter Miami CF","Minnesota United FC","CF Montréal","Nashville SC","New England Revolution","New York City FC","New York Red Bulls","Orlando City SC","Philadelphia Union","Portland Timbers","Real Salt Lake","San Diego FC","San Jose Earthquakes","Seattle Sounders FC","St. Louis CITY SC","Toronto FC","Vancouver Whitecaps FC"];
-  const open = id => document.getElementById(id)?.classList.add("open");
-  const close = id => document.getElementById(id)?.classList.remove("open");
-  const ensureTeams = () => {
-    const sel = document.getElementById("userTeamSelect");
-    if (!sel) return;
-    if (sel.options.length) return;
-    sel.innerHTML = TEAM_OPTIONS.map(name => `<option value="${name}">${name}</option>`).join("");
-  };
-  const bindOnce = (id, fn) => {
-    const el = document.getElementById(id);
-    if (!el || el.dataset.boundFallback === '1') return;
-    el.dataset.boundFallback = '1';
-    el.addEventListener('click', fn);
-  };
-  const bind = () => {
-    ensureTeams();
-    bindOnce("showCreateLeagueBtn", () => { ensureTeams(); (window.__mlsgmOpenSetup ? window.__mlsgmOpenSetup() : open("setupOverlay")); });
-    bindOnce("closeSetupBtn", () => { window.__mlsgmCloseSetup ? window.__mlsgmCloseSetup() : close("setupOverlay"); });
-    bindOnce("showLoadLeagueBtn", () => { if (window.__mlsgmOpenLoad) return window.__mlsgmOpenLoad(); open("loadOverlay"); });
-    bindOnce("closeLoadBtn", () => { window.__mlsgmCloseLoad ? window.__mlsgmCloseLoad() : close("loadOverlay"); });
-    bindOnce("createLeagueBtn", async () => {
-      ensureTeams();
-      if (window.__mlsgmCreateLeague) return window.__mlsgmCreateLeague();
-      try {
-        const mod = await import('./js/app.js?v=28fallback');
-        if (window.__mlsgmCreateLeague) return window.__mlsgmCreateLeague();
-      } catch (err) {
-        console.error('Fallback module import failed:', err);
-      }
-    });
-  };
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, { once: true });
-  else bind();
-})();
-</script>
-<script type="module" src="./js/app.js?v=28"></script>
+<script type="module" src="./js/app.js?v=29"></script>
 </body>
 </html>
