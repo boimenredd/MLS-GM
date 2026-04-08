@@ -1415,7 +1415,7 @@ function applyStandings(state, match) {
 
 // ─── Player match stats ───────────────────────────────────────────────────────
 
-function giveStats(state, teamId, teamGoals, oppGoals, xg, shots, sot, yellows, reds, resultType) {
+function giveStats(state, match, teamId, teamGoals, oppGoals, xg, shots, sot, yellows, reds, resultType) {
   const starters = state.players
     .filter(p =>
       p.clubId === teamId &&
@@ -1425,6 +1425,8 @@ function giveStats(state, teamId, teamGoals, oppGoals, xg, shots, sot, yellows, 
     .slice(0, 11);
 
   const ratingMap = new Map();
+  const playerEvents = new Map();
+  const bumpEvent = (id, key) => { if (!id) return; const row = playerEvents.get(id) || { goals:0, assists:0, yellow:0, red:0 }; row[key] = (row[key] || 0) + 1; playerEvents.set(id, row); };
   starters.forEach(p => {
     p.stats.gp  += 1;
     p.stats.gs  += 1;
@@ -1458,12 +1460,14 @@ function giveStats(state, teamId, teamGoals, oppGoals, xg, shots, sot, yellows, 
     scorer.stats.shots         += randInt(1, 3);
     scorer.stats.shotsOnTarget += 1;
     scorer.stats.xg            += xg / Math.max(1, teamGoals);
+    bumpEvent(scorer.id, "goals");
     ratingMap.set(scorer.id, (ratingMap.get(scorer.id) || 6.2) + 0.72);
     if (Math.random() < 0.72) {
       const pool = starters.filter(p => p.id !== scorer.id);
       if (pool.length) {
         const assister = chooseScorer(pool);
         assister.stats.assists += 1;
+        bumpEvent(assister.id, "assists");
         ratingMap.set(assister.id, (ratingMap.get(assister.id) || 6.2) + 0.32);
       }
     }
@@ -1472,6 +1476,7 @@ function giveStats(state, teamId, teamGoals, oppGoals, xg, shots, sot, yellows, 
   for (let i = 0; i < yellows; i++) {
     const booked = pick(starters);
     booked.stats.yellows += 1;
+    bumpEvent(booked.id, "yellow");
     ratingMap.set(booked.id, (ratingMap.get(booked.id) || 6.2) - 0.18);
   }
   for (let i = 0; i < reds; i++) {
@@ -1479,6 +1484,7 @@ function giveStats(state, teamId, teamGoals, oppGoals, xg, shots, sot, yellows, 
     if (outfield.length) {
       const sentOff = pick(outfield);
       sentOff.stats.reds += 1;
+      bumpEvent(sentOff.id, "red");
       ratingMap.set(sentOff.id, (ratingMap.get(sentOff.id) || 6.2) - 0.8);
     }
   }
@@ -1489,11 +1495,21 @@ function giveStats(state, teamId, teamGoals, oppGoals, xg, shots, sot, yellows, 
     p.stats.ratingCount = (Number(p.stats.ratingCount) || 0) + 1;
     p.stats.lastRating = finalRating;
     p.stats.matchRatings ||= [];
+    const teamSide = p.clubId === match.homeTeamId ? 'home' : 'away';
+    const opponentTeam = state.teams.find(t => t.id === (teamSide === 'home' ? match.awayTeamId : match.homeTeamId));
     p.stats.matchRatings.push({
       season: state.season.year,
       week: state.calendar.week,
       rating: finalRating,
       result: resultType === "win" ? "W" : resultType === "loss" ? "L" : "D",
+      opponent: opponentTeam?.name || '—',
+      score: `${match.result?.homeGoals ?? result.homeGoals}-${match.result?.awayGoals ?? result.awayGoals}`,
+      minutes: 90,
+      goals: Math.max(0, (playerEvents.get(p.id)?.goals || 0)),
+      assists: Math.max(0, (playerEvents.get(p.id)?.assists || 0)),
+      yellows: Math.max(0, (playerEvents.get(p.id)?.yellow || 0)),
+      reds: Math.max(0, (playerEvents.get(p.id)?.red || 0)),
+      dateLabel: `Week ${state.calendar.week}`,
     });
     if (p.stats.matchRatings.length > 30) p.stats.matchRatings.shift();
   });
@@ -1584,8 +1600,8 @@ export function simulateMatch(state, match, opts = {}) {
     ? (penalties.away > penalties.home ? "win" : "loss")
     : awayGoals > homeGoals ? "win" : awayGoals < homeGoals ? "loss" : "draw";
 
-  giveStats(state, homeTeam.id, homeGoals, awayGoals, homeXg, homeShots, homeSot, homeYellows, homeReds, homeResult);
-  giveStats(state, awayTeam.id, awayGoals, homeGoals, awayXg, awayShots, awaySot, awayYellows, awayReds, awayResult);
+  giveStats(state, match, homeTeam.id, homeGoals, awayGoals, homeXg, homeShots, homeSot, homeYellows, homeReds, homeResult);
+  giveStats(state, match, awayTeam.id, awayGoals, homeGoals, awayXg, awayShots, awaySot, awayYellows, awayReds, awayResult);
 
   if (match.type === "Regular Season") applyStandings(state, match);
 

@@ -3180,3 +3180,41 @@ html[data-theme="dark"] .week-mini-meta .team-link { color: #fff !important; }
 @media (max-width: 1100px) {
   .fotmob-facts-grid, .fotmob-subs-table, .fotmob-bench-table { grid-template-columns: 1fr; }
 }
+
+
+.week-mini-team {
+  background: #f2f3f5;
+  color: #0f172a;
+  border: 1px solid #d6dae2;
+}
+.week-mini-team .team-link, .week-mini-team .coach-link { color: #2563eb !important; }
+.week-mini-meta { color: #475569; }
+.week-mini-actions { background: transparent; }
+
+.player-hero-metrics-boxed > div {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+}
+.rating-pill-inline {
+  display:inline-flex; align-items:center; justify-content:center; min-width:38px; padding:4px 8px; border-radius:999px; background:#fb923c; color:#1f1300; font-weight:900;
+}
+.fotmob-history-table th, .fotmob-history-table td { font-size: 12px; }
+
+.fotmob-pitch-filter-row {
+  position:absolute; left:18px; right:18px; top:14px; display:flex; gap:12px; z-index:3;
+}
+.fotmob-pitch-filter-row span {
+  padding:6px 14px; border-radius:999px; background:rgba(0,0,0,.22); color:#fff; font-size:12px; font-weight:700;
+}
+.fotmob-pitch { padding-top: 44px; }
+.fotmob-player { width: 92px; }
+.fotmob-player-name { font-size: 11px; font-weight: 800; }
+.fotmob-player-number { opacity:.92; }
+.fotmob-player-rating { top: -10px; right: 8px; min-width: 30px; font-size: 11px; padding: 2px 7px; }
+.fotmob-player-icons { top: 39px; gap: 2px; }
+.event-chip.sub, .event-chip.sub-off { background:#111827; color:#fff; }
+.player-photo-fallback.fotmob-player-avatar { font-size: 12px; letter-spacing: .02em; }
+
+.player-photo-fallback, .player-photo-shell, .player-photo-img { animation:none !important; transition:none !important; }

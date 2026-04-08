@@ -1261,25 +1261,40 @@ function buildAutoLineup(players, positions, benchCount = 7) {
   const pool = [...(players || [])].filter(Boolean);
   const lineup = new Array(positions.length).fill(null);
   const usedIds = new Set();
+  const positionDemand = positions.reduce((acc, pos) => ((acc[pos] = (acc[pos] || 0) + 1), acc), {});
 
-  const slotsByPriority = positions
-    .map((position, idx) => ({ position, idx, scarce: pool.filter(p => lineupFitScore(p, position) >= (position === "GK" ? 70 : 62)).length }))
-    .sort((a, b) => a.scarce - b.scarce || a.idx - b.idx);
+  const topByPosition = pos => pool
+    .filter(p => !usedIds.has(p.id))
+    .sort((a, b) => lineupFitScore(b, pos) - lineupFitScore(a, pos) || (b.overall || 0) - (a.overall || 0));
 
-  for (const slot of slotsByPriority) {
+  const slotPriority = positions
+    .map((position, idx) => ({ position, idx, scarcity: topByPosition(position).filter(p => lineupFitScore(p, position) >= (position === 'GK' ? 92 : 76)).length }))
+    .sort((a, b) => a.scarcity - b.scarcity || a.idx - b.idx);
+
+  const reserveCounts = { ...positionDemand };
+  const futureNeeds = (player, currentPos) => {
+    const candidates = playerPositionCandidates(player);
+    return Object.entries(reserveCounts).reduce((sum, [pos, need]) => {
+      if (need <= 0 || pos === currentPos) return sum;
+      return sum + (candidates.includes(pos) ? need : 0);
+    }, 0);
+  };
+
+  for (const slot of slotPriority) {
+    reserveCounts[slot.position] = Math.max(0, (reserveCounts[slot.position] || 1) - 1);
     const candidates = pool
       .filter(player => !usedIds.has(player.id))
       .map(player => ({
         player,
         score: lineupFitScore(player, slot.position),
-        versatility: playerPositionCandidates(player).length,
         primaryMatch: normalizePosition(player.position) === normalizePosition(slot.position),
+        versatilePenalty: futureNeeds(player, slot.position) * 3.5,
       }))
       .sort((a, b) =>
-        b.score - a.score ||
+        (b.score - b.versatilePenalty) - (a.score - a.versatilePenalty) ||
         (b.primaryMatch ? 1 : 0) - (a.primaryMatch ? 1 : 0) ||
         (b.player.overall || 0) - (a.player.overall || 0) ||
-        (a.versatility || 0) - (b.versatility || 0)
+        (b.player.potential || 0) - (a.player.potential || 0)
       );
     const best = candidates[0];
     if (!best) continue;
@@ -1307,18 +1322,39 @@ function buildAutoLineup(players, positions, benchCount = 7) {
     }
   }
 
+  const tryUpgradeSlot = () => {
+    let improved = false;
+    for (let i = 0; i < positions.length; i++) {
+      const currentId = lineup[i]?.playerId;
+      const current = pool.find(p => p.id === currentId);
+      for (const challenger of pool.filter(p => !usedIds.has(p.id))) {
+        const gain = lineupFitScore(challenger, positions[i]) - lineupFitScore(current, positions[i]);
+        if (gain > 7) {
+          if (current) usedIds.delete(current.id);
+          lineup[i].playerId = challenger.id;
+          lineup[i].fitScore = lineupFitScore(challenger, positions[i]);
+          usedIds.add(challenger.id);
+          improved = true;
+          break;
+        }
+      }
+    }
+    return improved;
+  };
+  tryUpgradeSlot();
+
   const benchNeed = Math.max(benchCount || 0, 0);
   const bench = [];
   const benchPool = pool.filter(player => !usedIds.has(player.id));
-  const benchOrder = ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"];
-  for (const pos of benchOrder) {
+  const benchTargets = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LW', 'RW', 'ST'];
+  for (const pos of benchTargets) {
     if (bench.length >= benchNeed) break;
     const idx = benchPool.findIndex(p => normalizePosition(p.position) === pos || playerPositionCandidates(p).includes(pos));
     if (idx >= 0) bench.push(benchPool.splice(idx, 1)[0].id);
   }
   while (bench.length < benchNeed && benchPool.length) {
-    const bestIdx = benchPool.reduce((best, p, idx, arr) => ((p.overall || 0) > (arr[best]?.overall || 0) ? idx : best), 0);
-    bench.push(benchPool.splice(bestIdx, 1)[0].id);
+    benchPool.sort((a, b) => (b.overall || 0) - (a.overall || 0) || (b.potential || 0) - (a.potential || 0));
+    bench.push(benchPool.shift().id);
   }
 
   return { lineup, bench };
@@ -1987,19 +2023,22 @@ async function showVARReview(minute, scorerName = "") {
 function buildAuxMatchEvents(match, result) {
   const homePack = livePitchScene?.homePack || getLineupForFormation(match.homeTeamId, getLiveFormation(match.homeTeamId));
   const awayPack = livePitchScene?.awayPack || getLineupForFormation(match.awayTeamId, getLiveFormation(match.awayTeamId));
-  const randomPlayerId = (pack, posFilter = null) => {
-    const pool = (pack?.xi || []).map(x => x.player).filter(Boolean).filter(p => !posFilter || posFilter(p));
+  const randomStarterId = (pack, filterFn = null) => {
+    const pool = (pack?.xi || []).map(x => x.player).filter(Boolean).filter(p => !filterFn || filterFn(p));
     return pool.length ? pool[Math.floor(Math.random() * pool.length)].id : null;
   };
+  const benchSubCandidates = pack => (pack?.bench || []).filter(p => p && p.position !== 'GK');
   const extra = [];
-  for (let i = 0; i < (result.homeYellows || 0); i++) extra.push({ minute: 18 + i * 11 + Math.floor(Math.random()*10), type: "yellow", side: "home", playerId: randomPlayerId(homePack, p => p.position !== "GK") });
-  for (let i = 0; i < (result.awayYellows || 0); i++) extra.push({ minute: 20 + i * 9 + Math.floor(Math.random()*12), type: "yellow", side: "away", playerId: randomPlayerId(awayPack, p => p.position !== "GK") });
-  for (let i = 0; i < (result.homeReds || 0); i++) extra.push({ minute: 62 + Math.floor(Math.random()*18), type: "red", side: "home", playerId: randomPlayerId(homePack, p => p.position !== "GK") });
-  for (let i = 0; i < (result.awayReds || 0); i++) extra.push({ minute: 62 + Math.floor(Math.random()*18), type: "red", side: "away", playerId: randomPlayerId(awayPack, p => p.position !== "GK") });
-  const subMinutes = [58, 67, 76];
-  subMinutes.forEach((m, idx) => {
-    if ((homePack?.bench || [])[idx]) extra.push({ minute: m + Math.floor(Math.random()*4), type: "sub", side: "home", playerId: homePack.bench[idx].id });
-    if ((awayPack?.bench || [])[idx]) extra.push({ minute: m + 1 + Math.floor(Math.random()*4), type: "sub", side: "away", playerId: awayPack.bench[idx].id });
+  for (let i = 0; i < (result.homeYellows || 0); i++) extra.push({ minute: 18 + i * 11 + Math.floor(Math.random()*10), type: 'yellow', side: 'home', playerId: randomStarterId(homePack, p => p.position !== 'GK') });
+  for (let i = 0; i < (result.awayYellows || 0); i++) extra.push({ minute: 20 + i * 9 + Math.floor(Math.random()*12), type: 'yellow', side: 'away', playerId: randomStarterId(awayPack, p => p.position !== 'GK') });
+  for (let i = 0; i < (result.homeReds || 0); i++) extra.push({ minute: 62 + Math.floor(Math.random()*18), type: 'red', side: 'home', playerId: randomStarterId(homePack, p => p.position !== 'GK') });
+  for (let i = 0; i < (result.awayReds || 0); i++) extra.push({ minute: 62 + Math.floor(Math.random()*18), type: 'red', side: 'away', playerId: randomStarterId(awayPack, p => p.position !== 'GK') });
+  const plans = [{ minute: 58, chance: 0.85 }, { minute: 67, chance: 0.75 }, { minute: 77, chance: 0.60 }, { minute: 86, chance: 0.32 }];
+  plans.forEach((plan, idx) => {
+    const homeBench = benchSubCandidates(homePack);
+    const awayBench = benchSubCandidates(awayPack);
+    if (homeBench[idx] && Math.random() < plan.chance) extra.push({ minute: plan.minute + Math.floor(Math.random()*4), type: 'sub', side: 'home', playerId: homeBench[idx].id });
+    if (awayBench[idx] && Math.random() < plan.chance) extra.push({ minute: plan.minute + 1 + Math.floor(Math.random()*4), type: 'sub', side: 'away', playerId: awayBench[idx].id });
   });
   return extra.sort((a,b) => a.minute - b.minute);
 }
@@ -2036,8 +2075,7 @@ function buildFotmobLiveShell(match) {
         <button class="fotmob-tab" data-live-tab="facts" type="button">Facts</button>
         <button class="fotmob-tab" data-live-tab="commentary" type="button">Commentary</button>
         <button class="fotmob-tab active" data-live-tab="lineup" type="button">Lineup</button>
-        <button class="fotmob-tab" data-live-tab="stats" type="button">Stats</button>
-      </div>
+              </div>
       <section class="fotmob-live-panel hidden" data-live-panel="facts"><div id="fotmob-facts"></div></section>
       <section class="fotmob-live-panel hidden" data-live-panel="commentary"><div class="fotmob-commentary-card commentary-only"><div class="panel-head"><h3>Commentary</h3><span id="fotmob-commentary-meta-alt">Live feed</span></div><div class="match-events fotmob-commentary-list commentary-big" id="sim-events-alt"></div></div></section>
       <section class="fotmob-live-panel active" data-live-panel="lineup">
@@ -2057,10 +2095,9 @@ function buildFotmobLiveShell(match) {
           <div class="fotmob-bench-table" id="fotmob-bench"></div>
         </div>
       </section>
-      <section class="fotmob-live-panel hidden" data-live-panel="stats"><div id="fotmob-stats"></div></section>
-      <div class="fotmob-controls">
-        <button class="btn btn-sm sim-speed-opt" data-speed="slow" type="button">Slow</button>
-        <button class="btn btn-sm sim-speed-opt active" data-speed="normal" type="button">Normal</button>
+            <div class="fotmob-controls">
+        <button class="btn btn-sm sim-speed-opt active" data-speed="slow" type="button">Slow</button>
+        <button class="btn btn-sm sim-speed-opt" data-speed="normal" type="button">Normal</button>
         <button class="btn btn-sm sim-speed-opt" data-speed="fast" type="button">Fast</button>
         <button class="btn btn-sm sim-speed-opt" data-speed="turbo" type="button">Turbo</button>
         <button class="btn btn-sm" id="sim-pause-btn" type="button">Pause</button>
@@ -2083,17 +2120,18 @@ function renderFotmobCoachAndBench(match, minute = 1) {
     if (summary.assists) items.push(`<span class="event-chip assist">👟</span>`);
     if (summary.yellows) items.push(`<span class="event-chip yellow">🟨</span>`);
     if (summary.reds) items.push(`<span class="event-chip red">🟥</span>`);
+    if (summary.subOn) items.push(`<span class="event-chip sub">↩</span>`);
     return items.join('');
   };
   const subRows = side => {
-    const subs = (livePitchScene?.eventLog || []).filter(ev => ev.type === "sub" && ev.side === side);
+    const subs = (livePitchScene?.eventLog || []).filter(ev => ev.type === 'sub' && ev.side === side);
     return subs.map(ev => {
       const incoming = ev.playerId ? byPlayerId(ev.playerId) : null;
       const outgoing = ev.outPlayerId ? byPlayerId(ev.outPlayerId) : null;
-      return `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(outgoing || { name: "—" }, 'player-photo-inline')}<span class="num">${escapeHtml(String(outgoing?.jerseyNumber || outgoing?.number || ""))}</span><div><strong>${escapeHtml(outgoing?.name || "Unknown")}</strong><small>${escapeHtml(outgoing?.position || "")}</small></div></div><div class="fotmob-table-mid">${ev.minute || 0}'</div><div class="fotmob-table-player right">${playerPhoto(incoming || { name: "—" }, 'player-photo-inline')}<div><strong>${escapeHtml(incoming?.name || "Unknown")}</strong><small>${escapeHtml(incoming?.position || "")}</small></div><span class="num">${escapeHtml(String(incoming?.jerseyNumber || incoming?.number || ""))}</span></div></div>`;
+      return `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(outgoing || { name: '—' }, 'player-photo-inline')}<span class="num">${escapeHtml(getPlayerDisplayNumber(outgoing))}</span><div><strong>${escapeHtml(outgoing?.name || 'Player out')}</strong><small>${escapeHtml(outgoing?.position || '')}</small></div></div><div class="fotmob-table-mid">${ev.minute || 0}'</div><div class="fotmob-table-player right">${playerPhoto(incoming || { name: '—' }, 'player-photo-inline')}<div><strong>${escapeHtml(incoming?.name || 'Player in')}</strong><small>${escapeHtml(incoming?.position || '')}</small></div><span class="num">${escapeHtml(getPlayerDisplayNumber(incoming))}</span></div></div>`;
     }).join('');
   };
-  const benchList = (players = []) => players.map(p => `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(p,'player-photo-inline')}<span class="num">${escapeHtml(String(p.jerseyNumber || p.number || ""))}</span><div><strong>${escapeHtml(p.name || "Unknown")}</strong><small>${escapeHtml(p.position || "")}</small></div></div><div class="fotmob-table-mid">${playerStatusIcons(p) || "—"}</div><div class="fotmob-table-rating">${getLivePlayerRating(p, minute).toFixed(1)}</div></div>`).join('') || `<div class="note">No bench listed.</div>`;
+  const benchList = (players = []) => players.map(p => `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(p,'player-photo-inline')}<span class="num">${escapeHtml(getPlayerDisplayNumber(p))}</span><div><strong>${escapeHtml(p.name || 'Unknown')}</strong><small>${escapeHtml(p.position || '')}</small></div></div><div class="fotmob-table-mid">${playerStatusIcons(p) || '—'}</div><div class="fotmob-table-rating">${getLivePlayerRating(p, minute).toFixed(1)}</div></div>`).join('') || `<div class="note">No bench listed.</div>`;
   const hc = document.getElementById('fotmob-home-coach'); if (hc) hc.innerHTML = coachHtml(homeCoach);
   const ac = document.getElementById('fotmob-away-coach'); if (ac) ac.innerHTML = coachHtml(awayCoach);
   const subs = document.getElementById('fotmob-subs'); if (subs) subs.innerHTML = `<div>${subRows('home') || '<div class="note">No substitutions yet.</div>'}</div><div>${subRows('away') || '<div class="note">No substitutions yet.</div>'}</div>`;
@@ -2125,8 +2163,8 @@ function renderFotmobPitch(match, minute = 1) {
     const player = entry.player;
     if (!player) return '';
     const slot = layout[idx] || { x:.5, y:.5 };
-    const leftBase = slot.x * 40 + 10;
-    const topBase = slot.y * 78 + 10;
+    const leftBase = slot.x * 41 + 9;
+    const topBase = slot.y * 76 + 11;
     const left = side === 'home' ? `${leftBase}%` : `${100 - leftBase}%`;
     const top = `${topBase}%`;
     const rating = getLivePlayerRating(player, minute).toFixed(1);
@@ -2135,16 +2173,18 @@ function renderFotmobPitch(match, minute = 1) {
       icons.goals ? `<span class="event-chip goal">⚽</span>` : '',
       icons.assists ? `<span class="event-chip assist">👟</span>` : '',
       icons.yellows ? `<span class="event-chip yellow">🟨</span>` : '',
-      icons.reds ? `<span class="event-chip red">🟥</span>` : ''
+      icons.reds ? `<span class="event-chip red">🟥</span>` : '',
+      icons.subOn ? `<span class="event-chip sub">↩</span>` : '',
+      icons.subOff ? `<span class="event-chip sub-off">↪</span>` : ''
     ].join('');
     return `<div class="fotmob-player fotmob-player-${side}" style="left:${left};top:${top};">
       <div class="fotmob-player-rating ${side === 'home' ? 'home' : 'away'}">${rating}</div>
       <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar')}</div>
       ${iconHtml ? `<div class="fotmob-player-icons">${iconHtml}</div>` : ''}
-      <div class="fotmob-player-name">${escapeHtml(player.number || player.jerseyNumber || '')} ${escapeHtml((player.name || '').split(' ').slice(-1)[0] || player.name || '')}</div>
+      <div class="fotmob-player-name"><span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(getShortPlayerName(player))}</div>
     </div>`;
   }).join('');
-  pitch.innerHTML = `<div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, 'home')}${renderSide(ap?.xi || [], awayLayout, 'away')}`;
+  pitch.innerHTML = `<div class="fotmob-pitch-filter-row"><span>Distance</span><span>Top speed</span><span>Transfer value</span><span>Age</span><span>Country</span></div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, 'home')}${renderSide(ap?.xi || [], awayLayout, 'away')}`;
   const homeAvg = hp ? avg((hp.xi||[]).map(({player}) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
   const awayAvg = ap ? avg((ap.xi||[]).map(({player}) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
   const hEl = document.getElementById('fotmob-home-team-rating'); if (hEl) hEl.textContent = homeAvg;
@@ -2214,6 +2254,7 @@ function syncLiveCommentaryMirrors() {
 
 function refreshFotmobLive(match, minute = 1) {
   const ht = byTeamId(match.homeTeamId); const at = byTeamId(match.awayTeamId);
+  livePitchScene.currentMinute = minute;
   const score = livePitchScene?.score || { home:0, away:0 };
   const minuteEl = document.getElementById('sim-minute'); if (minuteEl) minuteEl.textContent = `${minute}'`;
   const scoreEl = document.getElementById('sim-score'); if (scoreEl) scoreEl.textContent = `${score.home} - ${score.away}`;
@@ -2224,7 +2265,6 @@ function refreshFotmobLive(match, minute = 1) {
   renderFotmobPitch(match, minute);
   renderFotmobCoachAndBench(match, minute);
   const facts = document.getElementById('fotmob-facts'); if (facts) facts.innerHTML = buildLiveFactsHtml(match, minute);
-  const statsPanel = document.getElementById('fotmob-stats'); if (statsPanel) statsPanel.innerHTML = `<div class="fotmob-facts-card"><div class="panel-head"><h3>Top stats</h3><span>Live</span></div>${buildLiveTopStatsHtml(livePitchScene?.liveStats || {})}</div>`;
   syncLiveCommentaryMirrors();
   const banner = document.getElementById('fotmob-sub-banner');
   if (banner) {
@@ -2244,10 +2284,19 @@ function applySubstitutionToPack(pack, playerId) {
   const benchIdx = (pack.bench || []).findIndex(p => p.id === playerId);
   if (benchIdx < 0) return;
   const incoming = pack.bench.splice(benchIdx, 1)[0];
-  const samePosIdx = (pack.xi || []).findIndex(entry => entry.position === incoming.position);
-  const replaceIdx = samePosIdx >= 0 ? samePosIdx : Math.max(0, (pack.xi || []).length - 1);
-  const outgoing = pack.xi[replaceIdx]?.player;
-  pack.xi[replaceIdx] = { position: incoming.position, player: incoming };
+  if (!incoming || incoming.position === 'GK') return;
+  const sameGroup = pos => ({ LB:'DEF', RB:'DEF', CB:'DEF', LWB:'DEF', RWB:'DEF', CDM:'MID', CM:'MID', CAM:'MID', LM:'MID', RM:'MID', LW:'ATT', RW:'ATT', ST:'ATT', GK:'GK' }[normalizePosition(pos)] || 'OTHER');
+  const candidates = (pack.xi || []).map((entry, idx) => ({ idx, entry, player: entry.player, fit: lineupFitScore(incoming, entry.position), energy: getLivePlayerEnergy(entry.player, livePitchScene?.currentMinute || 60) }))
+    .filter(row => row.player && row.player.id !== incoming.id && normalizePosition(row.player.position) !== 'GK')
+    .sort((a, b) => {
+      const samePosA = normalizePosition(a.entry.position) === normalizePosition(incoming.position) || sameGroup(a.entry.position) === sameGroup(incoming.position);
+      const samePosB = normalizePosition(b.entry.position) === normalizePosition(incoming.position) || sameGroup(b.entry.position) === sameGroup(incoming.position);
+      return (samePosB ? 1 : 0) - (samePosA ? 1 : 0) || a.energy - b.energy || a.fit - b.fit || getLivePlayerRating(a.player, livePitchScene?.currentMinute || 60) - getLivePlayerRating(b.player, livePitchScene?.currentMinute || 60);
+    });
+  const choice = candidates[0];
+  if (!choice) return;
+  const outgoing = choice.player;
+  pack.xi[choice.idx] = { position: choice.entry.position, player: incoming };
   if (outgoing) pack.bench.push(outgoing);
   return { incoming, outgoing, outPlayerId: outgoing?.id || null };
 }
@@ -2365,11 +2414,11 @@ async function playLiveMatch(match) {
   simPaused = false;
   simSkipped = false;
   simAbortRequested = false;
-  simSpeedKey = 'normal';
+  simSpeedKey = 'slow';
   box.innerHTML = buildFotmobLiveShell(match);
   overlay.classList.add('open');
   bindOverlayButtons();
-  setSimSpeed('normal');
+  setSimSpeed('slow');
 
   const ht = byTeamId(match.homeTeamId);
   const at = byTeamId(match.awayTeamId);
@@ -2623,9 +2672,9 @@ function openPlayerProfile(playerId) {
               <div class="player-hero-sub">${team ? teamLink(team.id, team.name) : "Free Agent"} · ${escapeHtml(country)}</div>
             </div>
           </div>
-          <div class="player-hero-metrics-clean roomy-player-hero-metrics">
-            <div><span>Overall</span><strong>${displayOverall}</strong></div>
-            <div><span>Potential</span><strong>${displayPotential}</strong></div>
+          <div class="player-hero-metrics-clean roomy-player-hero-metrics player-hero-metrics-boxed">
+            <div class="ovr-box"><span>Overall</span><strong>${displayOverall}</strong></div>
+            <div class="pot-box"><span>Potential</span><strong>${displayPotential}</strong></div>
           </div>
         </div>
         <div class="player-profile-tabbar roomy-tabbar">
@@ -2692,8 +2741,8 @@ function openPlayerProfile(playerId) {
           </section>
           <section class="panel roomy-panel">
             <div class="panel-head"><h3>Match rating history</h3><span>Recent matches</span></div>
-            <table class="tight-table player-match-table-clean roomy-match-table"><thead><tr><th>Match</th><th>Week</th><th>Result</th><th class="num">Rating</th></tr></thead><tbody>
-              ${recentRatings.length ? recentRatings.slice().reverse().map((row, idx) => `<tr><td>#${recentRatings.length - idx}</td><td>${row.week || "—"}</td><td>${escapeHtml(row.result || "—")}</td><td class="num">${Number(row.rating || 0).toFixed(1)}</td></tr>`).join("") : `<tr><td colspan="4" class="note" style="text-align:center">No match ratings yet.</td></tr>`}
+            <table class="tight-table player-match-table-clean roomy-match-table fotmob-history-table"><thead><tr><th>Date</th><th>Opponent</th><th>Res</th><th class="num">Min</th><th class="num">⚽</th><th class="num">👟</th><th class="num">🟨</th><th class="num">🟥</th><th class="num">★</th></tr></thead><tbody>
+              ${recentRatings.length ? recentRatings.slice().reverse().map((row, idx) => `<tr><td>${escapeHtml(row.dateLabel || `Wk ${row.week || "—"}`)}</td><td>${escapeHtml(row.opponent || "—")}</td><td>${escapeHtml(row.result || "—")} ${escapeHtml(row.score || "")}</td><td class="num">${row.minutes || 90}</td><td class="num">${row.goals || 0}</td><td class="num">${row.assists || 0}</td><td class="num">${row.yellows || 0}</td><td class="num">${row.reds || 0}</td><td class="num"><span class="rating-pill-inline">${Number(row.rating || 0).toFixed(1)}</span></td></tr>`).join("") : `<tr><td colspan="9" class="note" style="text-align:center">No match ratings yet.</td></tr>`}
             </tbody></table>
           </section>
         </div>
@@ -2912,7 +2961,7 @@ function renderWeeklySchedule() {
           <div class="week-mini-crest">${teamLogoMark(home, 'mini-team-logo')}</div>
           <div class="week-mini-copy">
             <div class="week-mini-name">${teamLink(home.id, home.name)}</div>
-            <div class="week-mini-meta">${homeRec.wins}-${homeRec.draws}-${homeRec.losses} · ${homeCoach ? coachLink(homeCoach.id, homeCoach.name) : 'No coach listed'}</div>
+            <div class="week-mini-meta">${homeRec.wins}-${homeRec.draws}-${homeRec.losses} · Coach: ${homeCoach ? coachLink(homeCoach.id, homeCoach.name) : 'No coach listed'}</div>
           </div>
           ${completed ? `<div class="week-mini-score">${result.homeGoals ?? 0}</div>` : ``}
         </div>
@@ -2921,7 +2970,7 @@ function renderWeeklySchedule() {
           ${completed ? `<div class="week-mini-score">${result.awayGoals ?? 0}</div>` : ``}
           <div class="week-mini-copy align-right">
             <div class="week-mini-name">${teamLink(away.id, away.name)}</div>
-            <div class="week-mini-meta">${awayRec.wins}-${awayRec.draws}-${awayRec.losses} · ${awayCoach ? coachLink(awayCoach.id, awayCoach.name) : 'No coach listed'}</div>
+            <div class="week-mini-meta">${awayRec.wins}-${awayRec.draws}-${awayRec.losses} · Coach: ${awayCoach ? coachLink(awayCoach.id, awayCoach.name) : 'No coach listed'}</div>
           </div>
           <div class="week-mini-crest">${teamLogoMark(away, 'mini-team-logo')}</div>
         </div>
@@ -3610,6 +3659,43 @@ const FORMATION_LAYOUT = {
   "3-4-3":   [{x:0.50,y:0.87},{x:0.25,y:0.70},{x:0.50,y:0.70},{x:0.75,y:0.70},{x:0.20,y:0.50},{x:0.80,y:0.50},{x:0.14,y:0.22},{x:0.86,y:0.22},{x:0.50,y:0.45},{x:0.35,y:0.18},{x:0.65,y:0.18}],
 };
 
+
+function remapSavedLineup(oldLineup, players, newPositions) {
+  const available = (oldLineup || []).map(slot => players.find(p => p.id === slot?.playerId)).filter(Boolean);
+  const auto = buildAutoLineup(players, newPositions, 7);
+  const used = new Set();
+  const remapped = newPositions.map((pos, idx) => {
+    const exact = available
+      .filter(p => !used.has(p.id))
+      .sort((a, b) => lineupFitScore(b, pos) - lineupFitScore(a, pos) || (b.overall || 0) - (a.overall || 0))[0];
+    const chosen = exact && lineupFitScore(exact, pos) >= 70 ? exact : null;
+    if (chosen) {
+      used.add(chosen.id);
+      return { playerId: chosen.id, role: (ROLES[pos] || [pos])[0], fitScore: lineupFitScore(chosen, pos) };
+    }
+    return auto.lineup[idx];
+  });
+  return remapped;
+}
+
+function autoAdvanceMatchdayIfComplete() {
+  const week = state?.calendar?.week || 1;
+  const remaining = (state?.schedule || []).some(m => m.week === week && !m.played);
+  if (!remaining) {
+    state.calendar.week += 1;
+    state.calendar.absoluteDay += 7;
+    weeklyScheduleWeek = state.calendar.week;
+  }
+}
+
+function getPlayerDisplayNumber(player) {
+  return String(player?.jerseyNumber || player?.number || '').trim();
+}
+
+function getShortPlayerName(player) {
+  return (player?.name || '').split(' ').slice(-1)[0] || player?.name || '—';
+}
+
 function renderTactics() {
   if (!tactics.formation) tactics.formation = "4-3-3";
   const team      = getUserTeam(state);
@@ -3758,6 +3844,7 @@ function bindPageEvents() {
     if (next.week !== state.calendar.week) return toast("Finish the current matchday and advance the week before opening a future fixture.","warn");
     if (!next.result) simulateMatch(state, next);
     await playLiveMatch(next);
+    autoAdvanceMatchdayIfComplete();
     await persist(); await renderPage();
   });
 
@@ -3767,7 +3854,7 @@ function bindPageEvents() {
   $("#simWeekOnlyBtn")?.addEventListener("click", async () => {
     if (weeklyScheduleWeek !== state.calendar.week) return toast("You cannot simulate a future matchday before the current week is complete.", "warn");
     state.schedule.filter(m => m.week === weeklyScheduleWeek && !m.played).forEach(m => simulateMatch(state, m));
-    if (state.calendar.week === weeklyScheduleWeek) { state.calendar.week += 1; state.calendar.absoluteDay += 7; }
+    autoAdvanceMatchdayIfComplete();
     await persist(); await renderPage(); toast(`Matchday ${weeklyScheduleWeek} simulated.`, "success");
   });
   $("#liveWatchWeekBtn")?.addEventListener("click", async () => {
@@ -3778,7 +3865,7 @@ function bindPageEvents() {
       await playLiveMatch(match);
       if (simAbortRequested) break;
     }
-    if (!simAbortRequested && state.calendar.week === weeklyScheduleWeek) { state.calendar.week += 1; state.calendar.absoluteDay += 7; }
+    autoAdvanceMatchdayIfComplete();
     await persist(); await renderPage();
   });
   $$(".watch-week-match-btn").forEach(btn => btn.addEventListener("click", async () => {
@@ -3788,6 +3875,7 @@ function bindPageEvents() {
     if (match.week !== state.calendar.week) return toast("That matchday has not opened yet.", "warn");
     simulateMatch(state, match);
     await playLiveMatch(match);
+    autoAdvanceMatchdayIfComplete();
     await persist(); await renderPage();
   }));
   $$(".sim-week-match-btn").forEach(btn => btn.addEventListener("click", async () => {
@@ -3795,6 +3883,7 @@ function bindPageEvents() {
     if (!match || match.played) return;
     if (match.week !== state.calendar.week) return toast("Finish the current matchday before simming into the future.", "warn");
     simulateMatch(state, match);
+    autoAdvanceMatchdayIfComplete();
     await persist(); await renderPage();
   }));
   $$(".box-score-btn").forEach(btn => btn.addEventListener("click", () => showMatchDetail(btn.dataset.id, "box")));
@@ -3952,7 +4041,7 @@ function bindPageEvents() {
   // Tactics
   const tfm = document.getElementById("tactics-formation");
   if (tfm) {
-    tfm.addEventListener("change", async () => { tactics.formation = tfm.value; tactics.lineup=[]; await persist(); renderPage(); });
+    tfm.addEventListener("change", async () => { const team = getUserTeam(state); const players = getTeamPlayers(state, team.id); tactics.lineup = remapSavedLineup(tactics.lineup, players, FORMATIONS[tfm.value] || FORMATIONS['4-3-3']); tactics.formation = tfm.value; await persist(); renderPage(); });
     document.getElementById("tactics-mentality")?.addEventListener("change", e => tactics.mentality = e.target.value);
     document.getElementById("tactics-pressing")?.addEventListener("change",  e => tactics.pressingIntensity = e.target.value);
     document.getElementById("tactics-defline")?.addEventListener("change",   e => tactics.defensiveLine = e.target.value);
@@ -3980,6 +4069,7 @@ function bindPageEvents() {
       const plrs = getTeamPlayers(state, team.id);
       const poss = FORMATIONS[tactics.formation]||FORMATIONS["4-3-3"];
       tactics.lineup = buildAutoLineup(plrs, poss, 7).lineup;
+      persist();
       renderPage(); toast("Auto-selected best XI.","success");
     });
   }
@@ -4130,6 +4220,7 @@ function bindTopLevel() {
     if (!simAbortRequested) {
       state.schedule.filter(m => m.week===next.week && !m.played).forEach(m => simulateMatch(state,m));
     }
+    autoAdvanceMatchdayIfComplete();
     await persist(); await renderPage();
   });
 
