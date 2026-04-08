@@ -331,7 +331,7 @@
       ensureTeams();
       if (window.__mlsgmCreateLeague) return window.__mlsgmCreateLeague();
       try {
-        const mod = await import('./js/app.js?v=27fallback');
+        const mod = await import('./js/app.js?v=28fallback');
         if (window.__mlsgmCreateLeague) return window.__mlsgmCreateLeague();
       } catch (err) {
         console.error('Fallback module import failed:', err);
@@ -342,6 +342,6 @@
   else bind();
 })();
 </script>
-<script type="module" src="./js/app.js?v=27"></script>
+<script type="module" src="./js/app.js?v=28"></script>
 </body>
 </html>

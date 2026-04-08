@@ -3218,3 +3218,28 @@ html[data-theme="dark"] .week-mini-meta .team-link { color: #fff !important; }
 .player-photo-fallback.fotmob-player-avatar { font-size: 12px; letter-spacing: .02em; }
 
 .player-photo-fallback, .player-photo-shell, .player-photo-img { animation:none !important; transition:none !important; }
+
+
+/* v28 live sim readability + broadside tweaks */
+.fotmob-lineup-card .fotmob-commentary-card{display:none!important;}
+.fotmob-pitch{overflow:hidden;}
+.fotmob-player{transform:translate(-50%,-50%); min-width:84px; text-align:center;}
+.fotmob-player-event-stack{position:absolute; top:-10px; display:flex; gap:4px; flex-wrap:wrap; max-width:88px;}
+.fotmob-player-event-stack.home{right:58px; justify-content:flex-end;}
+.fotmob-player-event-stack.away{left:58px; justify-content:flex-start;}
+.event-chip{display:inline-flex; align-items:center; justify-content:center; min-width:24px; height:18px; padding:0 5px; border-radius:999px; font-size:10px; font-weight:800; line-height:1; border:1px solid rgba(255,255,255,.16);}
+.event-chip.goal{background:#2f80ed; color:#fff;}
+.event-chip.assist{background:#2d3436; color:#fff;}
+.event-chip.yellow{background:#f2c94c; color:#111;}
+.event-chip.red{background:#eb5757; color:#fff;}
+.event-chip.sub,.event-chip.sub-off{background:#1f8f59; color:#fff;}
+.fotmob-player-name{font-size:12px; font-weight:700; white-space:nowrap;}
+.fotmob-player-number{opacity:.8;}
+.fotmob-pitch-filter-row span{color:var(--text, #fff);}
+[data-theme='light'] .fotmob-pitch-filter-row span,[data-theme='light'] .fotmob-player-name,[data-theme='light'] .fotmob-formation-line,[data-theme='light'] .fotmob-coach-title{color:#111!important;}
+@media (prefers-color-scheme: light){body:not(.dark) .fotmob-pitch-filter-row span, body:not(.dark) .fotmob-player-name, body:not(.dark) .fotmob-formation-line, body:not(.dark) .fotmob-coach-title{color:#111!important;}}
+.table-scroll{overflow:auto;}
+.fotmob-history-table td,.fotmob-history-table th{white-space:nowrap;}
+.week-mini-team{background:transparent!important; border:none!important;}
+.week-mini-team,.week-mini-copy,.week-mini-meta{color:inherit!important;}
+.player-profile-bottom-grid-stats{display:block!important;}

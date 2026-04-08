@@ -38,8 +38,8 @@ let state       = null;
 let currentPage = "dashboard";
 
 const SIM_SPEEDS = { slow: 180, normal: 90, fast: 40, turbo: 12 };
-let simSpeedKey   = "normal";
-let simSpeed      = SIM_SPEEDS.normal;
+let simSpeedKey   = "slow";
+let simSpeed      = SIM_SPEEDS.slow;
 let simPaused     = false;
 let simSkipped    = false;
 let simInProgress = false;
@@ -648,7 +648,7 @@ function playerPhoto(player, cls = "player-photo-inline") {
   const src = player?.photoUrl;
   const fallback = `<span class="${cls} player-photo-fallback">${initials}</span>`;
   if (src) {
-    return `<span class="player-photo-shell ${cls}" data-has-photo="1">${fallback}<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('show-fallback');this.remove()" /></span>`;
+    return `<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="eager" referrerpolicy="no-referrer" onerror="this.outerHTML=${JSON.stringify(fallback)}" />`;
   }
   return fallback;
 }
@@ -1190,7 +1190,7 @@ function bindOverlayButtons() {
 // ── Live sim helpers ─────────────────────────────────────────────────────────
 
 function addSimEvent(minute, html, style = "") {
-  const wrap = document.getElementById("sim-events");
+  const wrap = document.getElementById("sim-events") || document.getElementById("sim-events-alt");
   if (!wrap) return;
   const row = document.createElement("div");
   row.className = "ev";
@@ -1241,121 +1241,93 @@ function lineupFitScore(player, targetPosition) {
   const primary = normalizePosition(player.position);
   const target = normalizePosition(targetPosition);
   const overall = Number(player.overall) || 0;
-  if (primary === target) return overall + 40;
-  const candidates = playerPositionCandidates(player);
-  const idx = candidates.indexOf(target);
-  if (idx >= 0) return overall + Math.max(22 - idx * 6, 2);
-
-  const groups = {
-    GK: ['GK'],
-    DEF: ['LB','RB','CB','LWB','RWB'],
-    MID: ['CDM','CM','CAM','LM','RM'],
-    ATT: ['LW','RW','ST']
+  const attrs = player.attributes || {};
+  const pace = Number(attrs.pace || 0), passing = Number(attrs.passing || 0), defense = Number(attrs.defense || 0), physical = Number(attrs.physical || 0), skill = Number(attrs.skill || 0), shooting = Number(attrs.shooting || 0);
+  const detail = player.detailed || {};
+  const stamina = Number(detail?.physical?.stamina || physical || 60);
+  const vision = Number(detail?.passing?.vision || passing || 60);
+  const composure = Number(detail?.mentality?.composure || 60);
+  const map = {
+    GK: overall + (Number(detail?.goalkeeping?.reflexes || 0) + Number(detail?.goalkeeping?.positioning || 0)) * 0.12,
+    LB: overall + pace*0.10 + defense*0.16 + physical*0.08 + passing*0.04,
+    RB: overall + pace*0.10 + defense*0.16 + physical*0.08 + passing*0.04,
+    CB: overall + defense*0.18 + physical*0.12 + composure*0.04,
+    CDM: overall + defense*0.12 + passing*0.12 + physical*0.08 + vision*0.05,
+    CM: overall + passing*0.15 + vision*0.08 + stamina*0.05 + skill*0.05,
+    CAM: overall + passing*0.14 + skill*0.12 + shooting*0.08 + vision*0.08,
+    LM: overall + pace*0.09 + passing*0.10 + skill*0.10 + stamina*0.04,
+    RM: overall + pace*0.09 + passing*0.10 + skill*0.10 + stamina*0.04,
+    LW: overall + pace*0.11 + skill*0.12 + shooting*0.08,
+    RW: overall + pace*0.11 + skill*0.12 + shooting*0.08,
+    ST: overall + shooting*0.16 + skill*0.08 + pace*0.06 + physical*0.06 + composure*0.05,
   };
-  const groupOf = pos => Object.entries(groups).find(([, vals]) => vals.includes(pos))?.[0] || 'OTHER';
-  const sameGroup = groupOf(primary) === groupOf(target);
-  return overall - (sameGroup ? 12 : 28);
+  let score = map[target] ?? overall;
+  if (primary === target) score += 28;
+  else {
+    const candidates = playerPositionCandidates(player);
+    const idx = candidates.indexOf(target);
+    if (idx >= 0) score += Math.max(18 - idx * 4, 2);
+    else {
+      const groups = { GK:['GK'], DEF:['LB','RB','CB','LWB','RWB'], MID:['CDM','CM','CAM','LM','RM'], ATT:['LW','RW','ST'] };
+      const groupOf = pos => Object.entries(groups).find(([, vals]) => vals.includes(pos))?.[0] || 'OTHER';
+      score -= groupOf(primary) === groupOf(target) ? 10 : 24;
+    }
+  }
+  return score;
 }
 
 function buildAutoLineup(players, positions, benchCount = 7) {
-  const pool = [...(players || [])].filter(Boolean);
+  const pool = [...(players || [])].filter(Boolean).sort((a,b)=>(b.overall||0)-(a.overall||0)||(b.potential||0)-(a.potential||0));
   const lineup = new Array(positions.length).fill(null);
-  const usedIds = new Set();
-  const positionDemand = positions.reduce((acc, pos) => ((acc[pos] = (acc[pos] || 0) + 1), acc), {});
+  const assigned = new Set();
+  const lockedCore = new Set(pool.slice(0, Math.min(pool.length, positions.length + 2)).map(p => p.id));
 
-  const topByPosition = pos => pool
-    .filter(p => !usedIds.has(p.id))
-    .sort((a, b) => lineupFitScore(b, pos) - lineupFitScore(a, pos) || (b.overall || 0) - (a.overall || 0));
+  const slots = positions.map((position, idx) => ({ position, idx }));
+  slots.sort((a,b) => {
+    const aPool = pool.filter(p => lineupFitScore(p, a.position) > (a.position === 'GK' ? 80 : 72)).length;
+    const bPool = pool.filter(p => lineupFitScore(p, b.position) > (b.position === 'GK' ? 80 : 72)).length;
+    return aPool - bPool;
+  });
 
-  const slotPriority = positions
-    .map((position, idx) => ({ position, idx, scarcity: topByPosition(position).filter(p => lineupFitScore(p, position) >= (position === 'GK' ? 92 : 76)).length }))
-    .sort((a, b) => a.scarcity - b.scarcity || a.idx - b.idx);
-
-  const reserveCounts = { ...positionDemand };
-  const futureNeeds = (player, currentPos) => {
-    const candidates = playerPositionCandidates(player);
-    return Object.entries(reserveCounts).reduce((sum, [pos, need]) => {
-      if (need <= 0 || pos === currentPos) return sum;
-      return sum + (candidates.includes(pos) ? need : 0);
-    }, 0);
-  };
-
-  for (const slot of slotPriority) {
-    reserveCounts[slot.position] = Math.max(0, (reserveCounts[slot.position] || 1) - 1);
-    const candidates = pool
-      .filter(player => !usedIds.has(player.id))
-      .map(player => ({
-        player,
-        score: lineupFitScore(player, slot.position),
-        primaryMatch: normalizePosition(player.position) === normalizePosition(slot.position),
-        versatilePenalty: futureNeeds(player, slot.position) * 3.5,
-      }))
-      .sort((a, b) =>
-        (b.score - b.versatilePenalty) - (a.score - a.versatilePenalty) ||
-        (b.primaryMatch ? 1 : 0) - (a.primaryMatch ? 1 : 0) ||
-        (b.player.overall || 0) - (a.player.overall || 0) ||
-        (b.player.potential || 0) - (a.player.potential || 0)
-      );
-    const best = candidates[0];
+  for (const slot of slots) {
+    const best = pool.filter(p => !assigned.has(p.id)).map(player => ({ player, score: lineupFitScore(player, slot.position) }))
+      .sort((a,b)=> (b.score-a.score) || ((lockedCore.has(b.player.id)?1:0)-(lockedCore.has(a.player.id)?1:0)) || ((b.player.overall||0)-(a.player.overall||0)))[0];
     if (!best) continue;
-    lineup[slot.idx] = {
-      playerId: best.player.id,
-      role: (ROLES[slot.position] || [slot.position])[0],
-      fitScore: best.score,
-    };
-    usedIds.add(best.player.id);
+    lineup[slot.idx] = { playerId: best.player.id, role: (ROLES[slot.position] || [slot.position])[0], fitScore: best.score };
+    assigned.add(best.player.id);
   }
 
-  const missing = lineup.map((slot, idx) => !slot ? idx : -1).filter(idx => idx >= 0);
-  if (missing.length) {
-    const leftovers = pool.filter(player => !usedIds.has(player.id))
-      .sort((a, b) => (b.overall || 0) - (a.overall || 0) || (b.potential || 0) - (a.potential || 0));
-    for (const idx of missing) {
-      const player = leftovers.shift();
-      if (!player) continue;
-      lineup[idx] = {
-        playerId: player.id,
-        role: (ROLES[positions[idx]] || [positions[idx]])[0],
-        fitScore: lineupFitScore(player, positions[idx]),
-      };
-      usedIds.add(player.id);
-    }
-  }
-
-  const tryUpgradeSlot = () => {
-    let improved = false;
-    for (let i = 0; i < positions.length; i++) {
-      const currentId = lineup[i]?.playerId;
-      const current = pool.find(p => p.id === currentId);
-      for (const challenger of pool.filter(p => !usedIds.has(p.id))) {
-        const gain = lineupFitScore(challenger, positions[i]) - lineupFitScore(current, positions[i]);
-        if (gain > 7) {
-          if (current) usedIds.delete(current.id);
-          lineup[i].playerId = challenger.id;
-          lineup[i].fitScore = lineupFitScore(challenger, positions[i]);
-          usedIds.add(challenger.id);
-          improved = true;
-          break;
-        }
+  const unassignedTop = pool.filter(p => !assigned.has(p.id));
+  for (const elite of unassignedTop.slice(0, 6)) {
+    let weakestIdx = -1, weakestGap = 0;
+    positions.forEach((pos, idx) => {
+      const current = pool.find(p => p.id === lineup[idx]?.playerId);
+      if (!current || current.id === elite.id) return;
+      const eliteScore = lineupFitScore(elite, pos);
+      const currentScore = lineupFitScore(current, pos);
+      const gap = elite.overall - current.overall;
+      if ((eliteScore >= currentScore - 3 && gap >= 4) || eliteScore > currentScore + 4) {
+        if (gap > weakestGap) { weakestGap = gap; weakestIdx = idx; }
       }
+    });
+    if (weakestIdx >= 0) {
+      assigned.delete(lineup[weakestIdx].playerId);
+      lineup[weakestIdx] = { playerId: elite.id, role: (ROLES[positions[weakestIdx]] || [positions[weakestIdx]])[0], fitScore: lineupFitScore(elite, positions[weakestIdx]) };
+      assigned.add(elite.id);
     }
-    return improved;
-  };
-  tryUpgradeSlot();
+  }
 
-  const benchNeed = Math.max(benchCount || 0, 0);
   const bench = [];
-  const benchPool = pool.filter(player => !usedIds.has(player.id));
-  const benchTargets = ['GK', 'CB', 'LB', 'RB', 'CDM', 'CM', 'CAM', 'LW', 'RW', 'ST'];
-  for (const pos of benchTargets) {
+  const benchNeed = Math.max(benchCount || 0, 0);
+  const benchPool = pool.filter(p => !assigned.has(p.id));
+  const benchTargets = ['GK', 'CB', 'FB', 'DM', 'AM', 'W', 'ST'];
+  const matchBench = (target, p) => ({GK:['GK'],CB:['CB'],FB:['LB','RB','LWB','RWB'],DM:['CDM'],AM:['CM','CAM'],W:['LM','RM','LW','RW'],ST:['ST']})[target]?.includes(normalizePosition(p.position));
+  for (const target of benchTargets) {
     if (bench.length >= benchNeed) break;
-    const idx = benchPool.findIndex(p => normalizePosition(p.position) === pos || playerPositionCandidates(p).includes(pos));
-    if (idx >= 0) bench.push(benchPool.splice(idx, 1)[0].id);
+    const idx = benchPool.findIndex(p => matchBench(target, p));
+    if (idx >= 0) bench.push(benchPool.splice(idx,1)[0].id);
   }
-  while (bench.length < benchNeed && benchPool.length) {
-    benchPool.sort((a, b) => (b.overall || 0) - (a.overall || 0) || (b.potential || 0) - (a.potential || 0));
-    bench.push(benchPool.shift().id);
-  }
+  while (bench.length < benchNeed && benchPool.length) bench.push(benchPool.shift().id);
 
   return { lineup, bench };
 }
@@ -2027,13 +1999,13 @@ function buildAuxMatchEvents(match, result) {
     const pool = (pack?.xi || []).map(x => x.player).filter(Boolean).filter(p => !filterFn || filterFn(p));
     return pool.length ? pool[Math.floor(Math.random() * pool.length)].id : null;
   };
-  const benchSubCandidates = pack => (pack?.bench || []).filter(p => p && p.position !== 'GK');
+  const benchSubCandidates = pack => (pack?.bench || []).filter(p => p && p.position !== 'GK').sort((a,b)=>(b.overall||0)-(a.overall||0));
   const extra = [];
   for (let i = 0; i < (result.homeYellows || 0); i++) extra.push({ minute: 18 + i * 11 + Math.floor(Math.random()*10), type: 'yellow', side: 'home', playerId: randomStarterId(homePack, p => p.position !== 'GK') });
   for (let i = 0; i < (result.awayYellows || 0); i++) extra.push({ minute: 20 + i * 9 + Math.floor(Math.random()*12), type: 'yellow', side: 'away', playerId: randomStarterId(awayPack, p => p.position !== 'GK') });
   for (let i = 0; i < (result.homeReds || 0); i++) extra.push({ minute: 62 + Math.floor(Math.random()*18), type: 'red', side: 'home', playerId: randomStarterId(homePack, p => p.position !== 'GK') });
   for (let i = 0; i < (result.awayReds || 0); i++) extra.push({ minute: 62 + Math.floor(Math.random()*18), type: 'red', side: 'away', playerId: randomStarterId(awayPack, p => p.position !== 'GK') });
-  const plans = [{ minute: 58, chance: 0.85 }, { minute: 67, chance: 0.75 }, { minute: 77, chance: 0.60 }, { minute: 86, chance: 0.32 }];
+  const plans = [{ minute: 58, chance: 0.65 }, { minute: 67, chance: 0.78 }, { minute: 77, chance: 0.72 }, { minute: 84, chance: 0.42 }];
   plans.forEach((plan, idx) => {
     const homeBench = benchSubCandidates(homePack);
     const awayBench = benchSubCandidates(awayPack);
@@ -2080,7 +2052,6 @@ function buildFotmobLiveShell(match) {
       <section class="fotmob-live-panel hidden" data-live-panel="commentary"><div class="fotmob-commentary-card commentary-only"><div class="panel-head"><h3>Commentary</h3><span id="fotmob-commentary-meta-alt">Live feed</span></div><div class="match-events fotmob-commentary-list commentary-big" id="sim-events-alt"></div></div></section>
       <section class="fotmob-live-panel active" data-live-panel="lineup">
         <div class="fotmob-lineup-card">
-          <div class="fotmob-commentary-card commentary-sticky"><div class="panel-head"><h3>Commentary</h3><span id="fotmob-commentary-meta">Live feed</span></div><div class="match-events fotmob-commentary-list" id="sim-events"></div></div>
           <div class="fotmob-lineup-top"><div class="fotmob-rating-tag" id="fotmob-home-team-rating">—</div><div class="fotmob-formation-line"><span id="fotmob-home-formation">—</span><strong>Lineup</strong><span id="fotmob-away-formation">—</span></div><div class="fotmob-rating-tag away" id="fotmob-away-team-rating">—</div></div>
           <div id="fotmob-pitch" class="fotmob-pitch"></div>
           <div id="fotmob-sub-banner" class="fotmob-sub-banner hidden"></div>
@@ -2128,7 +2099,7 @@ function renderFotmobCoachAndBench(match, minute = 1) {
     return subs.map(ev => {
       const incoming = ev.playerId ? byPlayerId(ev.playerId) : null;
       const outgoing = ev.outPlayerId ? byPlayerId(ev.outPlayerId) : null;
-      return `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(outgoing || { name: '—' }, 'player-photo-inline')}<span class="num">${escapeHtml(getPlayerDisplayNumber(outgoing))}</span><div><strong>${escapeHtml(outgoing?.name || 'Player out')}</strong><small>${escapeHtml(outgoing?.position || '')}</small></div></div><div class="fotmob-table-mid">${ev.minute || 0}'</div><div class="fotmob-table-player right">${playerPhoto(incoming || { name: '—' }, 'player-photo-inline')}<div><strong>${escapeHtml(incoming?.name || 'Player in')}</strong><small>${escapeHtml(incoming?.position || '')}</small></div><span class="num">${escapeHtml(getPlayerDisplayNumber(incoming))}</span></div></div>`;
+      return `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(outgoing || { name: '—' }, 'player-photo-inline')}<span class="num">${escapeHtml(getPlayerDisplayNumber(outgoing) || '—')}</span><div><strong>${escapeHtml(outgoing?.name || 'Player out')}</strong><small>${escapeHtml(outgoing?.position || '')}</small></div></div><div class="fotmob-table-mid">${ev.minute || 0}'</div><div class="fotmob-table-player right">${playerPhoto(incoming || { name: '—' }, 'player-photo-inline')}<div><strong>${escapeHtml(incoming?.name || 'Player in')}</strong><small>${escapeHtml(incoming?.position || '')}</small></div><span class="num">${escapeHtml(getPlayerDisplayNumber(incoming) || '—')}</span></div></div>`;
     }).join('');
   };
   const benchList = (players = []) => players.map(p => `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(p,'player-photo-inline')}<span class="num">${escapeHtml(getPlayerDisplayNumber(p))}</span><div><strong>${escapeHtml(p.name || 'Unknown')}</strong><small>${escapeHtml(p.position || '')}</small></div></div><div class="fotmob-table-mid">${playerStatusIcons(p) || '—'}</div><div class="fotmob-table-rating">${getLivePlayerRating(p, minute).toFixed(1)}</div></div>`).join('') || `<div class="note">No bench listed.</div>`;
@@ -2734,20 +2705,9 @@ function openPlayerProfile(playerId) {
       </div>
 
       <div class="pp-tab-panel" data-pp-panel="stats">
-        <div class="player-profile-bottom-grid-clean player-profile-bottom-grid-stats roomy-stats-grid">
-          <section class="panel roomy-panel">
-            <div class="panel-head"><h3>${state.season.year} / ${state.season.year + 1}</h3><span>${escapeHtml(team?.name || "Season stats")}</span></div>
-            <div class="player-season-stat-strip player-season-stat-strip-clean roomy-season-strip">${statTiles.map(([k,v]) => `<div class="season-stat"><strong>${v}</strong><span>${escapeHtml(k)}</span></div>`).join("")}</div>
-          </section>
-          <section class="panel roomy-panel">
-            <div class="panel-head"><h3>Match rating history</h3><span>Recent matches</span></div>
-            <table class="tight-table player-match-table-clean roomy-match-table fotmob-history-table"><thead><tr><th>Date</th><th>Opponent</th><th>Res</th><th class="num">Min</th><th class="num">⚽</th><th class="num">👟</th><th class="num">🟨</th><th class="num">🟥</th><th class="num">★</th></tr></thead><tbody>
-              ${recentRatings.length ? recentRatings.slice().reverse().map((row, idx) => `<tr><td>${escapeHtml(row.dateLabel || `Wk ${row.week || "—"}`)}</td><td>${escapeHtml(row.opponent || "—")}</td><td>${escapeHtml(row.result || "—")} ${escapeHtml(row.score || "")}</td><td class="num">${row.minutes || 90}</td><td class="num">${row.goals || 0}</td><td class="num">${row.assists || 0}</td><td class="num">${row.yellows || 0}</td><td class="num">${row.reds || 0}</td><td class="num"><span class="rating-pill-inline">${Number(row.rating || 0).toFixed(1)}</span></td></tr>`).join("") : `<tr><td colspan="9" class="note" style="text-align:center">No match ratings yet.</td></tr>`}
-            </tbody></table>
-          </section>
-        </div>
         <div class="panel mt12 roomy-panel">
           <div class="panel-head"><h3>Match stats</h3><span>Season totals</span></div>
+          <div class="player-season-stat-strip player-season-stat-strip-clean roomy-season-strip">${statTiles.map(([k,v]) => `<div class="season-stat"><strong>${v}</strong><span>${escapeHtml(k)}</span></div>`).join("")}</div>
           <table class="tight-table player-match-table-clean roomy-match-table"><thead><tr><th>Category</th><th class="num">Value</th><th>Category</th><th class="num">Value</th></tr></thead><tbody>
             <tr><td>Goals</td><td class="num">${s.goals || 0}</td><td>Assists</td><td class="num">${s.assists || 0}</td></tr>
             <tr><td>Shots</td><td class="num">${s.shots || 0}</td><td>On target</td><td class="num">${s.shotsOnTarget || 0}</td></tr>
@@ -2755,6 +2715,12 @@ function openPlayerProfile(playerId) {
             <tr><td>Yellow cards</td><td class="num">${s.yellows || 0}</td><td>Red cards</td><td class="num">${s.reds || 0}</td></tr>
           </tbody></table>
         </div>
+        <section class="panel roomy-panel mt12">
+          <div class="panel-head"><h3>Match rating history</h3><span>Recent matches</span></div>
+          <div class="table-scroll"><table class="tight-table player-match-table-clean roomy-match-table fotmob-history-table"><thead><tr><th>Date</th><th>Opponent</th><th>Result</th><th class="num">Min</th><th class="num">⚽</th><th class="num">👟</th><th class="num">🟨</th><th class="num">🟥</th><th class="num">★</th></tr></thead><tbody>
+            ${recentRatings.length ? recentRatings.slice().reverse().map((row) => `<tr><td>${escapeHtml(row.dateLabel || `Wk ${row.week || "—"}`)}</td><td>${escapeHtml(row.opponent || "—")}</td><td>${escapeHtml(row.result || "—")} ${escapeHtml(row.score || "")}</td><td class="num">${row.minutes || 90}</td><td class="num">${row.goals || 0}</td><td class="num">${row.assists || 0}</td><td class="num">${row.yellows || 0}</td><td class="num">${row.reds || 0}</td><td class="num"><span class="rating-pill-inline">${Number(row.rating || 0).toFixed(1)}</span></td></tr>`).join("") : `<tr><td colspan="9" class="note" style="text-align:center">No match ratings yet.</td></tr>`}
+          </tbody></table></div>
+        </section>
       </div>
     </div>
   </div>`;
@@ -3067,28 +3033,32 @@ function renderLeagueLeaders() {
 function renderFreeAgents() {
   const team = getUserTeam(state);
   const cap = getCapSummary(state, team.id);
-  const roster = getTeamPlayers(state, team.id);
-  const openSpots = Math.max(0, 30 - roster.length);
-  const composition = ["GK","LB","CB","RB","LM","RM","CDM","CM","CAM","LW","RW","ST"].map(pos => {
-    const count = roster.filter(p => p.position === pos).length;
-    return `<div>${pos}: <strong>${count}</strong></div>`;
-  }).join('');
-  const rows = state.freeAgents.slice().sort((a,b)=> (b.overall-a.overall) || (a.age-b.age));
-  return `${pageHead("Free Agents","Available")}
+  const openSpots = Math.max(0, 30 - getTeamPlayers(state, team.id).length);
+  const rows = state.freeAgents.slice().map(p => ({ ...p, av: Number(getLivePlayerRating(p,1) || 0), salaryAsk: p.contract.salary, expYear: state.season.year + (p.contract.yearsLeft || 0) }));
+  const sorted = sortRows(rows, tableSortState.freeAgents || { key: 'overall', dir: 'desc' });
+  const upcoming = state.players.filter(p => p.clubId && ((p.contract?.expiresYear || (state.season.year + (p.contract?.yearsLeft || 0))) <= state.season.year + 1)).sort((a,b)=>(b.overall-a.overall)).slice(0,40);
+  const composition = ['DP','U22','TAM','Homegrown','Intl'].map(tag => `<div class="fa-comp-item"><span>${tag}</span><strong>${getTeamPlayers(state, team.id).filter(p => getPlayerTag(p).includes(tag)).length}</strong></div>`).join('');
+  return `${pageHead("Free Agency","In-season market + next contract wave")}
   <div class="free-agency-shell">
     <div class="free-agency-top">
       <div class="free-agency-summary">
-        <div class="note">More: Upcoming Free Agents</div>
+        <div class="note">Upcoming Free Agents below</div>
         <p>You currently have <strong>${openSpots}</strong> open roster spots and <strong>${formatMoney(Math.max(0, cap.budgetRoom))}</strong> in cap space.</p>
         <div class="note">Min contract: ${formatMoney(500000)} · Max contract: ${formatMoney(30000000)}</div>
       </div>
       <div class="free-agency-composition panel-lite"><div class="panel-head"><h3>Roster Composition</h3><span>Current</span></div><div class="fa-comp-grid">${composition}</div></div>
     </div>
     <div class="panel">
-      <div class="fa-toolbar"><div class="note">${rows.length} available players</div><div class="fa-search-row"><input id="freeAgentSearch" class="search-input" placeholder="Search" /><select id="freeAgentPageSize"><option>10</option><option selected>25</option><option>50</option></select></div></div>
-      <table class="tight-table free-agent-table"><thead><tr><th>Name</th><th>Pos</th><th class="num">Age</th><th class="num">Ovr</th><th class="num">Pot</th><th class="num">G</th><th class="num">Stats</th><th class="num">AV</th><th>Mood</th><th>Asking For</th><th>Exp</th><th>Negotiate</th></tr></thead><tbody>
-        ${rows.slice(0,25).map(p => `<tr><td>${playerLink(p.id, p.name)}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td><td class="num">${p.stats?.gp || 0}</td><td class="num">${(p.stats?.goals || 0) + (p.stats?.assists || 0)}</td><td class="num">${(getLivePlayerRating(p,1) || 0).toFixed(1)}</td><td><span class="badge">${escapeHtml(p.morale || 'Ok')}</span></td><td>${formatMoney(p.contract.salary)}</td><td>${state.season.year + (p.contract.yearsLeft || 0)}</td><td><button class="small-btn sign-fa-btn" data-id="${p.id}">Sign</button></td></tr>`).join('')}
-      </tbody></table>
+      <div class="panel-head"><h3>Available now</h3><span>${sorted.length}</span></div>
+      <div class="table-scroll"><table class="tight-table free-agent-table"><thead><tr>${makeSortableTh('Name','freeAgents','name')}${makeSortableTh('Pos','freeAgents','position')}${makeSortableTh('Age','freeAgents','age','num')}${makeSortableTh('Ovr','freeAgents','overall','num')}${makeSortableTh('Pot','freeAgents','potential','num')}${makeSortableTh('G','freeAgents','gp','num')}${makeSortableTh('Stats','freeAgents','contrib','num')}${makeSortableTh('AV','freeAgents','av','num')}<th>Mood</th>${makeSortableTh('Asking For','freeAgents','salaryAsk','num')}${makeSortableTh('Exp','freeAgents','expYear','num')}<th>Negotiate</th></tr></thead><tbody>
+        ${sorted.slice(0,50).map(p => `<tr><td>${playerLink(p.id, p.name)}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td><td class="num">${p.stats?.gp || 0}</td><td class="num">${(p.stats?.goals || 0) + (p.stats?.assists || 0)}</td><td class="num">${p.av.toFixed(1)}</td><td><span class="badge">${escapeHtml(p.morale || 'Ok')}</span></td><td>${formatMoney(p.contract.salary)}</td><td>${p.expYear}</td><td><button class="small-btn sign-fa-btn" data-id="${p.id}">Sign</button></td></tr>`).join('')}
+      </tbody></table></div>
+    </div>
+    <div class="panel mt12">
+      <div class="panel-head"><h3>Upcoming Free Agents</h3><span>Next off-season</span></div>
+      <div class="table-scroll"><table class="tight-table"><thead><tr>${makeSortableTh('Name','upcomingFA','name')}${makeSortableTh('Club','upcomingFA','club')}${makeSortableTh('Pos','upcomingFA','position')}${makeSortableTh('Age','upcomingFA','age','num')}${makeSortableTh('Ovr','upcomingFA','overall','num')}${makeSortableTh('Pot','upcomingFA','potential','num')}${makeSortableTh('Exp','upcomingFA','expYear','num')}</tr></thead><tbody>
+      ${sortRows(upcoming.map(p => ({...p, club: byTeamId(p.clubId)?.name || '—', expYear: p.contract?.expiresYear || (state.season.year + (p.contract?.yearsLeft || 0)) })), tableSortState.upcomingFA || { key:'overall', dir:'desc' }).map(p => `<tr><td>${playerLink(p.id,p.name)}</td><td>${teamLink(p.clubId, byTeamId(p.clubId)?.name || '—')}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td><td class="num">${p.expYear}</td></tr>`).join('') || `<tr><td colspan="7">No upcoming free agents.</td></tr>`}
+      </tbody></table></div>
     </div>
   </div>`;
 }
@@ -3628,6 +3598,11 @@ const FORMATIONS = {
   "5-3-2":   ["GK","LB","CB","CB","CB","RB","CDM","CM","CM","ST","ST"],
   "4-1-4-1": ["GK","LB","CB","CB","RB","CDM","LM","CM","CM","RM","ST"],
   "3-4-3":   ["GK","CB","CB","CB","LM","CM","CM","RM","LW","ST","RW"],
+  "4-3-1-2": ["GK","LB","CB","CB","RB","CM","CM","CM","CAM","ST","ST"],
+  "4-2-2-2": ["GK","LB","CB","CB","RB","CDM","CDM","CAM","CAM","ST","ST"],
+  "3-4-2-1": ["GK","CB","CB","CB","LM","CM","CM","RM","CAM","CAM","ST"],
+  "5-2-3":   ["GK","LB","CB","CB","CB","RB","CM","CM","LW","ST","RW"],
+  "4-5-1":   ["GK","LB","CB","CB","RB","LM","CM","CM","CAM","RM","ST"],
 };
 
 const ROLES = {
@@ -3657,6 +3632,11 @@ const FORMATION_LAYOUT = {
   "5-3-2":   [{x:0.50,y:0.87},{x:0.12,y:0.72},{x:0.30,y:0.70},{x:0.50,y:0.70},{x:0.70,y:0.70},{x:0.88,y:0.72},{x:0.25,y:0.47},{x:0.50,y:0.45},{x:0.75,y:0.47},{x:0.35,y:0.18},{x:0.65,y:0.18}],
   "4-1-4-1": [{x:0.50,y:0.87},{x:0.18,y:0.70},{x:0.38,y:0.70},{x:0.62,y:0.70},{x:0.82,y:0.70},{x:0.50,y:0.57},{x:0.14,y:0.40},{x:0.38,y:0.40},{x:0.62,y:0.40},{x:0.86,y:0.40},{x:0.50,y:0.14}],
   "3-4-3":   [{x:0.50,y:0.87},{x:0.25,y:0.70},{x:0.50,y:0.70},{x:0.75,y:0.70},{x:0.20,y:0.50},{x:0.80,y:0.50},{x:0.14,y:0.22},{x:0.86,y:0.22},{x:0.50,y:0.45},{x:0.35,y:0.18},{x:0.65,y:0.18}],
+  "4-3-1-2": [{x:0.50,y:0.87},{x:0.18,y:0.70},{x:0.38,y:0.70},{x:0.62,y:0.70},{x:0.82,y:0.70},{x:0.26,y:0.48},{x:0.50,y:0.52},{x:0.74,y:0.48},{x:0.50,y:0.30},{x:0.37,y:0.14},{x:0.63,y:0.14}],
+  "4-2-2-2": [{x:0.50,y:0.87},{x:0.18,y:0.70},{x:0.38,y:0.70},{x:0.62,y:0.70},{x:0.82,y:0.70},{x:0.35,y:0.55},{x:0.65,y:0.55},{x:0.28,y:0.31},{x:0.72,y:0.31},{x:0.38,y:0.14},{x:0.62,y:0.14}],
+  "3-4-2-1": [{x:0.50,y:0.87},{x:0.25,y:0.70},{x:0.50,y:0.70},{x:0.75,y:0.70},{x:0.18,y:0.49},{x:0.40,y:0.49},{x:0.60,y:0.49},{x:0.82,y:0.49},{x:0.34,y:0.27},{x:0.66,y:0.27},{x:0.50,y:0.12}],
+  "5-2-3":   [{x:0.50,y:0.87},{x:0.12,y:0.72},{x:0.30,y:0.70},{x:0.50,y:0.70},{x:0.70,y:0.70},{x:0.88,y:0.72},{x:0.38,y:0.48},{x:0.62,y:0.48},{x:0.16,y:0.18},{x:0.50,y:0.13},{x:0.84,y:0.18}],
+  "4-5-1":   [{x:0.50,y:0.87},{x:0.18,y:0.70},{x:0.38,y:0.70},{x:0.62,y:0.70},{x:0.82,y:0.70},{x:0.12,y:0.42},{x:0.32,y:0.45},{x:0.50,y:0.47},{x:0.68,y:0.45},{x:0.88,y:0.42},{x:0.50,y:0.14}],
 };
 
 

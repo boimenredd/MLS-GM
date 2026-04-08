@@ -1255,7 +1255,7 @@ export function getCapSummary(state, teamId) {
 
 function seedFreeAgents(state) {
   const freeAgents = [];
-  const total = 135;
+  const total = 145;
   for (let i = 0; i < total; i++) {
     const fakeClub = { id: null, marketRating: randInt(45, 60), country: "USA" };
     const p = makePlayer(fakeClub, 28 + i, pick(POSITIONS));
@@ -1264,12 +1264,12 @@ function seedFreeAgents(state) {
     p.contract.yearsLeft = randInt(1, 2);
     p.contract.expiresYear = state.season.year + p.contract.yearsLeft;
     p.contract.salary = clamp(
-      Math.round(p.contract.salary * randFloat(0.52, 0.88)),
+      Math.round(p.contract.salary * randFloat(0.38, 0.72)),
       88025,
-      i < 8 ? 950000 : 550000
+      i < 4 ? 575000 : 325000
     );
-    if (p.overall > 69) {
-      const drop = randInt(2, 6);
+    if (p.overall > 63) {
+      const drop = randInt(4, 10);
       p.overall = Math.max(56, p.overall - drop);
       p.potential = Math.max(p.overall, Math.min(p.potential || p.overall, p.overall + randInt(2, 7)));
       for (const key of Object.keys(p.attributes || {})) {
