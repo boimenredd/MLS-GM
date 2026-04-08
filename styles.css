@@ -3124,3 +3124,59 @@ html[data-theme="dark"] .week-mini-meta .team-link { color: #fff !important; }
 .fotmob-coach-title { font-size: 18px; }
 .fotmob-bench-row { grid-template-columns: minmax(220px,1fr) minmax(300px,410px) minmax(220px,1fr); }
 .fotmob-commentary-list { max-height: 260px; }
+
+/* --- v25 live sim polish --- */
+.player-photo-fallback { transition: none !important; animation: none !important; }
+.fotmob-live-panel.hidden { display:none; }
+.fotmob-live-panel.active { display:block; }
+.fotmob-commentary-card.commentary-sticky { margin-bottom: 14px; }
+.fotmob-commentary-card.commentary-only { min-height: 520px; }
+.fotmob-commentary-list { overflow:auto; scrollbar-width: thin; }
+.fotmob-commentary-list.commentary-big { max-height: 70vh; }
+.fotmob-section-title { margin: 18px 0 10px; text-align:center; color:#fff; font-size: 26px; font-weight: 800; }
+.fotmob-subs-table, .fotmob-bench-table { display:grid; grid-template-columns: 1fr 1fr; gap:18px; }
+.fotmob-table-row { display:grid; grid-template-columns: minmax(0,1fr) 70px 56px; align-items:center; gap:10px; padding:12px 10px; border-bottom:1px solid rgba(255,255,255,.08); }
+.fotmob-subs-table .fotmob-table-row { grid-template-columns: minmax(0,1fr) 70px minmax(0,1fr); }
+.fotmob-table-player { display:flex; align-items:center; gap:8px; min-width:0; color:#fff; }
+.fotmob-table-player.right { justify-content:flex-end; text-align:right; }
+.fotmob-table-player .num { color:rgba(255,255,255,.75); min-width: 18px; }
+.fotmob-table-player div { min-width:0; }
+.fotmob-table-player strong, .fotmob-table-player small { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fotmob-table-player small { color:rgba(255,255,255,.72); font-size:12px; }
+.fotmob-table-mid, .fotmob-table-rating { text-align:center; color:#57e389; font-weight:800; }
+.event-chip { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:999px; background:#2d2d31; font-size:11px; }
+.event-chip.goal { background:#1f6feb; }
+.event-chip.assist { background:#3b82f6; }
+.event-chip.yellow { background:#facc15; color:#111827; }
+.event-chip.red { background:#ef4444; }
+.fotmob-player-icons { top: 48px; gap:3px; }
+.fotmob-player-name { font-size: 11px; font-weight:800; }
+.fotmob-player { width: 88px; }
+.fotmob-player-rating { top:-8px; right:4px; }
+.fotmob-facts-grid { display:grid; grid-template-columns: 1.05fr 1fr; gap:18px; margin-bottom:18px; }
+.fotmob-facts-card { background:#1b1b1e; border:1px solid rgba(255,255,255,.08); border-radius:16px; padding:16px; }
+.momentum-chart { display:flex; align-items:flex-end; justify-content:space-between; gap:8px; min-height:220px; padding:20px 8px 10px; }
+.momentum-col { display:flex; flex-direction:column; align-items:center; justify-content:space-between; height:180px; width:100%; }
+.momentum-col .home, .momentum-col .away { width: 100%; border-radius:999px; }
+.momentum-col .home { background:#7db4e6; }
+.momentum-col .away { background:#f0c637; }
+.top-stats-list { display:grid; gap:16px; }
+.top-stat-row { display:grid; grid-template-columns: 60px 1fr 60px; gap:10px; align-items:center; color:#fff; position:relative; padding-bottom:10px; }
+.top-stat-row span { text-align:center; font-weight:700; }
+.top-stat-row strong:first-child { justify-self:start; }
+.top-stat-row strong:last-child { justify-self:end; }
+.top-stat-bar { position:absolute; left:0; right:0; bottom:0; height:8px; background:#2d2d31; border-radius:999px; overflow:hidden; }
+.top-stat-bar i { display:block; height:100%; background:#7db4e6; border-radius:999px; }
+.fotmob-events-list { display:grid; gap:12px; max-height:420px; overflow:auto; }
+.fotmob-event-row { display:grid; grid-template-columns: 1fr 78px 1fr; gap:12px; align-items:center; color:#fff; }
+.fotmob-event-row .event-side { min-height: 32px; }
+.fotmob-event-row .event-side.right { text-align:left; }
+.fotmob-event-row .event-side.left { text-align:right; }
+.fotmob-event-row small { display:block; color:rgba(255,255,255,.68); }
+.fotmob-event-row .event-minute { display:flex; flex-direction:column; align-items:center; gap:4px; }
+.fotmob-event-row .event-minute span { background:#3a3a3f; width:52px; height:52px; border-radius:999px; display:flex; align-items:center; justify-content:center; font-weight:800; }
+.fotmob-tab { cursor:pointer; }
+.player-photo-shell[data-has-photo="1"] .player-photo-fallback { display:none !important; }
+@media (max-width: 1100px) {
+  .fotmob-facts-grid, .fotmob-subs-table, .fotmob-bench-table { grid-template-columns: 1fr; }
+}

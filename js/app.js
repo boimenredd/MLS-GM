@@ -72,6 +72,11 @@ const tableSortState = {
   leaders:       { key: "value",         dir: "desc" },
 };
 
+function avg(arr = []) {
+  const nums = (arr || []).map(v => Number(v)).filter(v => Number.isFinite(v));
+  return nums.length ? (nums.reduce((s, v) => s + v, 0) / nums.length) : 0;
+}
+
 
 const INITIAL_MLS_COACHES = [
   ["Gerardo Martino","Argentina",63,"Atlanta United","2025-11-06","N/A"],
@@ -960,6 +965,17 @@ function normalizeState(st) {
   ensureOpenCupState(st);
   ensureCoachState(st);
 
+  st.userTactics ||= {};
+  const savedTactics = st.userTactics[st.userTeamId] || {};
+  tactics = {
+    formation: savedTactics.formation || tactics.formation || "4-3-3",
+    mentality: savedTactics.mentality || tactics.mentality || "Balanced",
+    pressingIntensity: savedTactics.pressingIntensity || tactics.pressingIntensity || "Medium",
+    defensiveLine: savedTactics.defensiveLine || tactics.defensiveLine || "Mid Block",
+    notes: savedTactics.notes || "",
+    lineup: Array.isArray(savedTactics.lineup) ? savedTactics.lineup.map(slot => ({ ...slot })) : [],
+  };
+
   st.draft ||= {};
   st.draft.pool ||= [];
   st.draft.pool = st.draft.pool.map(p => {
@@ -1141,6 +1157,21 @@ function bindOverlayButtons() {
     });
   }
 
+  document.querySelectorAll('[data-live-tab]').forEach(b => {
+    const clone = b.cloneNode(true);
+    b.replaceWith(clone);
+    clone.addEventListener('click', () => {
+      const tab = clone.dataset.liveTab;
+      document.querySelectorAll('[data-live-tab]').forEach(el => el.classList.toggle('active', el.dataset.liveTab === tab));
+      document.querySelectorAll('[data-live-panel]').forEach(el => {
+        const active = el.dataset.livePanel === tab;
+        el.classList.toggle('active', active);
+        el.classList.toggle('hidden', !active);
+      });
+      syncLiveCommentaryMirrors();
+    });
+  });
+
   if (!overlayButtonsBound) {
     overlayButtonsBound = true;
     document.addEventListener("keydown", e => {
@@ -1166,6 +1197,7 @@ function addSimEvent(minute, html, style = "") {
   row.style.cssText = `padding:6px 0;border-bottom:1px solid var(--line);${style}`;
   row.innerHTML = `<span style="display:inline-block;width:34px;font-family:var(--mono);color:var(--accent);">${minute}'</span> ${html}`;
   wrap.prepend(row);
+  syncLiveCommentaryMirrors();
 }
 
 function defaultLiveFormation(teamId) {
@@ -1231,64 +1263,97 @@ function lineupFitScore(player, targetPosition) {
 
 function buildAutoLineup(players, positions, benchCount = 7) {
   const pool = [...(players || [])].filter(Boolean);
-  const openSlots = positions.map((position, idx) => ({ position, idx }));
   const lineup = new Array(positions.length).fill(null);
   const usedIds = new Set();
 
-  const sortedPlayers = [...pool].sort((a, b) => {
-    const aBest = Math.max(...openSlots.map(slot => lineupFitScore(a, slot.position)));
-    const bBest = Math.max(...openSlots.map(slot => lineupFitScore(b, slot.position)));
-    return bBest - aBest || (b.overall || 0) - (a.overall || 0) || (b.potential || 0) - (a.potential || 0);
-  });
+  const slotsByPriority = positions
+    .map((position, idx) => ({ position, idx, scarce: pool.filter(p => lineupFitScore(p, position) >= (position === "GK" ? 70 : 62)).length }))
+    .sort((a, b) => a.scarce - b.scarce || a.idx - b.idx);
 
-  for (const player of sortedPlayers) {
-    const choices = openSlots
-      .filter(slot => !lineup[slot.idx])
-      .map(slot => ({ slot, score: lineupFitScore(player, slot.position) }))
-      .sort((a, b) => b.score - a.score || a.slot.idx - b.slot.idx);
-    if (!choices.length) continue;
-    const best = choices[0];
-    if (best.score < -10 && lineup.filter(Boolean).length >= positions.length) continue;
-    lineup[best.slot.idx] = {
-      playerId: player.id,
-      role: (ROLES[best.slot.position] || [best.slot.position])[0],
+  for (const slot of slotsByPriority) {
+    const candidates = pool
+      .filter(player => !usedIds.has(player.id))
+      .map(player => ({
+        player,
+        score: lineupFitScore(player, slot.position),
+        versatility: playerPositionCandidates(player).length,
+        primaryMatch: normalizePosition(player.position) === normalizePosition(slot.position),
+      }))
+      .sort((a, b) =>
+        b.score - a.score ||
+        (b.primaryMatch ? 1 : 0) - (a.primaryMatch ? 1 : 0) ||
+        (b.player.overall || 0) - (a.player.overall || 0) ||
+        (a.versatility || 0) - (b.versatility || 0)
+      );
+    const best = candidates[0];
+    if (!best) continue;
+    lineup[slot.idx] = {
+      playerId: best.player.id,
+      role: (ROLES[slot.position] || [slot.position])[0],
       fitScore: best.score,
     };
-    usedIds.add(player.id);
-    if (lineup.filter(Boolean).length >= positions.length) break;
+    usedIds.add(best.player.id);
   }
 
-  if (lineup.some(slot => !slot)) {
-    const leftovers = sortedPlayers.filter(player => !usedIds.has(player.id));
-    lineup.forEach((slot, idx) => {
-      if (!slot && leftovers.length) {
-        const player = leftovers.shift();
-        lineup[idx] = {
-          playerId: player.id,
-          role: (ROLES[positions[idx]] || [positions[idx]])[0],
-          fitScore: lineupFitScore(player, positions[idx]),
-        };
-        usedIds.add(player.id);
-      }
-    });
+  const missing = lineup.map((slot, idx) => !slot ? idx : -1).filter(idx => idx >= 0);
+  if (missing.length) {
+    const leftovers = pool.filter(player => !usedIds.has(player.id))
+      .sort((a, b) => (b.overall || 0) - (a.overall || 0) || (b.potential || 0) - (a.potential || 0));
+    for (const idx of missing) {
+      const player = leftovers.shift();
+      if (!player) continue;
+      lineup[idx] = {
+        playerId: player.id,
+        role: (ROLES[positions[idx]] || [positions[idx]])[0],
+        fitScore: lineupFitScore(player, positions[idx]),
+      };
+      usedIds.add(player.id);
+    }
   }
 
-  const bench = [...pool]
-    .filter(player => !usedIds.has(player.id))
-    .sort((a, b) => (b.overall || 0) - (a.overall || 0) || (b.potential || 0) - (a.potential || 0))
-    .slice(0, benchCount)
-    .map(player => player.id);
+  const benchNeed = Math.max(benchCount || 0, 0);
+  const bench = [];
+  const benchPool = pool.filter(player => !usedIds.has(player.id));
+  const benchOrder = ["GK", "CB", "LB", "RB", "CDM", "CM", "CAM", "LW", "RW", "ST"];
+  for (const pos of benchOrder) {
+    if (bench.length >= benchNeed) break;
+    const idx = benchPool.findIndex(p => normalizePosition(p.position) === pos || playerPositionCandidates(p).includes(pos));
+    if (idx >= 0) bench.push(benchPool.splice(idx, 1)[0].id);
+  }
+  while (bench.length < benchNeed && benchPool.length) {
+    const bestIdx = benchPool.reduce((best, p, idx, arr) => ((p.overall || 0) > (arr[best]?.overall || 0) ? idx : best), 0);
+    bench.push(benchPool.splice(bestIdx, 1)[0].id);
+  }
 
   return { lineup, bench };
 }
 
+
 function getLineupForFormation(teamId, formation, benchCount = 7) {
   const players = [...getTeamPlayers(state, teamId)].sort((a, b) => (b.overall - a.overall) || (b.potential - a.potential));
   const positions = FORMATIONS[formation] || FORMATIONS["4-3-3"];
-  const autoPack = buildAutoLineup(players, positions, benchCount);
-  const xi = positions.map((pos, idx) => ({ position: pos, player: players.find(player => player.id === autoPack.lineup[idx]?.playerId) || null }));
-  return { xi, bench: autoPack.bench };
+  let lineupPack = buildAutoLineup(players, positions, benchCount);
+
+  if (teamId === state?.userTeamId && Array.isArray(tactics?.lineup) && tactics.lineup.length === positions.length) {
+    const assigned = new Set();
+    const saved = positions.map((pos, idx) => {
+      const slot = tactics.lineup[idx];
+      const player = players.find(p => p.id === slot?.playerId);
+      if (!player || assigned.has(player.id)) return null;
+      assigned.add(player.id);
+      return { playerId: player.id, role: slot?.role || (ROLES[pos] || [pos])[0], fitScore: lineupFitScore(player, pos) };
+    });
+    if (saved.every(Boolean)) {
+      lineupPack.lineup = saved;
+      lineupPack.bench = players.filter(p => !assigned.has(p.id)).slice(0, benchCount).map(p => p.id);
+    }
+  }
+
+  const xi = positions.map((pos, idx) => ({ position: pos, player: players.find(player => player.id === lineupPack.lineup[idx]?.playerId) || null }));
+  const bench = (lineupPack.bench || []).map(id => players.find(player => player.id == id)).filter(Boolean);
+  return { xi, bench };
 }
+
 
 function getLivePlayerEnergy(player, minute) {
   const stamina = player?.detailed?.physical?.stamina ?? player?.attributes?.physical ?? 62;
@@ -1971,22 +2036,32 @@ function buildFotmobLiveShell(match) {
         <div class="fotmob-score-center"><div class="fotmob-minute-pill" id="sim-minute">0'</div><div class="fotmob-scoreline" id="sim-score">0 - 0</div><div class="fotmob-score-sub" id="sim-score-sub">Live</div></div>
         <div class="fotmob-score-team right"><div class="fotmob-score-name" id="sim-away-name"></div><div class="fotmob-goal-list" id="sim-away-goals"></div></div>
       </div>
-      <div class="fotmob-tabbar"><button class="fotmob-tab">Facts</button><button class="fotmob-tab">Commentary</button><button class="fotmob-tab active">Lineup</button><button class="fotmob-tab">Stats</button><button class="fotmob-tab">Head-to-Head</button></div>
-      <div class="fotmob-lineup-card">
-        <div class="fotmob-lineup-top"><div class="fotmob-rating-tag" id="fotmob-home-team-rating">—</div><div class="fotmob-formation-line"><span id="fotmob-home-formation">—</span><strong>Lineup</strong><span id="fotmob-away-formation">—</span></div><div class="fotmob-rating-tag away" id="fotmob-away-team-rating">—</div></div>
-        <div id="fotmob-pitch" class="fotmob-pitch"></div>
-        <div id="fotmob-sub-banner" class="fotmob-sub-banner hidden"></div>
-        <div class="fotmob-coach-row">
-          <div class="fotmob-coach-side" id="fotmob-home-coach"></div>
-          <div class="fotmob-coach-title">Coach</div>
-          <div class="fotmob-coach-side right" id="fotmob-away-coach"></div>
-        </div>
-        <div class="fotmob-bench-row">
-          <div class="fotmob-bench-side" id="fotmob-home-bench"></div>
-          <div class="fotmob-commentary-card"><div class="panel-head"><h3>Commentary</h3><span id="fotmob-commentary-meta">Live feed</span></div><div class="match-events fotmob-commentary-list" id="sim-events"></div></div>
-          <div class="fotmob-bench-side right" id="fotmob-away-bench"></div>
-        </div>
+      <div class="fotmob-tabbar">
+        <button class="fotmob-tab" data-live-tab="facts" type="button">Facts</button>
+        <button class="fotmob-tab" data-live-tab="commentary" type="button">Commentary</button>
+        <button class="fotmob-tab active" data-live-tab="lineup" type="button">Lineup</button>
+        <button class="fotmob-tab" data-live-tab="stats" type="button">Stats</button>
       </div>
+      <section class="fotmob-live-panel hidden" data-live-panel="facts"><div id="fotmob-facts"></div></section>
+      <section class="fotmob-live-panel hidden" data-live-panel="commentary"><div class="fotmob-commentary-card commentary-only"><div class="panel-head"><h3>Commentary</h3><span id="fotmob-commentary-meta-alt">Live feed</span></div><div class="match-events fotmob-commentary-list commentary-big" id="sim-events-alt"></div></div></section>
+      <section class="fotmob-live-panel active" data-live-panel="lineup">
+        <div class="fotmob-lineup-card">
+          <div class="fotmob-commentary-card commentary-sticky"><div class="panel-head"><h3>Commentary</h3><span id="fotmob-commentary-meta">Live feed</span></div><div class="match-events fotmob-commentary-list" id="sim-events"></div></div>
+          <div class="fotmob-lineup-top"><div class="fotmob-rating-tag" id="fotmob-home-team-rating">—</div><div class="fotmob-formation-line"><span id="fotmob-home-formation">—</span><strong>Lineup</strong><span id="fotmob-away-formation">—</span></div><div class="fotmob-rating-tag away" id="fotmob-away-team-rating">—</div></div>
+          <div id="fotmob-pitch" class="fotmob-pitch"></div>
+          <div id="fotmob-sub-banner" class="fotmob-sub-banner hidden"></div>
+          <div class="fotmob-coach-row">
+            <div class="fotmob-coach-side" id="fotmob-home-coach"></div>
+            <div class="fotmob-coach-title">Coach</div>
+            <div class="fotmob-coach-side right" id="fotmob-away-coach"></div>
+          </div>
+          <div class="fotmob-section-title">Substitutes</div>
+          <div class="fotmob-subs-table" id="fotmob-subs"></div>
+          <div class="fotmob-section-title">Bench</div>
+          <div class="fotmob-bench-table" id="fotmob-bench"></div>
+        </div>
+      </section>
+      <section class="fotmob-live-panel hidden" data-live-panel="stats"><div id="fotmob-stats"></div></section>
       <div class="fotmob-controls">
         <button class="btn btn-sm sim-speed-opt" data-speed="slow" type="button">Slow</button>
         <button class="btn btn-sm sim-speed-opt active" data-speed="normal" type="button">Normal</button>
@@ -1998,18 +2073,37 @@ function buildFotmobLiveShell(match) {
     </div>`;
 }
 
+
 function renderFotmobCoachAndBench(match, minute = 1) {
   const homeCoach = getTeamCoach(match.homeTeamId);
   const awayCoach = getTeamCoach(match.awayTeamId);
   const hp = livePitchScene?.homePack;
   const ap = livePitchScene?.awayPack;
   const coachHtml = coach => `${coach ? `${playerPhoto({ name: coach.name, photoUrl: coach.headshot }, 'player-photo-inline')}<strong>${escapeHtml(coach.name)}</strong>` : `<strong>Coach</strong>`}`;
-  const benchHtml = (players=[]) => players.map(p => `<div class="fotmob-bench-pill">${playerPhoto(p,'player-photo-inline')}<span>${escapeHtml(p.position)} ${escapeHtml((p.name||'').split(' ').slice(-1)[0] || p.name)}</span><strong>${getLivePlayerRating(p, minute).toFixed(1)}</strong></div>`).join('') || `<div class="note">No bench listed.</div>`;
+  const playerStatusIcons = player => {
+    const summary = liveEventSummaryForPlayer(player?.id);
+    const items = [];
+    if (summary.goals) items.push(`<span class="event-chip goal">⚽</span>`);
+    if (summary.assists) items.push(`<span class="event-chip assist">👟</span>`);
+    if (summary.yellows) items.push(`<span class="event-chip yellow">🟨</span>`);
+    if (summary.reds) items.push(`<span class="event-chip red">🟥</span>`);
+    return items.join('');
+  };
+  const subRows = side => {
+    const subs = (livePitchScene?.eventLog || []).filter(ev => ev.type === "sub" && ev.side === side);
+    return subs.map(ev => {
+      const incoming = ev.playerId ? byPlayerId(ev.playerId) : null;
+      const outgoing = ev.outPlayerId ? byPlayerId(ev.outPlayerId) : null;
+      return `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(outgoing || { name: "—" }, 'player-photo-inline')}<span class="num">${escapeHtml(String(outgoing?.jerseyNumber || outgoing?.number || ""))}</span><div><strong>${escapeHtml(outgoing?.name || "Unknown")}</strong><small>${escapeHtml(outgoing?.position || "")}</small></div></div><div class="fotmob-table-mid">${ev.minute || 0}'</div><div class="fotmob-table-player right">${playerPhoto(incoming || { name: "—" }, 'player-photo-inline')}<div><strong>${escapeHtml(incoming?.name || "Unknown")}</strong><small>${escapeHtml(incoming?.position || "")}</small></div><span class="num">${escapeHtml(String(incoming?.jerseyNumber || incoming?.number || ""))}</span></div></div>`;
+    }).join('');
+  };
+  const benchList = (players = []) => players.map(p => `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(p,'player-photo-inline')}<span class="num">${escapeHtml(String(p.jerseyNumber || p.number || ""))}</span><div><strong>${escapeHtml(p.name || "Unknown")}</strong><small>${escapeHtml(p.position || "")}</small></div></div><div class="fotmob-table-mid">${playerStatusIcons(p) || "—"}</div><div class="fotmob-table-rating">${getLivePlayerRating(p, minute).toFixed(1)}</div></div>`).join('') || `<div class="note">No bench listed.</div>`;
   const hc = document.getElementById('fotmob-home-coach'); if (hc) hc.innerHTML = coachHtml(homeCoach);
   const ac = document.getElementById('fotmob-away-coach'); if (ac) ac.innerHTML = coachHtml(awayCoach);
-  const hb = document.getElementById('fotmob-home-bench'); if (hb) hb.innerHTML = benchHtml(hp?.bench || []);
-  const ab = document.getElementById('fotmob-away-bench'); if (ab) ab.innerHTML = benchHtml(ap?.bench || []);
+  const subs = document.getElementById('fotmob-subs'); if (subs) subs.innerHTML = `<div>${subRows('home') || '<div class="note">No substitutions yet.</div>'}</div><div>${subRows('away') || '<div class="note">No substitutions yet.</div>'}</div>`;
+  const bench = document.getElementById('fotmob-bench'); if (bench) bench.innerHTML = `<div>${benchList(hp?.bench || [])}</div><div>${benchList(ap?.bench || [])}</div>`;
 }
+
 
 function renderFotmobScorers() {
   const homeWrap = document.getElementById('sim-home-goals');
@@ -2041,7 +2135,12 @@ function renderFotmobPitch(match, minute = 1) {
     const top = `${topBase}%`;
     const rating = getLivePlayerRating(player, minute).toFixed(1);
     const icons = liveEventSummaryForPlayer(player.id);
-    const iconHtml = [icons.goals ? `<span>⚽</span>` : '', icons.assists ? `<span>👟</span>` : '', icons.yellows ? `<span>🟨</span>` : '', icons.reds ? `<span>🟥</span>` : ''].join('');
+    const iconHtml = [
+      icons.goals ? `<span class="event-chip goal">⚽</span>` : '',
+      icons.assists ? `<span class="event-chip assist">👟</span>` : '',
+      icons.yellows ? `<span class="event-chip yellow">🟨</span>` : '',
+      icons.reds ? `<span class="event-chip red">🟥</span>` : ''
+    ].join('');
     return `<div class="fotmob-player fotmob-player-${side}" style="left:${left};top:${top};">
       <div class="fotmob-player-rating ${side === 'home' ? 'home' : 'away'}">${rating}</div>
       <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar')}</div>
@@ -2058,6 +2157,65 @@ function renderFotmobPitch(match, minute = 1) {
   const af = document.getElementById('fotmob-away-formation'); if (af) af.textContent = livePitchScene.awayFormation;
 }
 
+
+function buildLiveFactsHtml(match, minute = 1) {
+  const stats = livePitchScene?.liveStats || {};
+  const events = (livePitchScene?.eventLog || []).slice().sort((a, b) => (a.minute || 0) - (b.minute || 0));
+  const homeMomentum = Math.max(8, Math.round((stats.homePoss || 50) + ((stats.homeShots || 0) * 2) + ((stats.homeSot || 0) * 4)));
+  const awayMomentum = Math.max(8, Math.round((stats.awayPoss || 50) + ((stats.awayShots || 0) * 2) + ((stats.awaySot || 0) * 4)));
+  const maxM = Math.max(homeMomentum, awayMomentum, 1);
+  const momentumBars = Array.from({ length: 12 }, (_, i) => {
+    const homeVal = i < Math.round(homeMomentum / maxM * 12) ? 1 : 0;
+    const awayVal = i < Math.round(awayMomentum / maxM * 12) ? 1 : 0;
+    return `<div class="momentum-col"><span class="home" style="height:${homeVal ? 28 + (i % 3) * 14 : 4}px"></span><span class="away" style="height:${awayVal ? 20 + (i % 4) * 10 : 4}px"></span></div>`;
+  }).join('');
+  const eventRows = events.map(ev => renderLiveEventRow(ev)).join('') || `<div class="note">No major events yet.</div>`;
+  return `<div class="fotmob-facts-grid"><div class="fotmob-facts-card"><div class="panel-head"><h3>Momentum</h3><span>${minute >= 90 ? 'FT' : minute + "'"}</span></div><div class="momentum-chart">${momentumBars}</div></div><div class="fotmob-facts-card"><div class="panel-head"><h3>Top stats</h3><span>Live</span></div>${buildLiveTopStatsHtml(stats)}</div></div><div class="fotmob-facts-card"><div class="panel-head"><h3>Events</h3><span>Match timeline</span></div><div class="fotmob-events-list">${eventRows}</div></div>`;
+}
+
+function buildLiveTopStatsHtml(stats = {}) {
+  const rows = [
+    ['Ball possession', `${stats.homePoss || 50}%`, `${stats.awayPoss || 50}%`, stats.homePoss || 50],
+    ['Expected goals (xG)', (stats.homeXg || 0).toFixed(2), (stats.awayXg || 0).toFixed(2), ((stats.homeXg || 0) / (((stats.homeXg || 0) + (stats.awayXg || 0)) || 1)) * 100],
+    ['Total shots', stats.homeShots || 0, stats.awayShots || 0, ((stats.homeShots || 0) / (((stats.homeShots || 0) + (stats.awayShots || 0)) || 1)) * 100],
+    ['Shots on target', stats.homeSot || 0, stats.awaySot || 0, ((stats.homeSot || 0) / (((stats.homeSot || 0) + (stats.awaySot || 0)) || 1)) * 100],
+    ['Big chances', Math.max(0, Math.round((stats.homeSot || 0) / 2)), Math.max(0, Math.round((stats.awaySot || 0) / 2)), ((stats.homeSot || 0) / (((stats.homeSot || 0) + (stats.awaySot || 0)) || 1)) * 100],
+    ['Fouls committed', (stats.homeYellows || 0) * 3 + 5, (stats.awayYellows || 0) * 3 + 5, 50],
+    ['Corners', Math.max(0, Math.round((stats.homeShots || 0) / 3)), Math.max(0, Math.round((stats.awayShots || 0) / 3)), ((stats.homeShots || 0) / (((stats.homeShots || 0) + (stats.awayShots || 0)) || 1)) * 100],
+  ];
+  return `<div class="top-stats-list">${rows.map(([label, left, right, pct]) => `<div class="top-stat-row"><strong>${left}</strong><span>${label}</span><strong>${right}</strong><div class="top-stat-bar"><i style="width:${Math.max(0, Math.min(100, pct || 50))}%"></i></div></div>`).join('')}</div>`;
+}
+
+function renderLiveEventRow(ev) {
+  const player = ev.playerId ? byPlayerId(ev.playerId) : ev.scorerId ? byPlayerId(ev.scorerId) : null;
+  const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
+  const outgoing = ev.outPlayerId ? byPlayerId(ev.outPlayerId) : null;
+  let left = '', right = '', midIcon = '•';
+  if (ev.type === 'goal') {
+    left = `<strong>${escapeHtml(player?.name || 'Unknown')}</strong>${assist ? `<small>assist by ${escapeHtml(assist.name)}</small>` : ''}`;
+    midIcon = '⚽';
+  } else if (ev.type === 'yellow') {
+    right = `<strong>${escapeHtml(player?.name || 'Player')}</strong>`;
+    midIcon = '🟨';
+  } else if (ev.type === 'red') {
+    right = `<strong>${escapeHtml(player?.name || 'Player')}</strong>`;
+    midIcon = '🟥';
+  } else if (ev.type === 'sub') {
+    left = `<strong>${escapeHtml(player?.name || 'Player in')}</strong><small>${escapeHtml(outgoing?.name || 'Player out')}</small>`;
+    midIcon = '🔁';
+  }
+  return `<div class="fotmob-event-row"><div class="event-side left">${left}</div><div class="event-minute"><span>${ev.minute || 0}'</span><i>${midIcon}</i></div><div class="event-side right">${right}</div></div>`;
+}
+
+function syncLiveCommentaryMirrors() {
+  const primary = document.getElementById('sim-events');
+  const alt = document.getElementById('sim-events-alt');
+  if (primary && alt) alt.innerHTML = primary.innerHTML;
+  const meta = document.getElementById('fotmob-commentary-meta')?.textContent || 'Live feed';
+  const metaAlt = document.getElementById('fotmob-commentary-meta-alt');
+  if (metaAlt) metaAlt.textContent = meta;
+}
+
 function refreshFotmobLive(match, minute = 1) {
   const ht = byTeamId(match.homeTeamId); const at = byTeamId(match.awayTeamId);
   const score = livePitchScene?.score || { home:0, away:0 };
@@ -2069,6 +2227,9 @@ function refreshFotmobLive(match, minute = 1) {
   renderFotmobScorers();
   renderFotmobPitch(match, minute);
   renderFotmobCoachAndBench(match, minute);
+  const facts = document.getElementById('fotmob-facts'); if (facts) facts.innerHTML = buildLiveFactsHtml(match, minute);
+  const statsPanel = document.getElementById('fotmob-stats'); if (statsPanel) statsPanel.innerHTML = `<div class="fotmob-facts-card"><div class="panel-head"><h3>Top stats</h3><span>Live</span></div>${buildLiveTopStatsHtml(livePitchScene?.liveStats || {})}</div>`;
+  syncLiveCommentaryMirrors();
   const banner = document.getElementById('fotmob-sub-banner');
   if (banner) {
     const recentSub = livePitchScene?.recentSub;
@@ -2092,7 +2253,7 @@ function applySubstitutionToPack(pack, playerId) {
   const outgoing = pack.xi[replaceIdx]?.player;
   pack.xi[replaceIdx] = { position: incoming.position, player: incoming };
   if (outgoing) pack.bench.push(outgoing);
-  return { incoming, outgoing };
+  return { incoming, outgoing, outPlayerId: outgoing?.id || null };
 }
 
 
@@ -2305,7 +2466,8 @@ async function playLiveMatch(match) {
         addSimEvent(minute, `🟥 ${escapeHtml(player?.name || 'Player')} sent off.`, 'color:var(--red);font-weight:700;');
       } else if (ev.type === 'sub') {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
-        if (ev.side === 'home') applySubstitutionToPack(livePitchScene.homePack, ev.playerId); else applySubstitutionToPack(livePitchScene.awayPack, ev.playerId);
+        const subResult = ev.side === 'home' ? applySubstitutionToPack(livePitchScene.homePack, ev.playerId) : applySubstitutionToPack(livePitchScene.awayPack, ev.playerId);
+        if (subResult?.outPlayerId) ev.outPlayerId = subResult.outPlayerId;
         livePitchScene.recentSub = { minute, team: ev.side === 'home' ? ht.name : at.name, playerIn: player?.name || 'Substitution' };
         addSimEvent(minute, `🔁 ${escapeHtml(player?.name || 'Substitute')} enters the match.`);
         bumpLiveRating(player?.id, 0.08);
@@ -2338,7 +2500,8 @@ async function playLiveMatch(match) {
         addSimEvent(minute, `🟥 ${escapeHtml(player?.name || 'Player')} sent off.`);
       } else if (ev.type === 'sub') {
         const player = ev.playerId ? byPlayerId(ev.playerId) : null;
-        if (ev.side === 'home') applySubstitutionToPack(livePitchScene.homePack, ev.playerId); else applySubstitutionToPack(livePitchScene.awayPack, ev.playerId);
+        const subResult = ev.side === 'home' ? applySubstitutionToPack(livePitchScene.homePack, ev.playerId) : applySubstitutionToPack(livePitchScene.awayPack, ev.playerId);
+        if (subResult?.outPlayerId) ev.outPlayerId = subResult.outPlayerId;
         livePitchScene.recentSub = { minute, team: ev.side === 'home' ? ht.name : at.name, playerIn: player?.name || 'Substitution' };
         addSimEvent(minute, `🔁 ${escapeHtml(player?.name || 'Substitute')} enters the match.`);
       }
@@ -2358,6 +2521,7 @@ async function playLiveMatch(match) {
   updateLiveSceneState(match, result, 90);
   const minuteEl = document.getElementById('sim-minute'); if (minuteEl) minuteEl.textContent = 'FT';
   const metaEl = document.getElementById('fotmob-commentary-meta'); if (metaEl) metaEl.textContent = 'Full time';
+  const metaAltEl = document.getElementById('fotmob-commentary-meta-alt'); if (metaAltEl) metaAltEl.textContent = 'Full time';
   addSimEvent(90, `<b>Full Time.</b> ${escapeHtml(ht.name)} ${result.homeGoals}–${result.awayGoals} ${escapeHtml(at.name)}`, 'color:var(--accent);font-weight:700;');
   refreshFotmobLive(match, 90);
   await sleep(450);
@@ -2397,6 +2561,17 @@ function updateMeta() {
 
 async function persist() {
   if (!state) return;
+  state.userTactics ||= {};
+  if (state.userTeamId) {
+    state.userTactics[state.userTeamId] = {
+      formation: tactics.formation || "4-3-3",
+      mentality: tactics.mentality || "Balanced",
+      pressingIntensity: tactics.pressingIntensity || "Medium",
+      defensiveLine: tactics.defensiveLine || "Mid Block",
+      notes: tactics.notes || "",
+      lineup: Array.isArray(tactics.lineup) ? tactics.lineup.map(slot => ({ ...slot })) : [],
+    };
+  }
   await saveSlot(state.saveSlot, state);
 }
 
@@ -3781,17 +3956,23 @@ function bindPageEvents() {
   // Tactics
   const tfm = document.getElementById("tactics-formation");
   if (tfm) {
-    tfm.addEventListener("change", () => { tactics.formation = tfm.value; tactics.lineup=[]; renderPage(); });
+    tfm.addEventListener("change", async () => { tactics.formation = tfm.value; tactics.lineup=[]; await persist(); renderPage(); });
     document.getElementById("tactics-mentality")?.addEventListener("change", e => tactics.mentality = e.target.value);
     document.getElementById("tactics-pressing")?.addEventListener("change",  e => tactics.pressingIntensity = e.target.value);
     document.getElementById("tactics-defline")?.addEventListener("change",   e => tactics.defensiveLine = e.target.value);
 
-    $$(".tactics-player-select").forEach(sel => sel.addEventListener("change", () => {
-      tactics.lineup[+sel.dataset.slot].playerId = sel.value||null;
+    $$(".tactics-player-select").forEach(sel => sel.addEventListener("change", async () => {
+      const slotIdx = +sel.dataset.slot;
+      tactics.lineup[slotIdx] ||= {};
+      tactics.lineup[slotIdx].playerId = sel.value||null;
+      await persist();
       renderPage();
     }));
-    $$(".tactics-role-select").forEach(sel => sel.addEventListener("change", () => {
-      tactics.lineup[+sel.dataset.slot].role = sel.value;
+    $$(".tactics-role-select").forEach(sel => sel.addEventListener("change", async () => {
+      const slotIdx = +sel.dataset.slot;
+      tactics.lineup[slotIdx] ||= {};
+      tactics.lineup[slotIdx].role = sel.value;
+      await persist();
     }));
 
     document.getElementById("tactics-save-btn")?.addEventListener("click", async () => {
