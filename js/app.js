@@ -1181,7 +1181,7 @@ function getLiveFormation(teamId) {
 function getLineupForFormation(teamId, formation, benchCount = 7) {
   const players = [...getTeamPlayers(state, teamId)].sort((a, b) => (b.overall - a.overall) || (b.potential - a.potential));
   const positions = FORMATIONS[formation] || FORMATIONS["4-3-3"];
-  const autoPack = buildAutoLineup(players, positions, benchCount);
+  const autoPack = globalThis.buildAutoLineup(players, positions, benchCount);
   const xi = positions.map((pos, idx) => ({ position: pos, player: players.find(player => player.id === autoPack.lineup[idx]?.playerId) || null }));
   return { xi, bench: autoPack.bench };
 }
@@ -3444,7 +3444,7 @@ function getPositionalFitScore(player, targetPos) {
   return Number(score.toFixed(3));
 }
 
-function buildAutoLineup(players, positions, benchCount = 7) {
+globalThis.buildAutoLineup = function buildAutoLineup(players, positions, benchCount = 7) {
   const roster = [...(players || [])].filter(Boolean);
   const slots = [...(positions || [])];
   const assigned = Array(slots.length).fill(null);
@@ -3508,7 +3508,7 @@ function renderTactics() {
   const W = 480, H = 320;
 
   if (!tactics.lineup || tactics.lineup.length !== positions.length) {
-    tactics.lineup = buildAutoLineup(players, positions, 7).lineup;
+    tactics.lineup = globalThis.buildAutoLineup(players, positions, 7).lineup;
   }
 
   const dots = positions.map((pos, i) => {
@@ -3862,7 +3862,7 @@ function bindPageEvents() {
       const team = getUserTeam(state);
       const plrs = getTeamPlayers(state, team.id);
       const poss = FORMATIONS[tactics.formation]||FORMATIONS["4-3-3"];
-      tactics.lineup = buildAutoLineup(plrs, poss, 7).lineup;
+      tactics.lineup = globalThis.buildAutoLineup(plrs, poss, 7).lineup;
       renderPage(); toast("Auto-selected best XI.","success");
     });
   }
