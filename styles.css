@@ -3071,3 +3071,56 @@ html[data-theme="dark"] .week-mini-meta .team-link { color: #fff !important; }
 .player-profile-clean-shell.pp-modal, #playerProfileOverlay .panel, #playerProfileOverlay .pp-info-box, #playerProfileOverlay .season-stat, #playerProfileOverlay .player-stat-card, #playerProfileOverlay .player-position-box-clean, #playerProfileOverlay .player-traits-card-clean { background: color-mix(in srgb, var(--bg2) 92%, #000 8%) !important; }
 
 .side-group-sim { display:none !important; }
+
+
+/* --- v25 spacing and live sim fixes --- */
+.player-photo-shell[data-has-photo="1"] .player-photo-fallback { display: none !important; }
+.player-photo-shell[data-has-photo="1"] .player-photo-img { display: block; }
+.player-photo-shell.show-fallback .player-photo-fallback { display: inline-flex !important; }
+.player-photo-shell.show-fallback .player-photo-img { display: none !important; }
+.roomy-player-profile.pp-modal { width: min(1240px, calc(100vw - 28px)); padding: 0; }
+.roomy-player-hero { padding: 22px 22px 16px; margin-bottom: 0; }
+.roomy-player-hero-top { gap: 28px; align-items: stretch; }
+.roomy-player-id-block { gap: 18px; align-items: center; }
+.roomy-player-title-copy { display:flex; flex-direction:column; gap:8px; }
+.roomy-player-hero-metrics { min-width: 330px; gap: 12px; }
+.roomy-player-hero-metrics > div { min-height: 88px; padding: 16px 18px; }
+.roomy-tabbar { padding-top: 14px; gap: 12px; }
+.roomy-overview-grid, .roomy-stats-grid { gap: 18px; padding: 18px; }
+.roomy-panel { padding: 18px 18px 20px; }
+.roomy-summary-grid { gap: 14px; margin-top: 6px; }
+.roomy-info-box { min-height: 84px; padding: 16px 18px; }
+.roomy-overview-split { gap: 14px; margin-top: 16px; }
+.roomy-panel-block { min-height: 196px; padding: 18px; }
+.roomy-secondary-position { margin-top: 14px; }
+.roomy-trait-wrap { min-height: 118px; display:flex; flex-wrap:wrap; align-content:flex-start; gap:10px; padding: 14px; }
+.roomy-career-list { padding-top: 6px; }
+.roomy-mini-metrics { gap: 14px; margin-top: 14px; }
+.roomy-mini-metrics > div { min-height: 110px; padding: 16px 18px; }
+.roomy-ratings-grid { padding: 18px; gap: 18px; }
+.roomy-ratings-grid .player-stat-card, .roomy-ratings-grid .panel { padding: 18px; }
+.roomy-season-strip { gap: 14px; }
+.roomy-season-strip .season-stat { min-height: 94px; padding: 14px 16px; }
+.roomy-match-table th, .roomy-match-table td { padding: 12px 14px; }
+.roomy-match-table tbody tr td { vertical-align: middle; }
+@media (max-width: 980px) { .roomy-player-hero-top { flex-direction: column; } .roomy-player-hero-metrics { min-width: 0; width: 100%; } }
+#match-sim-box { width: min(1180px, 98vw); padding: 16px 18px 18px; }
+.fotmob-live-shell { gap: 16px; }
+.fotmob-score-hero { grid-template-columns: 1fr 260px 1fr; padding: 18px 24px; }
+.fotmob-score-name .msim-team-text { font-size: 24px; line-height: 1.15; }
+.fotmob-minute-pill { min-width: 96px; font-size: 30px; padding: 10px 16px; }
+.fotmob-scoreline { font-size: 58px; }
+.fotmob-lineup-card { padding: 16px 18px 20px; }
+.fotmob-pitch { height: 720px; background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,0) 16%, rgba(255,255,255,.03) 50%, rgba(255,255,255,0) 84%, rgba(255,255,255,.03)), linear-gradient(90deg, #303033 0%, #2b2b2e 50%, #303033 100%); }
+.fotmob-pitch::after { content:''; position:absolute; inset: 4% 4.5%; border:2px solid rgba(255,255,255,.12); border-radius: 18px; pointer-events:none; }
+.fotmob-pitch::before { content:''; position:absolute; inset:0; background: linear-gradient(90deg, transparent 49.8%, rgba(255,255,255,.09) 50%, transparent 50.2%), radial-gradient(circle at center, transparent 0 82px, rgba(255,255,255,.09) 83px 85px, transparent 86px); pointer-events:none; }
+.fotmob-pen-box { top: 6%; width: 18%; height: 88%; border:2px solid rgba(255,255,255,.10); }
+.fotmob-player { width: 132px; }
+.fotmob-player-avatar, .player-photo-fallback.fotmob-player-avatar { width: 54px; height: 54px; }
+.fotmob-player-name { margin-top: 8px; font-size: 13px; }
+.fotmob-player-rating { font-size: 13px; min-width: 34px; right: 16px; }
+.fotmob-player-icons { top: 44px; }
+.fotmob-coach-row { margin-top: 18px; }
+.fotmob-coach-title { font-size: 18px; }
+.fotmob-bench-row { grid-template-columns: minmax(220px,1fr) minmax(300px,410px) minmax(220px,1fr); }
+.fotmob-commentary-list { max-height: 260px; }

@@ -37,7 +37,7 @@ import { CONFERENCES, TEAM_LOGOS, TEAM_COLORS } from "./data.js";
 let state       = null;
 let currentPage = "dashboard";
 
-const SIM_SPEEDS = { slow: 1200, normal: 600, fast: 220, turbo: 80 };
+const SIM_SPEEDS = { slow: 180, normal: 90, fast: 40, turbo: 12 };
 let simSpeedKey   = "normal";
 let simSpeed      = SIM_SPEEDS.normal;
 let simPaused     = false;
@@ -643,7 +643,7 @@ function playerPhoto(player, cls = "player-photo-inline") {
   const src = player?.photoUrl;
   const fallback = `<span class="${cls} player-photo-fallback">${initials}</span>`;
   if (src) {
-    return `<span class="player-photo-shell ${cls}">${fallback}<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('show-fallback');this.remove()" /></span>`;
+    return `<span class="player-photo-shell ${cls}" data-has-photo="1">${fallback}<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentElement.classList.add('show-fallback');this.remove()" /></span>`;
   }
   return fallback;
 }
@@ -1943,8 +1943,10 @@ function renderFotmobPitch(match, minute = 1) {
     const player = entry.player;
     if (!player) return '';
     const slot = layout[idx] || { x:.5, y:.5 };
-    const left = side === 'home' ? `${slot.y * 45 + 6}%` : `${100 - (slot.y * 45 + 6)}%`;
-    const top = `${slot.x * 82 + 9}%`;
+    const leftBase = slot.x * 40 + 10;
+    const topBase = slot.y * 78 + 10;
+    const left = side === 'home' ? `${leftBase}%` : `${100 - leftBase}%`;
+    const top = `${topBase}%`;
     const rating = getLivePlayerRating(player, minute).toFixed(1);
     const icons = liveEventSummaryForPlayer(player.id);
     const iconHtml = [icons.goals ? `<span>⚽</span>` : '', icons.assists ? `<span>👟</span>` : '', icons.yellows ? `<span>🟨</span>` : '', icons.reds ? `<span>🟥</span>` : ''].join('');
@@ -2022,8 +2024,9 @@ async function playLiveMatch(match) {
   livePitchScene.lastMatch = match;
   livePitchScene.score = { home: 0, away: 0 };
   livePitchScene.eventLog = [];
-  refreshFotmobLive(match, 0);
+  refreshFotmobLive(match, 1);
   addSimEvent(0, `<b>Kickoff</b> · ${escapeHtml(ht.name)} vs ${escapeHtml(at.name)}`);
+  await sleep(120);
 
   const result = match.result || {
     homeGoals:0, awayGoals:0, homeXg:0, awayXg:0,
@@ -2088,7 +2091,7 @@ async function playLiveMatch(match) {
     }
 
     refreshFotmobLive(match, minute);
-    await sleep(simSpeedKey === "turbo" ? 8 : simSpeedKey === "fast" ? 14 : simSpeedKey === "slow" ? 28 : 20);
+    await sleep(simSpeed);
   }
 
   if (simSkipped && !simAbortRequested) {
@@ -2208,25 +2211,26 @@ function openPlayerProfile(playerId) {
     : p.position === "CAM" ? "CM"
     : "Versatile";
 
+  const avgLabel = displayAvgRating === '—' ? 'No games yet' : displayAvgRating;
   const html = `<div id="playerProfileOverlay" class="pp-overlay">
-    <div class="pp-modal pp-player-shell player-profile-clean-shell player-profile-no-hero-bg">
+    <div class="pp-modal pp-player-shell player-profile-clean-shell player-profile-no-hero-bg roomy-player-profile">
       <button class="pp-close" id="ppClose">×</button>
-      <div class="player-hero-card player-hero-card-clean player-hero-card-minimal">
-        <div class="player-hero-top-clean player-hero-top-tabs">
-          <div class="player-hero-id-block">
+      <div class="player-hero-card player-hero-card-clean player-hero-card-minimal roomy-player-hero">
+        <div class="player-hero-top-clean player-hero-top-tabs roomy-player-hero-top">
+          <div class="player-hero-id-block roomy-player-id-block">
             ${playerPhoto(p, 'player-photo-hero')}
-            <div>
+            <div class="roomy-player-title-copy">
               <div class="player-hero-name">${escapeHtml(p.name)}</div>
               <div class="player-hero-sub">${team ? teamLink(team.id, team.name) : "Free Agent"} · ${escapeHtml(country)}</div>
             </div>
           </div>
-          <div class="player-hero-metrics-clean player-hero-metrics-three">
+          <div class="player-hero-metrics-clean player-hero-metrics-three roomy-player-hero-metrics">
             <div><span>Overall</span><strong>${displayOverall}</strong></div>
             <div><span>Potential</span><strong>${displayPotential}</strong></div>
             <div><span>${escapeHtml(p.position)} rating</span><strong>${displayOverall}</strong></div>
           </div>
         </div>
-        <div class="player-profile-tabbar">
+        <div class="player-profile-tabbar roomy-tabbar">
           <button class="pp-tab-btn active" data-pp-tab="overview">Overview</button>
           <button class="pp-tab-btn" data-pp-tab="ratings">Ratings</button>
           <button class="pp-tab-btn" data-pp-tab="stats">Stats</button>
@@ -2234,41 +2238,41 @@ function openPlayerProfile(playerId) {
       </div>
 
       <div class="pp-tab-panel active" data-pp-panel="overview">
-        <div class="player-profile-top-grid-clean overview-grid-balanced">
-          <section class="panel player-summary-panel-clean">
+        <div class="player-profile-top-grid-clean overview-grid-balanced roomy-overview-grid">
+          <section class="panel player-summary-panel-clean roomy-panel">
             <div class="panel-head"><h3>Overview</h3><span>${team ? teamLink(team.id, team.name) : "Free Agent"}</span></div>
-            <div class="player-summary-grid-clean">
-              <div class="pp-info-box"><span class="pp-info-lbl">Height</span><strong class="pp-info-val">${escapeHtml(p.height || `5'10"`)}</strong></div>
-              <div class="pp-info-box"><span class="pp-info-lbl">Age</span><strong class="pp-info-val">${p.age}</strong></div>
-              <div class="pp-info-box"><span class="pp-info-lbl">Preferred foot</span><strong class="pp-info-val">${escapeHtml(p.preferredFoot || "Right")}</strong></div>
-              <div class="pp-info-box"><span class="pp-info-lbl">Country</span><strong class="pp-info-val">${escapeHtml(country)}</strong></div>
-              <div class="pp-info-box"><span class="pp-info-lbl">Contract end</span><strong class="pp-info-val">${p.contract?.expiresYear || (state.season.year + (p.contract?.yearsLeft || 0))}</strong></div>
-              <div class="pp-info-box"><span class="pp-info-lbl">Salary</span><strong class="pp-info-val">${formatMoney(roundMarketValue(p.contract?.salary || 0))}</strong></div>
+            <div class="player-summary-grid-clean roomy-summary-grid">
+              <div class="pp-info-box roomy-info-box"><span class="pp-info-lbl">Height</span><strong class="pp-info-val">${escapeHtml(p.height || `5'10"`)}</strong></div>
+              <div class="pp-info-box roomy-info-box"><span class="pp-info-lbl">Age</span><strong class="pp-info-val">${p.age}</strong></div>
+              <div class="pp-info-box roomy-info-box"><span class="pp-info-lbl">Preferred foot</span><strong class="pp-info-val">${escapeHtml(p.preferredFoot || "Right")}</strong></div>
+              <div class="pp-info-box roomy-info-box"><span class="pp-info-lbl">Country</span><strong class="pp-info-val">${escapeHtml(country)}</strong></div>
+              <div class="pp-info-box roomy-info-box"><span class="pp-info-lbl">Contract end</span><strong class="pp-info-val">${p.contract?.expiresYear || (state.season.year + (p.contract?.yearsLeft || 0))}</strong></div>
+              <div class="pp-info-box roomy-info-box"><span class="pp-info-lbl">Salary</span><strong class="pp-info-val">${formatMoney(roundMarketValue(p.contract?.salary || 0))}</strong></div>
             </div>
-            <div class="player-overview-split-clean">
-              <div class="player-position-box-clean">
+            <div class="player-overview-split-clean roomy-overview-split">
+              <div class="player-position-box-clean roomy-panel-block">
                 <div class="pp-section-title">Position</div>
                 <div class="position-primary">${escapeHtml(p.position)}</div>
                 <div class="note">Primary</div>
                 <div class="player-pos-chip">${escapeHtml(p.position)}</div>
-                <div class="note" style="margin-top:10px;">${escapeHtml(secondaryPosition)}</div>
+                <div class="note roomy-secondary-position">${escapeHtml(secondaryPosition)}</div>
               </div>
-              <div class="player-traits-card-clean">
+              <div class="player-traits-card-clean roomy-panel-block">
                 <div class="pp-section-title">Player traits</div>
-                <div class="trait-radar-placeholder">${traitHtml}</div>
+                <div class="trait-radar-placeholder roomy-trait-wrap">${traitHtml}</div>
               </div>
             </div>
           </section>
 
-          <section class="panel player-career-panel-clean">
+          <section class="panel player-career-panel-clean roomy-panel">
             <div class="panel-head"><h3>Career</h3><span>${team ? "Senior career" : "Free agent"}</span></div>
-            <div class="career-list">
+            <div class="career-list roomy-career-list">
               <div class="career-item"><strong>${team ? escapeHtml(team.name) : "Free Agent"}</strong><span>${Math.max(2023, state.season.year - (p.contract?.yearsLeft || 0) - 1)} — now</span><em>${formatNumber(s.gp || 0)} apps</em></div>
               ${p.homegrown ? `<div class="career-item"><strong>Youth career</strong><span>Academy pathway</span><em>Homegrown</em></div>` : ""}
             </div>
             <div class="subtle-divider"></div>
-            <div class="player-mini-metrics player-mini-metrics-clean">
-              <div><span>Average rating</span><strong>${displayAvgRating}</strong></div>
+            <div class="player-mini-metrics player-mini-metrics-clean roomy-mini-metrics">
+              <div><span>Average rating</span><strong>${avgLabel}</strong></div>
               <div><span>Country</span><strong>${escapeHtml(country)}</strong></div>
               <div><span>Position rating</span><strong>${displayOverall}</strong></div>
               <div><span>Potential</span><strong>${displayPotential}</strong></div>
@@ -2278,27 +2282,27 @@ function openPlayerProfile(playerId) {
       </div>
 
       <div class="pp-tab-panel" data-pp-panel="ratings">
-        <div class="player-ratings-grid-clean">
+        <div class="player-ratings-grid-clean roomy-ratings-grid">
           ${categoryOrder.map(([title, group]) => renderPlayerStatCard(title, profile.categoryRatings[title.toLowerCase()] || averageRatings(Object.values(group)), group)).join('')}
         </div>
       </div>
 
       <div class="pp-tab-panel" data-pp-panel="stats">
-        <div class="player-profile-bottom-grid-clean player-profile-bottom-grid-stats">
-          <section class="panel">
+        <div class="player-profile-bottom-grid-clean player-profile-bottom-grid-stats roomy-stats-grid">
+          <section class="panel roomy-panel">
             <div class="panel-head"><h3>${state.season.year} / ${state.season.year + 1}</h3><span>${escapeHtml(team?.name || "Season stats")}</span></div>
-            <div class="player-season-stat-strip player-season-stat-strip-clean">${statTiles.map(([k,v]) => `<div class="season-stat"><strong>${v}</strong><span>${escapeHtml(k)}</span></div>`).join("")}</div>
+            <div class="player-season-stat-strip player-season-stat-strip-clean roomy-season-strip">${statTiles.map(([k,v]) => `<div class="season-stat"><strong>${v}</strong><span>${escapeHtml(k)}</span></div>`).join("")}</div>
           </section>
-          <section class="panel">
+          <section class="panel roomy-panel">
             <div class="panel-head"><h3>Match rating history</h3><span>Recent matches</span></div>
-            <table class="tight-table player-match-table-clean"><thead><tr><th>Match</th><th>Week</th><th>Result</th><th class="num">Rating</th></tr></thead><tbody>
+            <table class="tight-table player-match-table-clean roomy-match-table"><thead><tr><th>Match</th><th>Week</th><th>Result</th><th class="num">Rating</th></tr></thead><tbody>
               ${recentRatings.length ? recentRatings.slice().reverse().map((row, idx) => `<tr><td>#${recentRatings.length - idx}</td><td>${row.week || "—"}</td><td>${escapeHtml(row.result || "—")}</td><td class="num">${Number(row.rating || 0).toFixed(1)}</td></tr>`).join("") : `<tr><td colspan="4" class="note" style="text-align:center">No match ratings yet.</td></tr>`}
             </tbody></table>
           </section>
         </div>
-        <div class="panel mt12">
+        <div class="panel mt12 roomy-panel">
           <div class="panel-head"><h3>Match stats</h3><span>Season totals</span></div>
-          <table class="tight-table player-match-table-clean"><thead><tr><th>Category</th><th class="num">Value</th><th>Category</th><th class="num">Value</th></tr></thead><tbody>
+          <table class="tight-table player-match-table-clean roomy-match-table"><thead><tr><th>Category</th><th class="num">Value</th><th>Category</th><th class="num">Value</th></tr></thead><tbody>
             <tr><td>Goals</td><td class="num">${s.goals || 0}</td><td>Assists</td><td class="num">${s.assists || 0}</td></tr>
             <tr><td>Shots</td><td class="num">${s.shots || 0}</td><td>On target</td><td class="num">${s.shotsOnTarget || 0}</td></tr>
             <tr><td>xG</td><td class="num">${(s.xg || 0).toFixed(1)}</td><td>Minutes</td><td class="num">${formatNumber(s.min || 0)}</td></tr>
