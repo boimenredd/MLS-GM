@@ -680,7 +680,7 @@ function playerPhoto(player, cls = "player-photo-inline") {
   const src = String(player?.photoUrl || "").trim();
   const fallback = `<span class="${cls} player-photo-fallback" aria-hidden="true">${initials || 'P'}</span>`;
   if (!src || brokenPhotoUrls.has(src)) {
-    return `<span class="player-photo-shell show-fallback" data-has-photo="0">${fallback}</span>`;
+    return fallback;
   }
   return `<span class="player-photo-shell" data-has-photo="1"><img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="eager" referrerpolicy="no-referrer" decoding="async">${fallback}</span>`;
 }
@@ -2214,11 +2214,11 @@ function renderFotmobPitch(match, minute = 1) {
     const prog = Math.max(0, Math.min(1, 1 - (slot?.y ?? 0.5)));
     const lane = Math.max(0, Math.min(1, slot?.x ?? 0.5));
     const isGk = prog < 0.08;
-    const attackBand = isGk ? 0 : prog;
+    const band = isGk ? 0 : prog;
     const leftPct = side === 'home'
-      ? (isGk ? 7 : 16 + attackBand * 28)
-      : (isGk ? 93 : 84 - attackBand * 28);
-    const topPct = 13 + lane * 68;
+      ? (isGk ? 6.5 : 13 + band * 31.5)
+      : (isGk ? 93.5 : 87 - band * 31.5);
+    const topPct = 14 + lane * 64;
     return { left: `${leftPct}%`, top: `${topPct}%` };
   };
   const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
