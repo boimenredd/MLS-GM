@@ -644,15 +644,43 @@ function renderPlayerStatCard(title, rating, statMap) {
 }
 
 const brokenPhotoUrls = new Set();
+function installPlayerPhotoFallbacks() {
+  if (window.__mlsgmPhotoFallbacksInstalled) return;
+  window.__mlsgmPhotoFallbacksInstalled = true;
+  const revealFallback = img => {
+    if (!(img instanceof HTMLImageElement)) return;
+    const src = img.getAttribute("src") || "";
+    if (src) brokenPhotoUrls.add(src);
+    const shell = img.closest(".player-photo-shell");
+    if (shell) {
+      shell.classList.add("show-fallback");
+      shell.dataset.hasPhoto = "0";
+    }
+    img.remove();
+  };
+  const showPhoto = img => {
+    if (!(img instanceof HTMLImageElement)) return;
+    const shell = img.closest(".player-photo-shell");
+    if (shell) {
+      shell.classList.remove("show-fallback");
+      shell.dataset.hasPhoto = "1";
+    }
+  };
+  document.addEventListener("error", ev => {
+    if (ev.target?.matches?.("img.player-photo-img")) revealFallback(ev.target);
+  }, true);
+  document.addEventListener("load", ev => {
+    if (ev.target?.matches?.("img.player-photo-img")) showPhoto(ev.target);
+  }, true);
+}
 function playerPhoto(player, cls = "player-photo-inline") {
-  const initials = escapeHtml((player?.name || "P").split(" ").map(x => x[0]).slice(0,2).join(""));
-  const src = player?.photoUrl;
-  const fallback = `<span class="${cls} player-photo-fallback">${initials}</span>`;
-  if (src && !brokenPhotoUrls.has(src)) {
-    return `<img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="eager" referrerpolicy="no-referrer" onerror="window.__mlsgmBrokenPhotoUrls=window.__mlsgmBrokenPhotoUrls||new Set();window.__mlsgmBrokenPhotoUrls.add(this.getAttribute('src')||'');this.outerHTML=${JSON.stringify(fallback)}" />`;
+  const initials = escapeHtml((player?.name || "P").split(/\s+/).filter(Boolean).map(x => x[0]).slice(0,2).join("").toUpperCase());
+  const src = String(player?.photoUrl || "").trim();
+  const fallback = `<span class="${cls} player-photo-fallback" aria-hidden="true">${initials || 'P'}</span>`;
+  if (!src || brokenPhotoUrls.has(src)) {
+    return `<span class="player-photo-shell show-fallback" data-has-photo="0">${fallback}</span>`;
   }
-  if (src && typeof window !== 'undefined' && window.__mlsgmBrokenPhotoUrls?.has(src)) brokenPhotoUrls.add(src);
-  return fallback;
+  return `<span class="player-photo-shell" data-has-photo="1"><img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="eager" referrerpolicy="no-referrer" decoding="async">${fallback}</span>`;
 }
 
 function playerLink(id, label) {
@@ -4318,6 +4346,7 @@ window.__mlsgmCloseSetup = () => closeOverlay($("#setupOverlay"));
 window.__mlsgmCloseLoad = () => closeOverlay($("#loadOverlay"));
 
 const __runBoot = () => {
+  installPlayerPhotoFallbacks();
   bindHomeFallbacks();
   boot().catch(err => {
     console.error("Boot failed:", err);
