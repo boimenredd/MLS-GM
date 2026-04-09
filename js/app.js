@@ -2159,6 +2159,35 @@ function renderFotmobCoachAndBench(match, minute = 1) {
 }
 
 
+
+let livePitchMetric = "transfer";
+
+function formatTransferValueShort(player) {
+  const v = Number(player?.value || player?.marketValue || player?.transferValue || 0);
+  if (!v) return '$0';
+  if (v >= 1000000) return `$${(v/1000000).toFixed(v >= 10000000 ? 0 : 1)}m`;
+  if (v >= 1000) return `$${Math.round(v/1000)}k`;
+  return `$${Math.round(v)}`;
+}
+
+function countryBadge(player) {
+  const n = String(player?.nationality || '').trim();
+  const map = {
+    USA:'🇺🇸', 'United States':'🇺🇸', Canada:'🇨🇦', Mexico:'🇲🇽', Argentina:'🇦🇷', Brazil:'🇧🇷', Colombia:'🇨🇴', Uruguay:'🇺🇾', Peru:'🇵🇪', Chile:'🇨🇱', Ecuador:'🇪🇨', Venezuela:'🇻🇪', Paraguay:'🇵🇾', Bolivia:'🇧🇴', Spain:'🇪🇸', Portugal:'🇵🇹', France:'🇫🇷', Germany:'🇩🇪', England:'🏴', Scotland:'🏴', Wales:'🏴', Ireland:'🇮🇪', Italy:'🇮🇹', Netherlands:'🇳🇱', Belgium:'🇧🇪', Switzerland:'🇨🇭', Austria:'🇦🇹', Croatia:'🇭🇷', Serbia:'🇷🇸', Slovenia:'🇸🇮', Denmark:'🇩🇰', Sweden:'🇸🇪', Norway:'🇳🇴', Finland:'🇫🇮', Poland:'🇵🇱', Czechia:'🇨🇿', 'Czech Republic':'🇨🇿', Slovakia:'🇸🇰', Ukraine:'🇺🇦', Russia:'🇷🇺', Turkey:'🇹🇷', Greece:'🇬🇷', Morocco:'🇲🇦', Algeria:'🇩🇿', Tunisia:'🇹🇳', Egypt:'🇪🇬', Ghana:'🇬🇭', Nigeria:'🇳🇬', Cameroon:'🇨🇲', Senegal:'🇸🇳', Japan:'🇯🇵', South Korea:'🇰🇷', Australia:'🇦🇺', New Zealand:'🇳🇿'
+  };
+  return map[n] || escapeHtml((n.split(/\s+/).map(s=>s[0]).join('') || '??').slice(0,2).toUpperCase());
+}
+
+function liveMetricBadge(player) {
+  if (livePitchMetric === 'country') {
+    return `<span class="fotmob-player-metric flag">${countryBadge(player)}</span>`;
+  }
+  if (livePitchMetric === 'age') {
+    return `<span class="fotmob-player-metric">${escapeHtml(String(player?.age || '—'))}</span>`;
+  }
+  return `<span class="fotmob-player-metric value">${escapeHtml(formatTransferValueShort(player))}</span>`;
+}
+
 function renderFotmobScorers() {
   const homeWrap = document.getElementById('sim-home-goals');
   const awayWrap = document.getElementById('sim-away-goals');
@@ -2180,12 +2209,13 @@ function renderFotmobPitch(match, minute = 1) {
   const homeLayout = FORMATION_LAYOUT[livePitchScene.homeFormation] || FORMATION_LAYOUT['4-3-3'];
   const awayLayout = FORMATION_LAYOUT[livePitchScene.awayFormation] || FORMATION_LAYOUT['4-3-3'];
   const makeCoords = (slot, side) => {
-    const progression = Math.max(0, Math.min(1, 1 - (slot?.y ?? 0.5)));
+    const prog = Math.max(0, Math.min(1, 1 - (slot?.y ?? 0.5)));
     const lane = Math.max(0, Math.min(1, slot?.x ?? 0.5));
+    const isGk = prog < 0.08;
     const leftPct = side === 'home'
-      ? (5 + progression * 41)
-      : (95 - progression * 41);
-    const topPct = 12 + lane * 68;
+      ? (isGk ? 5.5 : 11 + prog * 35)
+      : (isGk ? 94.5 : 89 - prog * 35);
+    const topPct = 11 + lane * 72;
     return { left: `${leftPct}%`, top: `${topPct}%` };
   };
   const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
@@ -2209,9 +2239,14 @@ function renderFotmobPitch(match, minute = 1) {
       <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar')}</div>
       ${rightStack.length ? `<div class="fotmob-player-icons">${rightStack.join('')}</div>` : ''}
       <div class="fotmob-player-name"><span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(getShortPlayerName(player))}</div>
+      <div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>
     </div>`;
   }).join('');
-  pitch.innerHTML = `<div class="fotmob-pitch-filter-row"><span>Distance</span><span>Top speed</span><span>Transfer value</span><span>Age</span><span>Country</span></div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, 'home')}${renderSide(ap?.xi || [], awayLayout, 'away')}`;
+  pitch.innerHTML = `<div class="fotmob-pitch-filter-row"><button type="button" class="fotmob-filter-btn ${livePitchMetric === 'transfer' ? 'active' : ''}" data-pitch-metric="transfer">Transfer value</button><button type="button" class="fotmob-filter-btn ${livePitchMetric === 'age' ? 'active' : ''}" data-pitch-metric="age">Age</button><button type="button" class="fotmob-filter-btn ${livePitchMetric === 'country' ? 'active' : ''}" data-pitch-metric="country">Country</button></div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, 'home')}${renderSide(ap?.xi || [], awayLayout, 'away')}`;
+  pitch.querySelectorAll('[data-pitch-metric]').forEach(btn => btn.addEventListener('click', () => {
+    livePitchMetric = btn.dataset.pitchMetric || 'transfer';
+    renderFotmobPitch(match, minute);
+  }));
   const homeAvg = hp ? avg((hp.xi||[]).map(({player}) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
   const awayAvg = ap ? avg((ap.xi||[]).map(({player}) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
   const hEl = document.getElementById('fotmob-home-team-rating'); if (hEl) hEl.textContent = homeAvg;

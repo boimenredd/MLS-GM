@@ -3266,3 +3266,33 @@ body.light-mode, .light-mode { --live-text: #111827; --live-muted: rgba(17,24,39
 .player-photo-fallback { display:inline-flex; align-items:center; justify-content:center; background:#45484d; color:#fff; font-weight:800; }
 .fotmob-table-player strong, .fotmob-table-player small { color: var(--live-text); }
 .fotmob-table-player small { color: var(--live-muted); }
+
+
+.fotmob-lineup-card{padding:14px 14px 18px;}
+.fotmob-lineup-top{margin-bottom:10px;}
+.fotmob-pitch{height:760px; padding-top:56px; background:linear-gradient(180deg,#37393d 0%, #2f3135 100%);} 
+.fotmob-pitch::after{inset:4.5% 3% 6%; border-radius:16px;}
+.fotmob-pitch::before{background:linear-gradient(90deg, transparent 49.86%, rgba(255,255,255,.1) 50%, transparent 50.14%), radial-gradient(circle at center, transparent 0 84px, rgba(255,255,255,.10) 85px 87px, transparent 88px);}
+.fotmob-pitch-filter-row{display:flex; gap:10px; padding:0 10px; margin-bottom:6px; position:relative; z-index:3;}
+.fotmob-filter-btn{appearance:none; border:0; border-radius:999px; padding:9px 16px; background:#2c2f33; color:var(--live-text); font-size:12px; font-weight:800; cursor:pointer;}
+.fotmob-filter-btn.active{background:#f3f4f6; color:#111827;}
+[data-theme='light'] .fotmob-filter-btn.active{background:#111827; color:#fff;}
+.fotmob-player{width:94px;}
+.fotmob-player-avatar, .player-photo-fallback.fotmob-player-avatar{width:50px; height:50px;}
+.fotmob-player-name{margin-top:7px; font-size:12px; line-height:1.08; white-space:nowrap; overflow:visible; text-overflow:clip;}
+.fotmob-player-number{opacity:.86; margin-right:2px;}
+.fotmob-player-rating{top:-8px; right:8px; min-width:31px; font-size:12px; padding:3px 7px;}
+.fotmob-player-event-stack.home{right:52px;}
+.fotmob-player-event-stack.away{left:52px;}
+.fotmob-player-icons{top:38px; right:4px;}
+.fotmob-player-metric-wrap{margin-top:4px; min-height:18px; display:flex; justify-content:center;}
+.fotmob-player-metric{display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 6px; border-radius:999px; background:rgba(255,255,255,.12); color:var(--live-text); font-size:10px; font-weight:800; line-height:1;}
+.fotmob-player-metric.flag{padding:0; min-width:18px; width:18px; font-size:12px; background:transparent;}
+.fotmob-player-metric.value{padding:0 6px;}
+[data-theme='light'] .fotmob-player-metric{background:rgba(17,24,39,.08); color:#111827;}
+@media (max-width: 900px){
+  .fotmob-pitch{height:680px;}
+  .fotmob-player{width:84px;}
+  .fotmob-player-avatar, .player-photo-fallback.fotmob-player-avatar{width:44px;height:44px;}
+  .fotmob-player-name{font-size:11px;}
+}
