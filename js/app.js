@@ -2212,10 +2212,11 @@ function renderFotmobPitch(match, minute = 1) {
     const prog = Math.max(0, Math.min(1, 1 - (slot?.y ?? 0.5)));
     const lane = Math.max(0, Math.min(1, slot?.x ?? 0.5));
     const isGk = prog < 0.08;
+    const clampedProg = isGk ? 0 : prog;
     const leftPct = side === 'home'
-      ? (isGk ? 5.5 : 11 + prog * 35)
-      : (isGk ? 94.5 : 89 - prog * 35);
-    const topPct = 11 + lane * 72;
+      ? (isGk ? 4.5 : 9 + clampedProg * 39)
+      : (isGk ? 95.5 : 91 - clampedProg * 39);
+    const topPct = 9 + lane * 78;
     return { left: `${leftPct}%`, top: `${topPct}%` };
   };
   const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
