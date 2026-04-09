@@ -70,6 +70,8 @@ const tableSortState = {
   standingsWest: { key: "points",        dir: "desc" },
   stats:         { key: "goals",         dir: "desc" },
   leaders:       { key: "value",         dir: "desc" },
+  freeAgents:    { key: "overall",       dir: "desc" },
+  upcomingFA:    { key: "overall",       dir: "desc" },
 };
 
 function avg(arr = []) {
@@ -2212,11 +2214,11 @@ function renderFotmobPitch(match, minute = 1) {
     const prog = Math.max(0, Math.min(1, 1 - (slot?.y ?? 0.5)));
     const lane = Math.max(0, Math.min(1, slot?.x ?? 0.5));
     const isGk = prog < 0.08;
-    const clampedProg = isGk ? 0 : prog;
+    const attackBand = isGk ? 0 : prog;
     const leftPct = side === 'home'
-      ? (isGk ? 4.5 : 9 + clampedProg * 39)
-      : (isGk ? 95.5 : 91 - clampedProg * 39);
-    const topPct = 9 + lane * 78;
+      ? (isGk ? 7 : 16 + attackBand * 28)
+      : (isGk ? 93 : 84 - attackBand * 28);
+    const topPct = 13 + lane * 68;
     return { left: `${leftPct}%`, top: `${topPct}%` };
   };
   const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
@@ -2639,13 +2641,14 @@ async function playLiveMatch(match) {
 // ── Sortable tables ──────────────────────────────────────────────────────────
 
 function toggleSort(tbl, key) {
-  const c = tableSortState[tbl];
+  const c = tableSortState[tbl] ||= { key, dir: (key === "name" || key === "position" || key === "club") ? "asc" : "desc" };
   if (c.key === key) c.dir = c.dir === "asc" ? "desc" : "asc";
-  else { c.key = key; c.dir = key === "name" || key === "position" ? "asc" : "desc"; }
+  else { c.key = key; c.dir = key === "name" || key === "position" || key === "club" ? "asc" : "desc"; }
   renderPage();
 }
 function sortArrow(tbl, key) {
   const c = tableSortState[tbl];
+  if (!c) return "";
   return c.key !== key ? "" : c.dir === "asc" ? " ▲" : " ▼";
 }
 function makeSortableTh(label, tbl, key, cls="") {
@@ -3142,7 +3145,7 @@ function renderFreeAgents() {
     </div>
     <div class="panel">
       <div class="panel-head"><h3>Available now</h3><span>${sorted.length}</span></div>
-      <div class="table-scroll"><table class="tight-table free-agent-table"><thead><tr>${makeSortableTh('Name','freeAgents','name')}${makeSortableTh('Pos','freeAgents','position')}${makeSortableTh('Age','freeAgents','age','num')}${makeSortableTh('Ovr','freeAgents','overall','num')}${makeSortableTh('Pot','freeAgents','potential','num')}${makeSortableTh('G','freeAgents','gp','num')}${makeSortableTh('Stats','freeAgents','contrib','num')}${makeSortableTh('AV','freeAgents','av','num')}<th>Mood</th>${makeSortableTh('Asking For','freeAgents','salaryAsk','num')}${makeSortableTh('Exp','freeAgents','expYear','num')}<th>Negotiate</th></tr></thead><tbody>
+      <div class="table-scroll"><table class="tight-table free-agent-table"><thead><tr>${makeSortableTh('Name','freeAgents','name')}${makeSortableTh('Pos','freeAgents','position')}${makeSortableTh('Age','freeAgents','age','num')}${makeSortableTh('Ovr','freeAgents','overall','num')}${makeSortableTh('Pot','freeAgents','potential','num')}${makeSortableTh('GP','freeAgents','gp','num')}${makeSortableTh('G+A','freeAgents','contrib','num')}${makeSortableTh('AV','freeAgents','av','num')}<th>Mood</th>${makeSortableTh('Asking For','freeAgents','salaryAsk','num')}${makeSortableTh('Exp','freeAgents','expYear','num')}<th>Negotiate</th></tr></thead><tbody>
         ${sorted.slice(0,50).map(p => `<tr><td>${playerLink(p.id, p.name)}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td><td class="num">${p.stats?.gp || 0}</td><td class="num">${(p.stats?.goals || 0) + (p.stats?.assists || 0)}</td><td class="num">${p.av.toFixed(1)}</td><td><span class="badge">${escapeHtml(p.morale || 'Ok')}</span></td><td>${formatMoney(p.contract.salary)}</td><td>${p.expYear}</td><td><button class="small-btn sign-fa-btn" data-id="${p.id}">Sign</button></td></tr>`).join('')}
       </tbody></table></div>
     </div>
@@ -3455,11 +3458,11 @@ function renderBudget() {
     <div>
       <div class="panel">
         <div class="panel-head"><h3>Roster Sheet</h3><span>Simple overview</span></div>
-        <table class="tight-table"><thead><tr><th>Bucket</th><th class="num">Used</th><th class="num">Max</th><th>Names</th></tr></thead><tbody>
-          <tr><td>DP</td><td class="num">${dps.length}</td><td class="num">${cap.dpSlots}</td><td>${dps.map(p => playerLink(p.id, p.name)).join(', ') || 'None'}</td></tr>
-          <tr><td>U22</td><td class="num">${u22.length}</td><td class="num">${cap.u22Slots}</td><td>${u22.map(p => playerLink(p.id, p.name)).join(', ') || 'None'}</td></tr>
-          <tr><td>TAM</td><td class="num">${tamPlayers.length}</td><td class="num">—</td><td>${tamPlayers.map(p => playerLink(p.id, p.name)).join(', ') || 'None'}</td></tr>
-          <tr><td>INTL</td><td class="num">${intlPlayers.length}</td><td class="num">${team.internationalSlots}</td><td>${intlPlayers.map(p => playerLink(p.id, p.name)).join(', ') || 'None'}</td></tr>
+        <table class="tight-table roster-sheet-table"><thead><tr><th>Bucket</th><th class="num">Used</th><th class="num">Max</th><th>Names</th></tr></thead><tbody>
+          <tr><td>DP</td><td class="num">${dps.length}</td><td class="num">${cap.dpSlots}</td><td class="roster-sheet-names">${dps.map(p => `<span class=\"roster-name-chip\">${playerLink(p.id, p.name)}</span>`).join('') || 'None'}</td></tr>
+          <tr><td>U22</td><td class="num">${u22.length}</td><td class="num">${cap.u22Slots}</td><td class="roster-sheet-names">${u22.map(p => `<span class=\"roster-name-chip\">${playerLink(p.id, p.name)}</span>`).join('') || 'None'}</td></tr>
+          <tr><td>TAM</td><td class="num">${tamPlayers.length}</td><td class="num">—</td><td class="roster-sheet-names">${tamPlayers.map(p => `<span class=\"roster-name-chip\">${playerLink(p.id, p.name)}</span>`).join('') || 'None'}</td></tr>
+          <tr><td>INTL</td><td class="num">${intlPlayers.length}</td><td class="num">${team.internationalSlots}</td><td class="roster-sheet-names">${intlPlayers.map(p => `<span class=\"roster-name-chip\">${playerLink(p.id, p.name)}</span>`).join('') || 'None'}</td></tr>
         </tbody></table>
       </div>
       <div class="panel">

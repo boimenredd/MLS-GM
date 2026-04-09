@@ -900,6 +900,13 @@ function tamFitScore(player) {
   return (player.overall * 4.8) + (player.potential * 1.2) + (salary / 50000) + rosterBoost;
 }
 
+
+const MANDATORY_DP_SALARY = 1803125;
+function isMandatoryDP(player) {
+  const salary = Number(player?.contract?.salary || 0);
+  return salary >= MANDATORY_DP_SALARY || salary >= (MLS_RULES.maxBudgetCharge * 2.25);
+}
+
 export function autoAssignTeamDesignations(state, teamId) {
   const team = state.teams.find(t => t.id === teamId);
   if (!team) return { ok: false, reason: "Team not found." };
@@ -932,10 +939,19 @@ export function autoAssignTeamDesignations(state, teamId) {
     player.designation = "U22";
   }
 
+  const mandatoryDp = seniorAuto
+    .filter(p => !p.designation && isMandatoryDP(p))
+    .sort((a, b) => Number(b.contract?.salary || 0) - Number(a.contract?.salary || 0));
+  let dpAssigned = 0;
+  for (const player of mandatoryDp) {
+    if (dpAssigned >= openDp) break;
+    player.designation = "DP";
+    dpAssigned += 1;
+  }
+
   const dpCandidates = seniorAuto
     .filter(p => !p.designation)
     .sort((a, b) => dpFitScore(b) - dpFitScore(a));
-  let dpAssigned = 0;
   for (const player of dpCandidates) {
     if (dpAssigned >= openDp) break;
     const salary = Number(player.contract?.salary || 0);
@@ -2318,6 +2334,7 @@ export function setPlayerDesignation(state, playerId, designation) {
   if (!team) return { ok: false, reason: "Team not found." };
   const nextValue = designation === "None" || designation === "" ? null : designation;
   if (nextValue === "U22" && player.age > 23) return { ok: false, reason: "U22 Initiative players must be 23 or younger." };
+  if (designation !== "Auto" && nextValue !== "DP" && isMandatoryDP(player)) return { ok: false, reason: "This player must be designated as a DP because of his salary level." };
   const teamPlayers = getTeamPlayers(state, team.id);
   const otherDp = teamPlayers.filter(p => p.id !== player.id && p.designationMode === "manual" && p.designation === "DP").length;
   const otherU22 = teamPlayers.filter(p => p.id !== player.id && p.designationMode === "manual" && p.designation === "U22").length;
