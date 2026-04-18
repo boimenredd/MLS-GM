@@ -678,7 +678,9 @@ function installPlayerPhotoFallbacks() {
 function playerPhoto(player, cls = "player-photo-inline") {
   const initials = escapeHtml((player?.name || "P").split(/\s+/).filter(Boolean).map(x => x[0]).slice(0,2).join("").toUpperCase());
   const src = String(player?.photoUrl || "").trim();
-  const fallback = `<span class="${cls} player-photo-fallback" aria-hidden="true">${initials || 'P'}</span>`;
+  const showLetters = /fotmob-player-avatar/.test(cls);
+  const fallbackText = showLetters ? (initials || 'P') : '';
+  const fallback = `<span class="${cls} player-photo-fallback" data-initials="${initials || 'P'}" aria-hidden="true">${fallbackText}</span>`;
   if (!src || brokenPhotoUrls.has(src)) {
     return fallback;
   }
