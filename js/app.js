@@ -678,13 +678,14 @@ function installPlayerPhotoFallbacks() {
 function playerPhoto(player, cls = "player-photo-inline") {
   const initials = escapeHtml((player?.name || "P").split(/\s+/).filter(Boolean).map(x => x[0]).slice(0,2).join("").toUpperCase());
   const src = String(player?.photoUrl || "").trim();
-  const showLetters = /fotmob-player-avatar/.test(cls);
+  const showLetters = /(^|\s)(player-photo-avatar-text|allow-initials)(\s|$)/.test(cls);
   const fallbackText = showLetters ? (initials || 'P') : '';
-  const fallback = `<span class="${cls} player-photo-fallback" data-initials="${initials || 'P'}" aria-hidden="true">${fallbackText}</span>`;
+  const fallbackClass = showLetters ? `${cls} player-photo-fallback` : `player-photo-fallback`;
+  const fallback = `<span class="${fallbackClass}" data-initials="${initials || 'P'}" aria-hidden="true">${fallbackText}</span>`;
   if (!src || brokenPhotoUrls.has(src)) {
-    return fallback;
+    return `<span class="player-photo-shell ${cls} show-fallback" data-has-photo="0" aria-label="${escapeAttr(player?.name || 'Player')}">${fallback}</span>`;
   }
-  return `<span class="player-photo-shell" data-has-photo="1"><img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="eager" referrerpolicy="no-referrer" decoding="async">${fallback}</span>`;
+  return `<span class="player-photo-shell ${cls}" data-has-photo="1"><img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="eager" referrerpolicy="no-referrer" decoding="async">${fallback}</span>`;
 }
 
 function playerLink(id, label) {
