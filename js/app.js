@@ -2236,10 +2236,20 @@ function renderFotmobPitch(match, minute = 1) {
     const lane = Math.max(0, Math.min(1, slot?.x ?? 0.5));
     const isGk = prog < 0.08;
     const depth = isGk ? 0 : prog;
-    const leftPct = side === 'home'
-      ? (isGk ? 7.25 : 15 + depth * 30.5)
-      : (isGk ? 92.75 : 85 - depth * 30.5);
-    const topPct = 12 + lane * 66;
+
+    // Wider FotMob-style broadcast spacing: keep goalkeepers pinned wide,
+    // spread rows farther apart vertically, and give each half more width.
+    const edgeX = side === 'home' ? 5.2 : 94.8;
+    const fieldStart = side === 'home' ? 12.8 : 87.2;
+    const fieldEnd = side === 'home' ? 43.5 : 56.5;
+    const leftPct = isGk
+      ? edgeX
+      : (side === 'home'
+          ? fieldStart + depth * (fieldEnd - fieldStart)
+          : fieldStart - depth * (fieldStart - fieldEnd));
+
+    // Use almost the full pitch height so players do not bunch in the middle.
+    const topPct = 9 + lane * 78;
     return { left: `${leftPct}%`, top: `${topPct}%` };
   };
   const renderSide = (entries, layout, side) => entries.map((entry, idx) => {

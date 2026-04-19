@@ -4039,3 +4039,125 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
 [data-theme='light'] .fotmob-filter-btn{background:#dde2e8; color:#111827;}
 [data-theme='light'] .fotmob-filter-btn.active{background:#111827; color:#fff;}
 [data-theme='light'] .fotmob-player-metric{background:rgba(17,24,39,.09); color:#111827;}
+
+
+/* v34 live sim spacing override */
+.fotmob-pitch{
+  height: 760px !important;
+  padding: 22px 14px 10px !important;
+  border-radius: 0 0 22px 22px;
+  background: linear-gradient(180deg,#3b3d41 0%, #2f3135 100%) !important;
+}
+.fotmob-pitch::after{
+  inset: 5% 3.25% 6.5% !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255,255,255,.11) !important;
+}
+.fotmob-pitch::before{
+  background: linear-gradient(90deg,transparent 49.9%,rgba(255,255,255,.08) 50%,transparent 50.1%), radial-gradient(circle at center, transparent 0 82px, rgba(255,255,255,.08) 83px 85px, transparent 86px) !important;
+}
+.fotmob-pen-box{
+  top: 10.5% !important;
+  height: 76% !important;
+  width: 10.5% !important;
+  border: 1px solid rgba(255,255,255,.11) !important;
+}
+.fotmob-pitch-filter-row{
+  display:flex;
+  gap:10px;
+  padding:0 8px !important;
+  margin-bottom: 10px !important;
+  position:relative;
+  z-index:3;
+}
+.fotmob-filter-btn{
+  padding: 7px 14px !important;
+  border-radius:999px !important;
+  background:#2b2d31 !important;
+  color:rgba(255,255,255,.92) !important;
+  font-size:12px !important;
+  font-weight:800 !important;
+}
+.fotmob-filter-btn.active{
+  background:#f3f4f6 !important;
+  color:#111827 !important;
+}
+.fotmob-player{
+  width: 82px !important;
+}
+.fotmob-player-head{
+  position:relative;
+  height:14px !important;
+  margin-bottom:4px !important;
+}
+.fotmob-player-avatar,.player-photo-fallback.fotmob-player-avatar.allow-initials{
+  width: 44px !important;
+  height: 44px !important;
+}
+.fotmob-player-rating{
+  top: -8px !important;
+  right: 4px !important;
+  min-width: 30px !important;
+  padding: 3px 6px !important;
+  font-size: 11px !important;
+  font-weight: 900 !important;
+}
+.fotmob-player-notes{
+  left: 2px !important;
+  top: -2px !important;
+  gap: 2px !important;
+  min-height: 16px !important;
+}
+.fotmob-player-minute{
+  font-size: 10px !important;
+  font-weight: 800 !important;
+}
+.event-chip{
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
+}
+.event-chip-icon{width:10px !important;height:10px !important;}
+.event-chip-icon svg{width:10px !important;height:10px !important;}
+.fotmob-player-name{
+  margin-top: 6px !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  line-height: 1.05 !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+.fotmob-player-number{opacity:.9 !important; margin-right:2px !important;}
+.fotmob-player-metric-wrap{
+  margin-top: 5px !important;
+  min-height: 18px !important;
+}
+.fotmob-player-metric{
+  min-width: 18px !important;
+  height: 18px !important;
+  padding: 0 6px !important;
+  border-radius: 999px !important;
+  background: rgba(255,255,255,.14) !important;
+  color: #f3f4f6 !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+}
+.fotmob-coach-row{padding:10px 16px 4px !important; margin-top:0 !important;}
+.fotmob-coach-side,.fotmob-coach-title,.fotmob-section-title{font-size:14px !important; font-weight:800 !important;}
+[data-theme='light'] .fotmob-pitch{background:linear-gradient(180deg,#e8ebef 0%, #dde2e8 100%) !important;}
+[data-theme='light'] .fotmob-player-name,
+[data-theme='light'] .fotmob-player-minute,
+[data-theme='light'] .fotmob-coach-side,
+[data-theme='light'] .fotmob-coach-title,
+[data-theme='light'] .fotmob-formation-line span,
+[data-theme='light'] .fotmob-formation-line strong{color:#111827 !important; text-shadow:none !important;}
+[data-theme='light'] .fotmob-filter-btn{background:#dde2e8 !important; color:#111827 !important;}
+[data-theme='light'] .fotmob-filter-btn.active{background:#111827 !important; color:#fff !important;}
+[data-theme='light'] .fotmob-player-metric{background:rgba(17,24,39,.09) !important; color:#111827 !important;}
+@media (max-width: 900px){
+  .fotmob-pitch{height:680px !important;}
+  .fotmob-player{width:76px !important;}
+  .fotmob-player-avatar,.player-photo-fallback.fotmob-player-avatar.allow-initials{width:40px !important;height:40px !important;}
+  .fotmob-player-name{font-size:10px !important;}
+}
