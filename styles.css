@@ -3877,3 +3877,165 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
     width: 100%;
   }
 }
+
+/* --- v20 live lineup fidelity + initials fallback --- */
+.player-photo-fallback.allow-initials{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:800;
+  letter-spacing:.01em;
+  color:#e5e7eb;
+  background:linear-gradient(180deg,#4b5563,#374151);
+  text-transform:uppercase;
+}
+.player-photo-inline.player-photo-fallback.allow-initials,
+.player-photo-fallback.player-photo-inline.allow-initials{
+  width:24px;
+  height:24px;
+  border-radius:50%;
+  font-size:10px;
+}
+.fotmob-player-avatar.player-photo-fallback.allow-initials,
+.player-photo-fallback.fotmob-player-avatar.allow-initials{
+  width:46px;
+  height:46px;
+  border-radius:50%;
+  font-size:14px;
+}
+.fotmob-lineup-card{
+  background:#2f2f32;
+  border-radius:20px;
+}
+.fotmob-lineup-top{
+  min-height:46px;
+  padding:0 18px;
+}
+.fotmob-rating-tag{
+  font-size:14px;
+  padding:5px 10px;
+}
+.fotmob-formation-line{
+  font-size:14px;
+  font-weight:800;
+}
+.fotmob-formation-line span{opacity:.96;}
+.fotmob-pitch{
+  height:612px;
+  padding:14px 6px 0;
+  background:linear-gradient(180deg,#37393d 0%, #303236 100%);
+}
+.fotmob-pitch::after{ inset:7% 3% 7%; border-radius:16px; border-width:2px; }
+.fotmob-pitch::before{
+  background:
+    linear-gradient(90deg,transparent 49.9%,rgba(255,255,255,.08) 50%,transparent 50.1%),
+    radial-gradient(circle at center, transparent 0 58px, rgba(255,255,255,.08) 59px 61px, transparent 62px);
+}
+.fotmob-pen-box{
+  top:19%;
+  height:54%;
+  width:12%;
+  border-width:2px;
+}
+.fotmob-pitch-filter-row{
+  padding:0 12px;
+  margin-bottom:8px;
+  gap:10px;
+}
+.fotmob-filter-btn{
+  padding:8px 16px;
+  border-radius:999px;
+  background:#27292d;
+  color:#fff;
+  font-size:12px;
+  font-weight:800;
+}
+.fotmob-filter-btn.active{ background:#f5f5f5; color:#111827; }
+.fotmob-player{
+  width:92px;
+}
+.fotmob-player-head{ position:relative; height:14px; margin-bottom:2px; }
+.fotmob-player-avatar,.player-photo-fallback.fotmob-player-avatar.allow-initials{ width:46px; height:46px; }
+.fotmob-player-rating{
+  top:-4px;
+  right:6px;
+  min-width:32px;
+  padding:4px 6px;
+  font-size:12px;
+  line-height:1;
+}
+.fotmob-player-notes{
+  position:absolute;
+  left:4px;
+  top:-2px;
+  display:flex;
+  align-items:center;
+  gap:3px;
+  min-height:18px;
+}
+.fotmob-player-minute{
+  font-size:11px;
+  font-weight:800;
+  color:#fff;
+  text-shadow:0 1px 2px rgba(0,0,0,.45);
+}
+.event-chip{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:18px;
+  height:18px;
+  min-width:18px;
+  padding:0;
+  border-radius:50%;
+  border:none;
+  box-shadow:0 2px 6px rgba(0,0,0,.24);
+}
+.event-chip-icon{display:inline-flex; width:12px; height:12px; align-items:center; justify-content:center;}
+.event-chip-icon svg{width:12px; height:12px; display:block;}
+.event-chip.goal{background:#23262b;color:#fff;}
+.event-chip.assist{background:#3b82f6;color:#fff;}
+.event-chip.yellow{background:#facc15;color:#111827;}
+.event-chip.red{background:#ef4444;color:#fff;}
+.event-chip.subOn{background:#111827;color:#fff;}
+.event-chip.subOff{background:#111827;color:#fff;}
+.event-minute-mini{display:none;}
+.fotmob-player-name{
+  margin-top:6px;
+  font-size:11px;
+  font-weight:800;
+  line-height:1.05;
+  white-space:nowrap;
+  color:#fff;
+}
+.fotmob-player-number{opacity:.9; margin-right:2px;}
+.fotmob-player-metric-wrap{
+  margin-top:5px;
+  min-height:18px;
+}
+.fotmob-player-metric{
+  min-width:18px;
+  height:18px;
+  padding:0 6px;
+  border-radius:999px;
+  background:rgba(255,255,255,.14);
+  color:#f3f4f6;
+  font-size:10px;
+  font-weight:800;
+}
+.fotmob-player-metric.flag{ background:transparent; }
+.fotmob-coach-row{ padding:10px 16px 4px; margin-top:0; }
+.fotmob-coach-side{ font-size:14px; font-weight:800; }
+.fotmob-coach-title{ font-size:14px; font-weight:800; }
+.fotmob-section-title{ margin-top:2px; font-size:14px; }
+[data-theme='light'] .fotmob-lineup-card{background:#f3f4f6; border-color:rgba(17,24,39,.08);}
+[data-theme='light'] .fotmob-pitch{background:linear-gradient(180deg,#e8ebef 0%, #dde2e8 100%);}
+[data-theme='light'] .fotmob-player-name,
+[data-theme='light'] .fotmob-player-minute,
+[data-theme='light'] .fotmob-coach-side,
+[data-theme='light'] .fotmob-coach-title,
+[data-theme='light'] .fotmob-formation-line span,
+[data-theme='light'] .fotmob-formation-line strong{color:#111827; text-shadow:none;}
+[data-theme='light'] .fotmob-filter-btn{background:#dde2e8; color:#111827;}
+[data-theme='light'] .fotmob-filter-btn.active{background:#111827; color:#fff;}
+[data-theme='light'] .fotmob-player-metric{background:rgba(17,24,39,.09); color:#111827;}

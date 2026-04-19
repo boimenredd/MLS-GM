@@ -676,13 +676,14 @@ function installPlayerPhotoFallbacks() {
   }, true);
 }
 function playerPhoto(player, cls = "player-photo-inline") {
-  const initials = escapeHtml((player?.name || "P").split(/\s+/).filter(Boolean).map(x => x[0]).slice(0,2).join("").toUpperCase());
+  const initials = escapeHtml((player?.name || "P").split(/\s+/).filter(Boolean).map(x => x[0]).slice(0,2).join("").toUpperCase() || 'P');
   const src = String(player?.photoUrl || "").trim();
-  const showLetters = /(^|\s)(player-photo-avatar-text|allow-initials)(\s|$)/.test(cls);
-  const fallbackText = showLetters ? (initials || 'P') : '';
-  const fallbackClass = showLetters ? `${cls} player-photo-fallback` : `player-photo-fallback`;
-  const fallback = `<span class="${fallbackClass}" data-initials="${initials || 'P'}" aria-hidden="true">${fallbackText}</span>`;
-  if (!src || brokenPhotoUrls.has(src)) {
+  const wantsInitials = /(^|\s)(player-photo-avatar-text|allow-initials)(\s|$)/.test(cls);
+  const hasRealFace = player?.realFace !== false && !player?.generatedPhoto;
+  const shouldForceFallback = !src || brokenPhotoUrls.has(src) || !hasRealFace;
+  const fallbackClass = `${cls} player-photo-fallback allow-initials`;
+  const fallback = `<span class="${fallbackClass}" data-initials="${initials}" aria-hidden="true">${initials}</span>`;
+  if (shouldForceFallback) {
     return `<span class="player-photo-shell ${cls} show-fallback" data-has-photo="0" aria-label="${escapeAttr(player?.name || 'Player')}">${fallback}</span>`;
   }
   return `<span class="player-photo-shell ${cls}" data-has-photo="1"><img src="${escapeAttr(src)}" alt="${escapeAttr(player?.name || 'Player')}" class="${cls} player-photo-img" loading="eager" referrerpolicy="no-referrer" decoding="async">${fallback}</span>`;
@@ -2072,16 +2073,19 @@ function buildAuxMatchEvents(match, result) {
 
 function liveEventSummaryForPlayer(playerId) {
   const items = (livePitchScene?.eventLog || []).filter(ev =>
-    ev.playerId === playerId || ev.scorerId === playerId || ev.assistId === playerId
+    ev.playerId === playerId || ev.scorerId === playerId || ev.assistId === playerId || ev.outPlayerId === playerId
   );
-  let goals = 0, assists = 0, yellows = 0, reds = 0;
+  let goals = 0, assists = 0, yellows = 0, reds = 0, subOn = 0, subOff = 0;
+  let latestMinute = null;
   for (const ev of items) {
-    if (ev.type === 'goal' && (ev.playerId === playerId || ev.scorerId === playerId)) goals++;
-    if (ev.type === 'goal' && ev.assistId === playerId) assists++;
-    if (ev.type === 'yellow' && ev.playerId === playerId) yellows++;
-    if (ev.type === 'red' && ev.playerId === playerId) reds++;
+    if (ev.type === 'goal' && (ev.playerId === playerId || ev.scorerId === playerId)) { goals++; latestMinute = ev.minute || latestMinute; }
+    if (ev.type === 'goal' && ev.assistId === playerId) { assists++; latestMinute = ev.minute || latestMinute; }
+    if (ev.type === 'yellow' && ev.playerId === playerId) { yellows++; latestMinute = ev.minute || latestMinute; }
+    if (ev.type === 'red' && ev.playerId === playerId) { reds++; latestMinute = ev.minute || latestMinute; }
+    if (ev.type === 'sub' && ev.playerId === playerId) { subOn++; latestMinute = ev.minute || latestMinute; }
+    if (ev.type === 'sub' && ev.outPlayerId === playerId) { subOff++; latestMinute = ev.minute || latestMinute; }
   }
-  return { goals, assists, yellows, reds };
+  return { goals, assists, yellows, reds, subOn, subOff, latestMinute };
 }
 
 function buildFotmobLiveShell(match) {
@@ -2141,11 +2145,11 @@ function renderFotmobCoachAndBench(match, minute = 1) {
   const playerStatusIcons = player => {
     const summary = liveEventSummaryForPlayer(player?.id);
     const items = [];
-    if (summary.goals) items.push(`<span class="event-chip goal">⚽</span>`);
-    if (summary.assists) items.push(`<span class="event-chip assist">👟</span>`);
-    if (summary.yellows) items.push(`<span class="event-chip yellow">🟨</span>`);
-    if (summary.reds) items.push(`<span class="event-chip red">🟥</span>`);
-    if (summary.subOn) items.push(`<span class="event-chip sub">↩</span>`);
+    if (summary.goals) items.push(liveEventChip('goal', 'Goal'));
+    if (summary.assists) items.push(liveEventChip('assist', 'Assist'));
+    if (summary.yellows) items.push(liveEventChip('yellow', 'Yellow card'));
+    if (summary.reds) items.push(liveEventChip('red', 'Red card'));
+    if (summary.subOn) items.push(liveEventChip('subOn', 'Subbed on'));
     return items.join('');
   };
   const subRows = side => {
@@ -2207,6 +2211,20 @@ function renderFotmobScorers() {
   awayWrap.innerHTML = rows('away');
 }
 
+
+function liveEventChip(type, label, minute = null) {
+  const minuteHtml = minute ? `<span class="event-minute-mini">${escapeHtml(String(minute))}'</span>` : '';
+  const iconMap = {
+    goal: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="currentColor" opacity=".16"></circle><path d="M12 4.5 18.5 8v8L12 19.5 5.5 16V8z" fill="none" stroke="currentColor" stroke-width="1.7"></path><path d="M12 4.5v15M5.5 8l13 8M18.5 8l-13 8" stroke="currentColor" stroke-width="1" opacity=".6"></path></svg>',
+    assist: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path><path d="M10 7h7v7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path></svg>',
+    yellow: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="4" width="10" height="16" rx="1.8" fill="currentColor"></rect></svg>',
+    red: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="4" width="10" height="16" rx="1.8" fill="currentColor"></rect></svg>',
+    subOn: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path><path d="m12 8 4 4-4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+    subOff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H8" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path><path d="m12 8-4 4 4 4" transform="translate(0,-8)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>'
+  };
+  return `<span class="event-chip ${type}" aria-label="${escapeAttr(label)}">${minuteHtml}<span class="event-chip-icon">${iconMap[type] || ''}</span></span>`;
+}
+
 function renderFotmobPitch(match, minute = 1) {
   const pitch = document.getElementById('fotmob-pitch');
   if (!pitch || !livePitchScene) return;
@@ -2217,11 +2235,11 @@ function renderFotmobPitch(match, minute = 1) {
     const prog = Math.max(0, Math.min(1, 1 - (slot?.y ?? 0.5)));
     const lane = Math.max(0, Math.min(1, slot?.x ?? 0.5));
     const isGk = prog < 0.08;
-    const band = isGk ? 0 : prog;
+    const depth = isGk ? 0 : prog;
     const leftPct = side === 'home'
-      ? (isGk ? 6.5 : 13 + band * 31.5)
-      : (isGk ? 93.5 : 87 - band * 31.5);
-    const topPct = 14 + lane * 64;
+      ? (isGk ? 7.25 : 15 + depth * 30.5)
+      : (isGk ? 92.75 : 85 - depth * 30.5);
+    const topPct = 12 + lane * 66;
     return { left: `${leftPct}%`, top: `${topPct}%` };
   };
   const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
@@ -2231,26 +2249,26 @@ function renderFotmobPitch(match, minute = 1) {
     const pos = makeCoords(slot, side);
     const rating = getLivePlayerRating(player, minute).toFixed(1);
     const icons = liveEventSummaryForPlayer(player.id);
-    const leftStack = [];
-    const rightStack = [];
-    if (icons.goals) leftStack.push(`<span class="event-chip goal">⚽</span>`);
-    if (icons.assists) leftStack.push(`<span class="event-chip assist">👟</span>`);
-    if (icons.yellows) rightStack.push(`<span class="event-chip yellow">🟨</span>`);
-    if (icons.reds) rightStack.push(`<span class="event-chip red">🟥</span>`);
-    if (icons.subOn) rightStack.push(`<span class="event-chip sub">↩</span>`);
-    if (icons.subOff) rightStack.push(`<span class="event-chip sub-off">↪</span>`);
+    const notes = [];
+    if (icons.latestMinute) notes.push(`<span class="fotmob-player-minute">${icons.latestMinute}'</span>`);
+    if (icons.goals) notes.push(liveEventChip('goal', 'Goal', icons.goals > 1 ? icons.goals : null));
+    if (icons.assists) notes.push(liveEventChip('assist', 'Assist', icons.assists > 1 ? icons.assists : null));
+    if (icons.yellows) notes.push(liveEventChip('yellow', 'Yellow card'));
+    if (icons.reds) notes.push(liveEventChip('red', 'Red card'));
+    if (icons.subOn) notes.push(liveEventChip('subOn', 'Subbed on'));
+    if (icons.subOff) notes.push(liveEventChip('subOff', 'Subbed off'));
     return `<div class="fotmob-player fotmob-player-${side}" style="left:${pos.left};top:${pos.top};">
-      ${leftStack.length ? `<div class="fotmob-player-event-stack ${side}">${leftStack.join('')}</div>` : ''}
-      <div class="fotmob-player-rating ${side === 'home' ? 'home' : 'away'}">${rating}</div>
-      <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar')}</div>
-      ${rightStack.length ? `<div class="fotmob-player-icons">${rightStack.join('')}</div>` : ''}
+      <div class="fotmob-player-head">${notes.length ? `<div class="fotmob-player-notes ${side}">${notes.join('')}</div>` : ''}<div class="fotmob-player-rating ${side === 'home' ? 'home' : 'away'}">${rating}</div></div>
+      <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar allow-initials')}</div>
       <div class="fotmob-player-name"><span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(getShortPlayerName(player))}</div>
-      <div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>
+      ${livePitchMetric ? `<div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>` : `<div class="fotmob-player-metric-wrap"></div>`}
     </div>`;
   }).join('');
-  pitch.innerHTML = `<div class="fotmob-pitch-filter-row"><button type="button" class="fotmob-filter-btn ${livePitchMetric === 'transfer' ? 'active' : ''}" data-pitch-metric="transfer">Transfer value</button><button type="button" class="fotmob-filter-btn ${livePitchMetric === 'age' ? 'active' : ''}" data-pitch-metric="age">Age</button><button type="button" class="fotmob-filter-btn ${livePitchMetric === 'country' ? 'active' : ''}" data-pitch-metric="country">Country</button></div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, 'home')}${renderSide(ap?.xi || [], awayLayout, 'away')}`;
+  const btn = (key, label) => `<button type="button" class="fotmob-filter-btn ${livePitchMetric === key ? 'active' : ''}" data-pitch-metric="${key}">${label}</button>`;
+  pitch.innerHTML = `<div class="fotmob-pitch-filter-row">${btn('transfer','Transfer value')}${btn('age','Age')}${btn('country','Country')}</div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, 'home')}${renderSide(ap?.xi || [], awayLayout, 'away')}`;
   pitch.querySelectorAll('[data-pitch-metric]').forEach(btn => btn.addEventListener('click', () => {
-    livePitchMetric = btn.dataset.pitchMetric || 'transfer';
+    const nextMetric = btn.dataset.pitchMetric || null;
+    livePitchMetric = livePitchMetric === nextMetric ? null : nextMetric;
     renderFotmobPitch(match, minute);
   }));
   const homeAvg = hp ? avg((hp.xi||[]).map(({player}) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
