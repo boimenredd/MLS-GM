@@ -2178,7 +2178,7 @@ function renderFotmobCoachAndBench(match, minute = 1) {
 
 
 
-let livePitchMetric = "transfer";
+let livePitchMetric = null;
 
 function formatTransferValueShort(player) {
   const v = Number(player?.value || player?.marketValue || player?.transferValue || 0);
@@ -2532,6 +2532,7 @@ async function playLiveMatch(match) {
   simSkipped = false;
   simAbortRequested = false;
   simSpeedKey = 'slow';
+  livePitchMetric = null;
   box.innerHTML = buildFotmobLiveShell(match);
   overlay.classList.add('open');
   bindOverlayButtons();

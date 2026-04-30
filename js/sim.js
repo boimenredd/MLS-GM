@@ -1357,18 +1357,23 @@ function makeSchedule(state) {
 
 // ─── Goal scoring helpers ─────────────────────────────────────────────────────
 
-function chooseScorer(players) {
-  const weights = players.map(p => {
-    const bucket = posBucket(p.position);
+function chooseScorer(players, context = {}) {
+  const nonKeepers = (players || []).filter(p => String(p?.position || "").toUpperCase() !== "GK");
+  const usable = nonKeepers.length ? nonKeepers : (players || []);
+  const allowKeeperGoal = !!context.allowKeeperGoal && Math.random() < 0.015;
+  const weights = usable.map(p => {
+    const pos = String(p?.position || "").toUpperCase();
+    const bucket = posBucket(pos);
     let weight = 1;
-    if      (bucket === "ATT") weight = 5;
-    else if (bucket === "MID") weight = 3;
-    else if (bucket === "DEF") weight = 1.2;
-    else                       weight = 0.25;
-    weight *= Math.max(0.5, p.overall / 70);
+    if (pos === "GK") weight = allowKeeperGoal ? 0.02 : 0;
+    else if (bucket === "ATT") weight = 5.4;
+    else if (bucket === "MID") weight = 2.9;
+    else if (bucket === "DEF") weight = 0.95;
+    else weight = 0.45;
+    weight *= Math.max(0.5, (p?.overall || 60) / 70);
     return { value: p, weight };
-  });
-  return weightedRandom(weights);
+  }).filter(row => row.weight > 0);
+  return weightedRandom(weights.length ? weights : usable.map(p => ({ value: p, weight: 1 })));
 }
 
 function poisson(lambda) {
