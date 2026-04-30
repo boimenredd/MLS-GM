@@ -2231,32 +2231,27 @@ function renderFotmobPitch(match, minute = 1) {
   const hp = livePitchScene.homePack; const ap = livePitchScene.awayPack;
   const homeLayout = FORMATION_LAYOUT[livePitchScene.homeFormation] || FORMATION_LAYOUT['4-3-3'];
   const awayLayout = FORMATION_LAYOUT[livePitchScene.awayFormation] || FORMATION_LAYOUT['4-3-3'];
-  const makeCoords = (slot, side) => {
-    const prog = Math.max(0, Math.min(1, 1 - (slot?.y ?? 0.5)));
+  const makeCoords = (slot, side, idx) => {
     const lane = Math.max(0, Math.min(1, slot?.x ?? 0.5));
-    const isGk = prog < 0.08;
-    const depth = isGk ? 0 : prog;
+    const y = Math.max(0, Math.min(1, slot?.y ?? 0.5));
 
-    // Wider FotMob-style broadcast spacing: keep goalkeepers pinned wide,
-    // spread rows farther apart vertically, and give each half more width.
-    const edgeX = side === 'home' ? 5.2 : 94.8;
-    const fieldStart = side === 'home' ? 12.8 : 87.2;
-    const fieldEnd = side === 'home' ? 43.5 : 56.5;
-    const leftPct = isGk
-      ? edgeX
-      : (side === 'home'
-          ? fieldStart + depth * (fieldEnd - fieldStart)
-          : fieldStart - depth * (fieldStart - fieldEnd));
+    // FotMob uses broad horizontal bands, not a loose depth scale.
+    let homeX;
+    if (idx === 0 || y >= 0.82) homeX = 5.2;
+    else if (y >= 0.64) homeX = 16.8;
+    else if (y >= 0.44) homeX = 29.2;
+    else if (y >= 0.23) homeX = 38.8;
+    else homeX = 44.0;
 
-    // Use almost the full pitch height so players do not bunch in the middle.
-    const topPct = 9 + lane * 78;
-    return { left: `${leftPct}%`, top: `${topPct}%` };
+    const leftPct = side === 'home' ? homeX : 100 - homeX;
+    const topPct = 14 + lane * 72;
+    return { left: leftPct + "%", top: topPct + "%" };
   };
   const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
     const player = entry.player;
     if (!player) return '';
     const slot = layout[idx] || { x:.5, y:.5 };
-    const pos = makeCoords(slot, side);
+    const pos = makeCoords(slot, side, idx);
     const rating = getLivePlayerRating(player, minute).toFixed(1);
     const icons = liveEventSummaryForPlayer(player.id);
     const notes = [];
