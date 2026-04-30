@@ -4362,3 +4362,212 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
 [data-theme='light'] .fotmob-lineup-card,[data-theme='light'] .fotmob-lineup-top{background:#303030 !important;}
 [data-theme='light'] .fotmob-pitch{background:#292929 !important;}
 [data-theme='light'] .fotmob-player-name,[data-theme='light'] .fotmob-player-minute,[data-theme='light'] .fotmob-coach-side,[data-theme='light'] .fotmob-coach-title,[data-theme='light'] .fotmob-section-title,[data-theme='light'] .fotmob-formation-line span{color:#fff !important;}
+
+/* v36 tighter FotMob lineup alignment */
+.fotmob-lineup-card{
+  background:#303030 !important;
+  border-radius:0 !important;
+  border:0 !important;
+  overflow:hidden !important;
+}
+.fotmob-lineup-top{
+  height:52px !important;
+  min-height:52px !important;
+  padding:0 18px !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  background:#303030 !important;
+  border-bottom:1px solid rgba(255,255,255,.06) !important;
+}
+.fotmob-lineup-side{
+  display:flex !important;
+  align-items:center !important;
+  gap:14px !important;
+  min-width:0 !important;
+}
+.fotmob-lineup-side.right{justify-content:flex-end !important;}
+.fotmob-lineup-label{
+  display:flex !important;
+  align-items:center !important;
+  gap:18px !important;
+  min-width:0 !important;
+  color:#fff !important;
+}
+.fotmob-lineup-label.right{flex-direction:row !important;}
+.fotmob-lineup-team,
+.fotmob-lineup-form{
+  font-size:14px !important;
+  line-height:1 !important;
+  font-weight:800 !important;
+  color:#fff !important;
+  white-space:nowrap !important;
+}
+.fotmob-lineup-team{letter-spacing:-.01em !important;}
+.fotmob-lineup-form{opacity:.98 !important;}
+.fotmob-rating-tag{
+  min-width:34px !important;
+  height:24px !important;
+  padding:0 9px !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  border-radius:999px !important;
+  font-size:13px !important;
+  font-weight:900 !important;
+}
+.fotmob-formation-line{display:none !important;}
+.fotmob-pitch{
+  height:552px !important;
+  padding:54px 0 0 !important;
+  border-radius:0 !important;
+  background:#2c2c2c !important;
+  overflow:hidden !important;
+}
+.fotmob-pitch::after{
+  inset:0 1.7% 0 1.7% !important;
+  border:0 !important;
+  border-left:1px solid rgba(255,255,255,.09) !important;
+  border-right:1px solid rgba(255,255,255,.09) !important;
+  border-radius:0 !important;
+}
+.fotmob-pitch::before{
+  background:linear-gradient(90deg,transparent 49.84%,rgba(255,255,255,.075) 50%,transparent 50.16%), radial-gradient(circle at center, transparent 0 76px, rgba(255,255,255,.08) 77px 79px, transparent 80px) !important;
+}
+.fotmob-pen-box{
+  top:25.2% !important;
+  height:43.8% !important;
+  width:12.1% !important;
+  border:1px solid rgba(255,255,255,.09) !important;
+}
+.fotmob-pen-box.left{left:0 !important;border-left:0 !important;border-radius:0 12px 12px 0 !important;}
+.fotmob-pen-box.right{right:0 !important;border-right:0 !important;border-radius:12px 0 0 12px !important;}
+.fotmob-pitch-filter-row{
+  position:absolute !important;
+  left:18px !important;
+  top:14px !important;
+  display:flex !important;
+  gap:10px !important;
+  padding:0 !important;
+  margin:0 !important;
+  z-index:5 !important;
+}
+.fotmob-filter-btn{
+  height:30px !important;
+  padding:0 17px !important;
+  border:0 !important;
+  border-radius:999px !important;
+  background:#252525 !important;
+  color:#fff !important;
+  font-size:12px !important;
+  font-weight:800 !important;
+  letter-spacing:-.01em !important;
+  box-shadow:none !important;
+}
+.fotmob-filter-btn.active{background:#f5f5f5 !important;color:#111827 !important;}
+.fotmob-player{
+  width:86px !important;
+  transform:translate(-50%,-50%) !important;
+  text-align:center !important;
+  z-index:3 !important;
+}
+.fotmob-player-head{
+  position:absolute !important;
+  left:0 !important;
+  right:0 !important;
+  top:-19px !important;
+  height:18px !important;
+  margin:0 !important;
+  pointer-events:none !important;
+}
+.fotmob-player-avatar-wrap{height:44px !important;display:flex !important;align-items:center !important;justify-content:center !important;}
+.fotmob-player-avatar,.player-photo-fallback.fotmob-player-avatar.allow-initials,.player-photo-shell.fotmob-player-avatar{
+  width:44px !important;
+  height:44px !important;
+  border-radius:50% !important;
+  border:2px solid rgba(255,255,255,.14) !important;
+  background:#494949 !important;
+}
+.fotmob-player-rating{
+  position:absolute !important;
+  top:0 !important;
+  right:5px !important;
+  min-width:30px !important;
+  height:20px !important;
+  padding:0 6px !important;
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  border-radius:999px !important;
+  font-size:11px !important;
+  font-weight:900 !important;
+  line-height:1 !important;
+  box-shadow:none !important;
+}
+.fotmob-player-notes{
+  position:absolute !important;
+  left:2px !important;
+  top:0 !important;
+  min-height:18px !important;
+  display:flex !important;
+  align-items:center !important;
+  gap:2px !important;
+  max-width:38px !important;
+  flex-wrap:nowrap !important;
+}
+.fotmob-player-minute{font-size:10px !important;font-weight:900 !important;color:#fff !important;line-height:1 !important;}
+.event-chip{width:15px !important;height:15px !important;min-width:15px !important;padding:0 !important;border-radius:50% !important;box-shadow:0 0 0 1px rgba(255,255,255,.14) !important;}
+.event-chip-icon,.event-chip-icon svg{width:9px !important;height:9px !important;}
+.fotmob-player-name{
+  margin-top:6px !important;
+  color:#fff !important;
+  font-size:11px !important;
+  font-weight:800 !important;
+  line-height:1.12 !important;
+  white-space:nowrap !important;
+  overflow:visible !important;
+  text-overflow:clip !important;
+  text-shadow:none !important;
+  letter-spacing:-.01em !important;
+}
+.fotmob-player-number{opacity:.84 !important;margin-right:2px !important;}
+.fotmob-player-metric-wrap{margin-top:4px !important;min-height:16px !important;display:flex !important;justify-content:center !important;}
+.fotmob-player-metric{
+  min-width:18px !important;
+  height:16px !important;
+  padding:0 5px !important;
+  border-radius:999px !important;
+  background:rgba(255,255,255,.14) !important;
+  color:#f5f5f5 !important;
+  font-size:10px !important;
+  font-weight:800 !important;
+}
+.fotmob-player-metric.flag{background:transparent !important;}
+.fotmob-coach-row{
+  height:66px !important;
+  margin:0 !important;
+  padding:0 18px !important;
+  display:grid !important;
+  grid-template-columns:1fr auto 1fr !important;
+  align-items:center !important;
+  background:#171717 !important;
+  border-top:0 !important;
+}
+.fotmob-coach-side{font-size:14px !important;font-weight:800 !important;color:#fff !important;gap:10px !important;}
+.fotmob-coach-title{font-size:16px !important;font-weight:900 !important;color:#fff !important;}
+.fotmob-section-title{margin:0 !important;padding:14px 0 !important;background:#171717 !important;color:#fff !important;font-size:16px !important;font-weight:900 !important;}
+[data-theme='light'] .fotmob-lineup-card,[data-theme='light'] .fotmob-lineup-top{background:#303030 !important;}
+[data-theme='light'] .fotmob-pitch{background:#2c2c2c !important;}
+[data-theme='light'] .fotmob-lineup-team,
+[data-theme='light'] .fotmob-lineup-form,
+[data-theme='light'] .fotmob-player-name,
+[data-theme='light'] .fotmob-player-minute,
+[data-theme='light'] .fotmob-coach-side,
+[data-theme='light'] .fotmob-coach-title,
+[data-theme='light'] .fotmob-section-title{color:#fff !important;}
+@media (max-width: 900px){
+  .fotmob-pitch{height:510px !important;padding-top:50px !important;}
+  .fotmob-player{width:78px !important;}
+  .fotmob-player-avatar,.player-photo-fallback.fotmob-player-avatar.allow-initials,.player-photo-shell.fotmob-player-avatar{width:40px !important;height:40px !important;}
+  .fotmob-player-name{font-size:10px !important;}
+}

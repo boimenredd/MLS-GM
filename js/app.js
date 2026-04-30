@@ -2110,7 +2110,16 @@ function buildFotmobLiveShell(match) {
       <section class="fotmob-live-panel hidden" data-live-panel="commentary"><div class="fotmob-commentary-card commentary-only"><div class="panel-head"><h3>Commentary</h3><span id="fotmob-commentary-meta-alt">Live feed</span></div><div class="match-events fotmob-commentary-list commentary-big" id="sim-events-alt"></div></div></section>
       <section class="fotmob-live-panel active" data-live-panel="lineup">
         <div class="fotmob-lineup-card">
-          <div class="fotmob-lineup-top"><div class="fotmob-rating-tag" id="fotmob-home-team-rating">—</div><div class="fotmob-formation-line"><span id="fotmob-home-formation">—</span><strong>Lineup</strong><span id="fotmob-away-formation">—</span></div><div class="fotmob-rating-tag away" id="fotmob-away-team-rating">—</div></div>
+          <div class="fotmob-lineup-top">
+            <div class="fotmob-lineup-side left">
+              <div class="fotmob-rating-tag" id="fotmob-home-team-rating">—</div>
+              <div class="fotmob-lineup-label left"><span class="fotmob-lineup-team" id="fotmob-home-lineup-name">Home</span><span class="fotmob-lineup-form" id="fotmob-home-formation">—</span></div>
+            </div>
+            <div class="fotmob-lineup-side right">
+              <div class="fotmob-lineup-label right"><span class="fotmob-lineup-form" id="fotmob-away-formation">—</span><span class="fotmob-lineup-team" id="fotmob-away-lineup-name">Away</span></div>
+              <div class="fotmob-rating-tag away" id="fotmob-away-team-rating">—</div>
+            </div>
+          </div>
           <div id="fotmob-pitch" class="fotmob-pitch"></div>
           <div id="fotmob-sub-banner" class="fotmob-sub-banner hidden"></div>
           <div class="fotmob-coach-row">
@@ -2228,30 +2237,42 @@ function liveEventChip(type, label, minute = null) {
 function renderFotmobPitch(match, minute = 1) {
   const pitch = document.getElementById('fotmob-pitch');
   if (!pitch || !livePitchScene) return;
-  const hp = livePitchScene.homePack; const ap = livePitchScene.awayPack;
+  const hp = livePitchScene.homePack;
+  const ap = livePitchScene.awayPack;
   const homeLayout = FORMATION_LAYOUT[livePitchScene.homeFormation] || FORMATION_LAYOUT['4-3-3'];
   const awayLayout = FORMATION_LAYOUT[livePitchScene.awayFormation] || FORMATION_LAYOUT['4-3-3'];
-  const makeCoords = (slot, side, idx) => {
-    const lane = Math.max(0, Math.min(1, slot?.x ?? 0.5));
-    const y = Math.max(0, Math.min(1, slot?.y ?? 0.5));
 
-    // FotMob uses broad horizontal bands, not a loose depth scale.
-    let homeX;
-    if (idx === 0 || y >= 0.82) homeX = 5.2;
-    else if (y >= 0.64) homeX = 16.8;
-    else if (y >= 0.44) homeX = 29.2;
-    else if (y >= 0.23) homeX = 38.8;
-    else homeX = 44.0;
-
-    const leftPct = side === 'home' ? homeX : 100 - homeX;
-    const topPct = 14 + lane * 72;
-    return { left: leftPct + "%", top: topPct + "%" };
+  const clamp = (min, val, max) => Math.max(min, Math.min(max, val));
+  const lineupBands = rowCount => {
+    if (rowCount <= 3) return [5.0, 25.5, 44.3];
+    if (rowCount === 4) return [5.0, 18.5, 31.4, 44.3];
+    if (rowCount === 5) return [5.0, 16.0, 26.1, 35.9, 44.3];
+    return [5.0, 13.5, 21.5, 29.4, 37.0, 44.3];
   };
-  const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
+  const buildRowMap = layout => {
+    const ys = [...new Set(layout.map(slot => Number((slot?.y ?? 0.5).toFixed(3))))].sort((a, b) => b - a);
+    const bands = lineupBands(ys.length);
+    const map = new Map();
+    ys.forEach((y, idx) => map.set(y, bands[idx] ?? bands[bands.length - 1] ?? 44.3));
+    return map;
+  };
+  const homeRows = buildRowMap(homeLayout);
+  const awayRows = buildRowMap(awayLayout);
+  const makeCoords = (slot, side, rowMap) => {
+    const rowKey = Number((slot?.y ?? 0.5).toFixed(3));
+    const band = rowMap.get(rowKey) ?? 25;
+    const laneRaw = clamp(0.05, slot?.x ?? 0.5, 0.95);
+    const laneSpread = clamp(0.035, 0.5 + (laneRaw - 0.5) * 1.14, 0.965);
+    const topPct = 13 + laneSpread * 72.5;
+    const leftPct = side === 'home' ? band : 100 - band;
+    return { left: leftPct + '%', top: topPct + '%' };
+  };
+
+  const renderSide = (entries, layout, rowMap, side) => entries.map((entry, idx) => {
     const player = entry.player;
     if (!player) return '';
-    const slot = layout[idx] || { x:.5, y:.5 };
-    const pos = makeCoords(slot, side, idx);
+    const slot = layout[idx] || { x: .5, y: .5 };
+    const pos = makeCoords(slot, side, rowMap);
     const rating = getLivePlayerRating(player, minute).toFixed(1);
     const icons = liveEventSummaryForPlayer(player.id);
     const notes = [];
@@ -2269,20 +2290,25 @@ function renderFotmobPitch(match, minute = 1) {
       ${livePitchMetric ? `<div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>` : `<div class="fotmob-player-metric-wrap"></div>`}
     </div>`;
   }).join('');
+
   const btn = (key, label) => `<button type="button" class="fotmob-filter-btn ${livePitchMetric === key ? 'active' : ''}" data-pitch-metric="${key}">${label}</button>`;
-  pitch.innerHTML = `<div class="fotmob-pitch-filter-row">${btn('transfer','Transfer value')}${btn('age','Age')}${btn('country','Country')}</div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, 'home')}${renderSide(ap?.xi || [], awayLayout, 'away')}`;
+  pitch.innerHTML = `<div class="fotmob-pitch-filter-row">${btn('transfer', 'Transfer value')}${btn('age', 'Age')}${btn('country', 'Country')}</div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, homeRows, 'home')}${renderSide(ap?.xi || [], awayLayout, awayRows, 'away')}`;
   pitch.querySelectorAll('[data-pitch-metric]').forEach(btn => btn.addEventListener('click', () => {
     const nextMetric = btn.dataset.pitchMetric || null;
     livePitchMetric = livePitchMetric === nextMetric ? null : nextMetric;
     renderFotmobPitch(match, minute);
   }));
-  const homeAvg = hp ? avg((hp.xi||[]).map(({player}) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
-  const awayAvg = ap ? avg((ap.xi||[]).map(({player}) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+
+  const homeAvg = hp ? avg((hp.xi || []).map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+  const awayAvg = ap ? avg((ap.xi || []).map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
   const hEl = document.getElementById('fotmob-home-team-rating'); if (hEl) hEl.textContent = homeAvg;
   const aEl = document.getElementById('fotmob-away-team-rating'); if (aEl) aEl.textContent = awayAvg;
   const hf = document.getElementById('fotmob-home-formation'); if (hf) hf.textContent = livePitchScene.homeFormation;
   const af = document.getElementById('fotmob-away-formation'); if (af) af.textContent = livePitchScene.awayFormation;
+  const homeName = document.getElementById('fotmob-home-lineup-name'); if (homeName) homeName.textContent = byTeamId(match.homeTeamId)?.name || 'Home';
+  const awayName = document.getElementById('fotmob-away-lineup-name'); if (awayName) awayName.textContent = byTeamId(match.awayTeamId)?.name || 'Away';
 }
+
 
 
 function buildLiveFactsHtml(match, minute = 1) {
