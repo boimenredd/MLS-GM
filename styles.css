@@ -4860,3 +4860,98 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
   .fotmob-player-name{font-size:10px !important;max-width:76px !important;}
   .fotmob-player-notes{left:39px !important;top:31px !important;}
 }
+
+/* v40 compact FotMob live lineup + 9-man custom bench polish */
+.fotmob-lineup-card{
+  max-width:960px !important;
+  margin:0 auto !important;
+  border-radius:10px !important;
+  background:#303030 !important;
+}
+.fotmob-lineup-top{
+  height:58px !important;
+  min-height:58px !important;
+  padding:0 18px !important;
+  background:#343434 !important;
+}
+.fotmob-pitch{
+  height:552px !important;
+  padding-top:55px !important;
+  background:#292929 !important;
+}
+.fotmob-pitch::before{
+  background:
+    linear-gradient(90deg, transparent 49.82%, rgba(255,255,255,.07) 50%, transparent 50.18%),
+    radial-gradient(circle at center, transparent 0 73px, rgba(255,255,255,.075) 74px 76px, transparent 77px) !important;
+}
+.fotmob-pen-box{
+  top:25.5% !important;
+  height:43.0% !important;
+  width:13.2% !important;
+}
+.fotmob-pitch-filter-row{
+  top:17px !important;
+  left:18px !important;
+  gap:10px !important;
+}
+.fotmob-filter-btn{
+  height:30px !important;
+  padding:0 20px !important;
+  font-size:12px !important;
+  font-weight:900 !important;
+}
+.fotmob-player{
+  width:78px !important;
+}
+.fotmob-player-avatar-wrap{
+  height:42px !important;
+}
+.fotmob-player-avatar,
+.player-photo-fallback.fotmob-player-avatar.allow-initials,
+.player-photo-shell.fotmob-player-avatar{
+  width:42px !important;
+  height:42px !important;
+}
+.fotmob-player-head{
+  top:-18px !important;
+  height:20px !important;
+}
+.fotmob-player-rating{
+  right:3px !important;
+  min-width:29px !important;
+  height:20px !important;
+  font-size:11px !important;
+}
+.fotmob-player-rating.best{min-width:39px !important;}
+.fotmob-player-notes{
+  left:39px !important;
+  top:31px !important;
+  gap:2px !important;
+  max-width:58px !important;
+}
+.fotmob-player-name{
+  margin-top:5px !important;
+  max-width:82px !important;
+  font-size:11px !important;
+  line-height:1.08 !important;
+}
+.fotmob-player-metric-wrap:empty{display:none !important;min-height:0 !important;margin:0 !important;}
+.fotmob-coach-row{
+  height:64px !important;
+  max-width:960px !important;
+  border-radius:0 0 10px 10px !important;
+}
+.fotmob-section-title{max-width:960px !important;}
+.fotmob-bench-table{
+  max-width:960px !important;
+  margin:0 auto !important;
+}
+.tactics-bench-select{background:var(--bg3);color:var(--text);border:1px solid var(--line);border-radius:8px;}
+@media (max-width:900px){
+  .fotmob-pitch{height:510px !important;padding-top:52px !important;}
+  .fotmob-player{width:72px !important;}
+  .fotmob-player-avatar,
+  .player-photo-fallback.fotmob-player-avatar.allow-initials,
+  .player-photo-shell.fotmob-player-avatar{width:38px !important;height:38px !important;}
+  .fotmob-player-name{font-size:10px !important;max-width:72px !important;}
+}

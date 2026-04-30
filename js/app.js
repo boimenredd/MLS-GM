@@ -1010,6 +1010,7 @@ function normalizeState(st) {
     defensiveLine: savedTactics.defensiveLine || tactics.defensiveLine || "Mid Block",
     notes: savedTactics.notes || "",
     lineup: Array.isArray(savedTactics.lineup) ? savedTactics.lineup.map(slot => ({ ...slot })) : [],
+    bench: Array.isArray(savedTactics.bench) ? savedTactics.bench.slice(0, 9) : [],
   };
 
   st.draft ||= {};
@@ -1312,7 +1313,7 @@ function lineupFitScore(player, targetPosition) {
   return score;
 }
 
-function buildAutoLineup(players, positions, benchCount = 7) {
+function buildAutoLineup(players, positions, benchCount = 9) {
   const pool = [...(players || [])].filter(Boolean).sort((a,b)=>(b.overall||0)-(a.overall||0)||(b.potential||0)-(a.potential||0));
   const lineup = new Array(positions.length).fill(null);
   const assigned = new Set();
@@ -1388,7 +1389,7 @@ function buildAutoLineup(players, positions, benchCount = 7) {
 }
 
 
-function getLineupForFormation(teamId, formation, benchCount = 7) {
+function getLineupForFormation(teamId, formation, benchCount = 9) {
   const players = [...getTeamPlayers(state, teamId)].sort((a, b) => (b.overall - a.overall) || (b.potential - a.potential));
   const positions = FORMATIONS[formation] || FORMATIONS["4-3-3"];
   let lineupPack = buildAutoLineup(players, positions, benchCount);
@@ -1404,7 +1405,14 @@ function getLineupForFormation(teamId, formation, benchCount = 7) {
     });
     if (saved.every(Boolean)) {
       lineupPack.lineup = saved;
-      lineupPack.bench = players.filter(p => !assigned.has(p.id)).slice(0, benchCount).map(p => p.id);
+      const savedBench = Array.isArray(tactics?.bench) ? tactics.bench.map(id => String(id)) : [];
+      const benchIds = [];
+      savedBench.forEach(id => {
+        const candidate = players.find(p => String(p.id) === id && !assigned.has(p.id) && !benchIds.includes(p.id));
+        if (candidate) benchIds.push(candidate.id);
+      });
+      players.filter(p => !assigned.has(p.id) && !benchIds.includes(p.id)).slice(0, benchCount - benchIds.length).forEach(p => benchIds.push(p.id));
+      lineupPack.bench = benchIds.slice(0, benchCount);
     }
   }
 
@@ -2262,7 +2270,7 @@ function renderFotmobPitch(match, minute = 1) {
     const rowKey = Number((slot?.y ?? 0.5).toFixed(3));
     const band = rowMap.get(rowKey) ?? 25;
     const laneRaw = clamp(0.06, slot?.x ?? 0.5, 0.94);
-    const topPct = clamp(14, 3 + laneRaw * 103, 88);
+    const topPct = clamp(17, 13 + laneRaw * 74, 84);
     const leftPct = side === 'home' ? band : 100 - band;
     return { left: leftPct + '%', top: topPct + '%' };
   };
@@ -2278,7 +2286,7 @@ function renderFotmobPitch(match, minute = 1) {
     const pos = makeCoords(slot, side, rowMap);
     const ratingValue = getLivePlayerRating(player, minute);
     const rating = ratingValue.toFixed(1);
-    const isBest = ratingValue >= bestRating - 0.001 && bestRating >= 7;
+    const isBest = minute >= 90 && ratingValue >= bestRating - 0.001 && bestRating >= 7;
     const icons = liveEventSummaryForPlayer(player.id);
     const notes = [];
     if (icons.latestMinute) notes.push(`<span class="fotmob-player-minute">${icons.latestMinute}'</span>`);
@@ -2745,6 +2753,7 @@ async function persist() {
       defensiveLine: tactics.defensiveLine || "Mid Block",
       notes: tactics.notes || "",
       lineup: Array.isArray(tactics.lineup) ? tactics.lineup.map(slot => ({ ...slot })) : [],
+      bench: Array.isArray(tactics.bench) ? tactics.bench.slice(0, 9) : [],
     };
   }
   await saveSlot(state.saveSlot, state);
@@ -3844,7 +3853,9 @@ function renderTactics() {
   const W = 480, H = 320;
 
   if (!tactics.lineup || tactics.lineup.length !== positions.length) {
-    tactics.lineup = buildAutoLineup(players, positions, 7).lineup;
+    const autoPack = buildAutoLineup(players, positions, 9);
+    tactics.lineup = autoPack.lineup;
+    tactics.bench = autoPack.bench;
   }
 
   const dots = positions.map((pos, i) => {
@@ -3873,6 +3884,22 @@ function renderTactics() {
       <td class="num">${player?player.overall:"—"}</td>
       <td class="num">${player?formatMoney(player.contract.salary):"—"}</td>
     </tr>`;
+  }).join("");
+
+  const selectedXIIds = new Set((tactics.lineup || []).map(slot => String(slot?.playerId || '')).filter(Boolean));
+  if (!Array.isArray(tactics.bench)) tactics.bench = [];
+  tactics.bench = tactics.bench.filter(id => !selectedXIIds.has(String(id))).slice(0, 9);
+  const benchPool = players.filter(p => !selectedXIIds.has(String(p.id)));
+  while (tactics.bench.length < 9 && benchPool.length) {
+    const next = benchPool.find(p => !tactics.bench.map(String).includes(String(p.id)));
+    if (!next) break;
+    tactics.bench.push(next.id);
+  }
+  const benchRows = Array.from({ length: 9 }, (_, i) => {
+    const selectedId = tactics.bench[i] || '';
+    const selectedPlayer = players.find(p => String(p.id) === String(selectedId));
+    const options = `<option value="">— Select —</option>` + benchPool.map(p => `<option value="${p.id}" ${String(selectedId)===String(p.id)?"selected":""}>${escapeHtml(p.name)} (${p.position} · ${p.overall})</option>`).join("");
+    return `<tr><td class="num">${i+1}</td><td><select class="tactics-bench-select" data-bench-slot="${i}" style="margin:0;padding:5px 8px;font-size:12px;width:100%;">${options}</select></td><td><span class="badge">${escapeHtml(selectedPlayer?.position || '—')}</span></td><td class="num">${selectedPlayer?.overall || '—'}</td></tr>`;
   }).join("");
 
   return `${pageHead("Tactics","Formation, lineup & roles · saved per session")}
@@ -3915,6 +3942,13 @@ function renderTactics() {
           <button id="tactics-save-btn" class="primary-btn">💾 Save Lineup</button>
           <button id="tactics-auto-btn" class="ghost-btn">⚡ Auto Best XI</button>
         </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3>Bench</h3><span>9 customizable slots</span></div>
+        <table style="table-layout:fixed;width:100%;">
+          <thead><tr><th class="num" style="width:42px">#</th><th>Player</th><th style="width:64px">Pos</th><th class="num" style="width:48px">OVR</th></tr></thead>
+          <tbody>${benchRows}</tbody>
+        </table>
       </div>
       <div class="panel">
         <div class="panel-head"><h3>Match Notes</h3><span>Optional instructions</span></div>
@@ -4199,6 +4233,15 @@ function bindPageEvents() {
       await persist();
     }));
 
+    $$(".tactics-bench-select").forEach(sel => sel.addEventListener("change", async () => {
+      const benchIdx = +sel.dataset.benchSlot;
+      tactics.bench ||= [];
+      tactics.bench[benchIdx] = sel.value || null;
+      tactics.bench = tactics.bench.filter(Boolean).slice(0, 9);
+      await persist();
+      renderPage();
+    }));
+
     document.getElementById("tactics-save-btn")?.addEventListener("click", async () => {
       tactics.notes = document.getElementById("tactics-notes")?.value||"";
       await persist(); toast("Lineup saved.","success");
@@ -4207,7 +4250,9 @@ function bindPageEvents() {
       const team = getUserTeam(state);
       const plrs = getTeamPlayers(state, team.id);
       const poss = FORMATIONS[tactics.formation]||FORMATIONS["4-3-3"];
-      tactics.lineup = buildAutoLineup(plrs, poss, 7).lineup;
+      const pack = buildAutoLineup(plrs, poss, 9);
+      tactics.lineup = pack.lineup;
+      tactics.bench = pack.bench;
       persist();
       renderPage(); toast("Auto-selected best XI.","success");
     });
