@@ -2113,10 +2113,10 @@ function buildFotmobLiveShell(match) {
           <div class="fotmob-lineup-top">
             <div class="fotmob-lineup-side left">
               <div class="fotmob-rating-tag" id="fotmob-home-team-rating">—</div>
-              <div class="fotmob-lineup-label left"><span class="fotmob-lineup-team" id="fotmob-home-lineup-name">Home</span><span class="fotmob-lineup-form" id="fotmob-home-formation">—</span></div>
+              <div class="fotmob-lineup-label left"><span id="fotmob-home-lineup-logo" class="fotmob-lineup-logo"></span><span class="fotmob-lineup-team" id="fotmob-home-lineup-name">Home</span><span class="fotmob-lineup-form" id="fotmob-home-formation">—</span></div>
             </div>
             <div class="fotmob-lineup-side right">
-              <div class="fotmob-lineup-label right"><span class="fotmob-lineup-form" id="fotmob-away-formation">—</span><span class="fotmob-lineup-team" id="fotmob-away-lineup-name">Away</span></div>
+              <div class="fotmob-lineup-label right"><span class="fotmob-lineup-form" id="fotmob-away-formation">—</span><span class="fotmob-lineup-team" id="fotmob-away-lineup-name">Away</span><span id="fotmob-away-lineup-logo" class="fotmob-lineup-logo"></span></div>
               <div class="fotmob-rating-tag away" id="fotmob-away-team-rating">—</div>
             </div>
           </div>
@@ -2244,10 +2244,10 @@ function renderFotmobPitch(match, minute = 1) {
 
   const clamp = (min, val, max) => Math.max(min, Math.min(max, val));
   const lineupBands = rowCount => {
-    if (rowCount <= 3) return [5.2, 25.2, 44.0];
-    if (rowCount === 4) return [5.2, 18.8, 31.2, 44.0];
-    if (rowCount === 5) return [5.2, 15.4, 24.8, 34.2, 44.0];
-    return [5.2, 12.8, 20.6, 28.2, 35.7, 44.0];
+    if (rowCount <= 3) return [5.4, 25.0, 43.7];
+    if (rowCount === 4) return [5.4, 18.4, 31.0, 43.7];
+    if (rowCount === 5) return [5.4, 15.2, 24.7, 34.1, 43.7];
+    return [5.4, 12.9, 20.5, 28.0, 35.5, 43.7];
   };
   const buildRowMap = layout => {
     const ys = [...new Set(layout.map(slot => Number((slot?.y ?? 0.5).toFixed(3))))].sort((a, b) => b - a);
@@ -2262,8 +2262,7 @@ function renderFotmobPitch(match, minute = 1) {
     const rowKey = Number((slot?.y ?? 0.5).toFixed(3));
     const band = rowMap.get(rowKey) ?? 25;
     const laneRaw = clamp(0.06, slot?.x ?? 0.5, 0.94);
-    const laneSpread = clamp(0.025, 0.5 + (laneRaw - 0.5) * 1.22, 0.975);
-    const topPct = 10.5 + laneSpread * 77;
+    const topPct = clamp(14, 3 + laneRaw * 103, 88);
     const leftPct = side === 'home' ? band : 100 - band;
     return { left: leftPct + '%', top: topPct + '%' };
   };
@@ -2287,7 +2286,7 @@ function renderFotmobPitch(match, minute = 1) {
       <div class="fotmob-player-head">${notes.length ? `<div class="fotmob-player-notes ${side}">${notes.join('')}</div>` : ''}<div class="fotmob-player-rating ${side === 'home' ? 'home' : 'away'}">${rating}</div></div>
       <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar allow-initials')}</div>
       <div class="fotmob-player-name"><span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(getShortPlayerName(player))}</div>
-      ${livePitchMetric ? `<div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>` : `<div class="fotmob-player-metric-wrap"></div>`}
+      ${livePitchMetric ? `<div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>` : ``}
     </div>`;
   }).join('');
 
@@ -2305,8 +2304,12 @@ function renderFotmobPitch(match, minute = 1) {
   const aEl = document.getElementById('fotmob-away-team-rating'); if (aEl) aEl.textContent = awayAvg;
   const hf = document.getElementById('fotmob-home-formation'); if (hf) hf.textContent = livePitchScene.homeFormation;
   const af = document.getElementById('fotmob-away-formation'); if (af) af.textContent = livePitchScene.awayFormation;
-  const homeName = document.getElementById('fotmob-home-lineup-name'); if (homeName) homeName.textContent = byTeamId(match.homeTeamId)?.name || 'Home';
-  const awayName = document.getElementById('fotmob-away-lineup-name'); if (awayName) awayName.textContent = byTeamId(match.awayTeamId)?.name || 'Away';
+  const homeTeam = byTeamId(match.homeTeamId);
+  const awayTeam = byTeamId(match.awayTeamId);
+  const homeName = document.getElementById('fotmob-home-lineup-name'); if (homeName) homeName.textContent = homeTeam?.name || 'Home';
+  const awayName = document.getElementById('fotmob-away-lineup-name'); if (awayName) awayName.textContent = awayTeam?.name || 'Away';
+  const homeLogo = document.getElementById('fotmob-home-lineup-logo'); if (homeLogo) homeLogo.innerHTML = homeTeam ? teamLogoMark(homeTeam, 'fotmob-lineup-crest') : '';
+  const awayLogo = document.getElementById('fotmob-away-lineup-logo'); if (awayLogo) awayLogo.innerHTML = awayTeam ? teamLogoMark(awayTeam, 'fotmob-lineup-crest') : '';
 }
 
 
