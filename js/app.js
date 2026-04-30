@@ -2244,10 +2244,10 @@ function renderFotmobPitch(match, minute = 1) {
 
   const clamp = (min, val, max) => Math.max(min, Math.min(max, val));
   const lineupBands = rowCount => {
-    if (rowCount <= 3) return [5.0, 25.5, 44.3];
-    if (rowCount === 4) return [5.0, 18.5, 31.4, 44.3];
-    if (rowCount === 5) return [5.0, 16.0, 26.1, 35.9, 44.3];
-    return [5.0, 13.5, 21.5, 29.4, 37.0, 44.3];
+    if (rowCount <= 3) return [5.2, 25.2, 44.0];
+    if (rowCount === 4) return [5.2, 18.8, 31.2, 44.0];
+    if (rowCount === 5) return [5.2, 15.4, 24.8, 34.2, 44.0];
+    return [5.2, 12.8, 20.6, 28.2, 35.7, 44.0];
   };
   const buildRowMap = layout => {
     const ys = [...new Set(layout.map(slot => Number((slot?.y ?? 0.5).toFixed(3))))].sort((a, b) => b - a);
@@ -2261,9 +2261,9 @@ function renderFotmobPitch(match, minute = 1) {
   const makeCoords = (slot, side, rowMap) => {
     const rowKey = Number((slot?.y ?? 0.5).toFixed(3));
     const band = rowMap.get(rowKey) ?? 25;
-    const laneRaw = clamp(0.05, slot?.x ?? 0.5, 0.95);
-    const laneSpread = clamp(0.035, 0.5 + (laneRaw - 0.5) * 1.14, 0.965);
-    const topPct = 13 + laneSpread * 72.5;
+    const laneRaw = clamp(0.06, slot?.x ?? 0.5, 0.94);
+    const laneSpread = clamp(0.025, 0.5 + (laneRaw - 0.5) * 1.22, 0.975);
+    const topPct = 10.5 + laneSpread * 77;
     const leftPct = side === 'home' ? band : 100 - band;
     return { left: leftPct + '%', top: topPct + '%' };
   };

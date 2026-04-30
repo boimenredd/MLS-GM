@@ -4571,3 +4571,174 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
   .fotmob-player-avatar,.player-photo-fallback.fotmob-player-avatar.allow-initials,.player-photo-shell.fotmob-player-avatar{width:40px !important;height:40px !important;}
   .fotmob-player-name{font-size:10px !important;}
 }
+
+
+/* v38 closer FotMob lineup match */
+
+.fotmob-live-shell{gap:12px !important;}
+.fotmob-lineup-card{
+  background:#303030 !important;
+  border:1px solid rgba(255,255,255,.08) !important;
+  border-radius:18px !important;
+  overflow:hidden !important;
+  padding:0 !important;
+}
+.fotmob-lineup-top{
+  height:48px !important;
+  min-height:48px !important;
+  padding:0 18px !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:space-between !important;
+  background:#343434 !important;
+  border-bottom:1px solid rgba(255,255,255,.05) !important;
+}
+.fotmob-lineup-side{gap:10px !important;}
+.fotmob-lineup-label{gap:16px !important;}
+.fotmob-lineup-team,.fotmob-lineup-form{
+  font-size:14px !important;
+  font-weight:800 !important;
+  line-height:1 !important;
+  color:#fff !important;
+}
+.fotmob-rating-tag{
+  min-width:31px !important;
+  height:22px !important;
+  padding:0 8px !important;
+  font-size:12px !important;
+  font-weight:900 !important;
+  border-radius:999px !important;
+}
+.fotmob-pitch{
+  height:588px !important;
+  padding:50px 0 0 !important;
+  background:#2f2f31 !important;
+  border-radius:0 !important;
+  overflow:hidden !important;
+}
+.fotmob-pitch::after{
+  inset:0 1.45% 0 1.45% !important;
+  border:0 !important;
+  border-left:1px solid rgba(255,255,255,.10) !important;
+  border-right:1px solid rgba(255,255,255,.10) !important;
+  border-radius:0 !important;
+}
+.fotmob-pitch::before{
+  background:
+    linear-gradient(90deg,transparent 49.84%,rgba(255,255,255,.075) 50%,transparent 50.16%),
+    radial-gradient(circle at center, transparent 0 74px, rgba(255,255,255,.08) 75px 77px, transparent 78px) !important;
+}
+.fotmob-pen-box{
+  top:25.4% !important;
+  height:42.7% !important;
+  width:12.4% !important;
+  border:1px solid rgba(255,255,255,.10) !important;
+}
+.fotmob-pen-box.left{left:0 !important;border-left:0 !important;border-radius:0 12px 12px 0 !important;}
+.fotmob-pen-box.right{right:0 !important;border-right:0 !important;border-radius:12px 0 0 12px !important;}
+.fotmob-pitch-filter-row{
+  top:14px !important;
+  left:18px !important;
+  gap:10px !important;
+}
+.fotmob-filter-btn{
+  height:30px !important;
+  padding:0 18px !important;
+  border:0 !important;
+  border-radius:999px !important;
+  background:#252525 !important;
+  color:#fff !important;
+  font-size:12px !important;
+  font-weight:800 !important;
+  letter-spacing:-.01em !important;
+}
+.fotmob-filter-btn.active{background:#fff !important;color:#111 !important;}
+.fotmob-player{
+  width:78px !important;
+  transform:translate(-50%,-50%) !important;
+  text-align:center !important;
+}
+.fotmob-player-head{
+  top:-18px !important;
+  height:18px !important;
+}
+.fotmob-player-avatar-wrap{height:42px !important;}
+.fotmob-player-avatar,
+.player-photo-fallback.fotmob-player-avatar.allow-initials,
+.player-photo-shell.fotmob-player-avatar{
+  width:42px !important;
+  height:42px !important;
+  border:2px solid rgba(255,255,255,.14) !important;
+  background:#4b4b4b !important;
+}
+.fotmob-player-rating{
+  top:0 !important;
+  right:2px !important;
+  min-width:29px !important;
+  height:20px !important;
+  padding:0 6px !important;
+  font-size:11px !important;
+  font-weight:900 !important;
+}
+.fotmob-player-notes{
+  left:1px !important;
+  top:0 !important;
+  gap:2px !important;
+  max-width:38px !important;
+}
+.fotmob-player-minute{font-size:10px !important;font-weight:900 !important;}
+.event-chip{width:15px !important;height:15px !important;min-width:15px !important;}
+.event-chip-icon,.event-chip-icon svg{width:9px !important;height:9px !important;}
+.fotmob-player-name{
+  margin:5px auto 0 !important;
+  max-width:80px !important;
+  color:#fff !important;
+  font-size:11px !important;
+  font-weight:800 !important;
+  line-height:1.06 !important;
+  white-space:normal !important;
+  overflow:visible !important;
+  text-overflow:clip !important;
+  letter-spacing:-.01em !important;
+}
+.fotmob-player-number{opacity:.84 !important;margin-right:2px !important;}
+.fotmob-player-metric-wrap{margin-top:4px !important; min-height:16px !important;}
+.fotmob-player-metric{
+  height:16px !important;
+  min-width:18px !important;
+  padding:0 6px !important;
+  border-radius:999px !important;
+  background:rgba(255,255,255,.14) !important;
+  color:#f3f4f6 !important;
+  font-size:10px !important;
+  font-weight:800 !important;
+}
+.fotmob-coach-row{
+  height:64px !important;
+  padding:0 18px !important;
+  background:#181818 !important;
+  display:grid !important;
+  grid-template-columns:1fr auto 1fr !important;
+  align-items:center !important;
+}
+.fotmob-coach-side{font-size:13px !important;font-weight:800 !important;color:#fff !important;gap:10px !important;}
+.fotmob-coach-title{font-size:14px !important;font-weight:900 !important;color:#fff !important;}
+.fotmob-section-title{background:#181818 !important;color:#fff !important;}
+[data-theme='light'] .fotmob-lineup-card,
+[data-theme='light'] .fotmob-lineup-top{background:#303030 !important;}
+[data-theme='light'] .fotmob-pitch{background:#2f2f31 !important;}
+[data-theme='light'] .fotmob-lineup-team,
+[data-theme='light'] .fotmob-lineup-form,
+[data-theme='light'] .fotmob-player-name,
+[data-theme='light'] .fotmob-player-minute,
+[data-theme='light'] .fotmob-coach-side,
+[data-theme='light'] .fotmob-coach-title,
+[data-theme='light'] .fotmob-section-title{color:#fff !important;}
+@media (max-width: 900px){
+  .fotmob-pitch{height:520px !important;padding-top:46px !important;}
+  .fotmob-player{width:72px !important;}
+  .fotmob-player-avatar,
+  .player-photo-fallback.fotmob-player-avatar.allow-initials,
+  .player-photo-shell.fotmob-player-avatar{width:38px !important;height:38px !important;}
+  .fotmob-player-name{font-size:10px !important;max-width:72px !important;}
+}
