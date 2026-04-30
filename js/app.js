@@ -2267,12 +2267,18 @@ function renderFotmobPitch(match, minute = 1) {
     return { left: leftPct + '%', top: topPct + '%' };
   };
 
+  const allLiveXi = [...(hp?.xi || []), ...(ap?.xi || [])].map(({ player }) => player).filter(Boolean);
+  const bestRating = allLiveXi.length ? Math.max(...allLiveXi.map(p => getLivePlayerRating(p, minute))) : 0;
+  const ratingClassFor = value => value >= 7 ? 'good' : value >= 5 ? 'warn' : 'bad';
+
   const renderSide = (entries, layout, rowMap, side) => entries.map((entry, idx) => {
     const player = entry.player;
     if (!player) return '';
     const slot = layout[idx] || { x: .5, y: .5 };
     const pos = makeCoords(slot, side, rowMap);
-    const rating = getLivePlayerRating(player, minute).toFixed(1);
+    const ratingValue = getLivePlayerRating(player, minute);
+    const rating = ratingValue.toFixed(1);
+    const isBest = ratingValue >= bestRating - 0.001 && bestRating >= 7;
     const icons = liveEventSummaryForPlayer(player.id);
     const notes = [];
     if (icons.latestMinute) notes.push(`<span class="fotmob-player-minute">${icons.latestMinute}'</span>`);
@@ -2282,9 +2288,11 @@ function renderFotmobPitch(match, minute = 1) {
     if (icons.reds) notes.push(liveEventChip('red', 'Red card'));
     if (icons.subOn) notes.push(liveEventChip('subOn', 'Subbed on'));
     if (icons.subOff) notes.push(liveEventChip('subOff', 'Subbed off'));
+    const ratingHtml = `<div class="fotmob-player-rating ${ratingClassFor(ratingValue)} ${isBest ? 'best' : ''}">${rating}${isBest ? '<span class="rating-star">★</span>' : ''}</div>`;
     return `<div class="fotmob-player fotmob-player-${side}" style="left:${pos.left};top:${pos.top};">
-      <div class="fotmob-player-head">${notes.length ? `<div class="fotmob-player-notes ${side}">${notes.join('')}</div>` : ''}<div class="fotmob-player-rating ${side === 'home' ? 'home' : 'away'}">${rating}</div></div>
+      <div class="fotmob-player-head">${ratingHtml}</div>
       <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar allow-initials')}</div>
+      ${notes.length ? `<div class="fotmob-player-notes ${side}">${notes.join('')}</div>` : ''}
       <div class="fotmob-player-name"><span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(getShortPlayerName(player))}</div>
       ${livePitchMetric ? `<div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>` : ``}
     </div>`;
