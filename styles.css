@@ -4999,3 +4999,21 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
 .fotmob-table-rating{min-width:28px !important;text-align:center !important;}
 [data-theme='light'] .fotmob-lineup-card,[data-theme='light'] .fotmob-lineup-top,[data-theme='light'] .fotmob-pitch,[data-theme='light'] .fotmob-bench-table,[data-theme='light'] .fotmob-section-title,[data-theme='light'] .fotmob-coach-row{background:#303030 !important;color:#fff !important;}
 .garber-mode-actions{display:flex;gap:10px;flex-wrap:wrap;}
+
+
+/* v42 live sim closer/bigger player layout */
+.fotmob-lineup-card{max-width:1020px !important;}
+.fotmob-lineup-top,.fotmob-pitch,.fotmob-coach-row,.fotmob-section-title,.fotmob-bench-table{max-width:1020px !important;}
+.fotmob-pitch{height:560px !important;padding-top:56px !important;}
+.fotmob-player{width:88px !important;}
+.fotmob-player-avatar-wrap{height:46px !important;}
+.fotmob-player-avatar,.player-photo-fallback.fotmob-player-avatar.allow-initials,.player-photo-shell.fotmob-player-avatar{width:46px !important;height:46px !important;}
+.fotmob-player-head{top:-21px !important;}
+.fotmob-player-rating{min-width:32px !important;height:21px !important;font-size:11px !important;}
+.fotmob-player-rating.best{min-width:44px !important;}
+.fotmob-player-name{max-width:92px !important;font-size:11px !important;line-height:1.04 !important;}
+.fotmob-player-number{font-size:11px !important;}
+.fotmob-player-notes{top:22px !important;transform:translateX(17px) !important;max-width:62px !important;}
+.fotmob-player-notes.away{transform:translateX(15px) !important;}
+.fotmob-filter-btn{padding:0 16px !important;height:31px !important;}
+#garberPlayerSelect,#garberPlayerPos,#garberPlayerClub,#garberPlayerDesignation,#garberSalaryCap,#garberGam,#garberTam,#garberIntlSlots,#garberPlayerOverall,#garberPlayerPotential,#garberPlayerAge,#garberPlayerValue,#garberPlayerSalary,#garberPlayerYears,#garberPlayerMorale,#garberAttrPace,#garberAttrShooting,#garberAttrPassing,#garberAttrDribbling,#garberAttrDefense,#garberAttrPhysical{width:100%;}

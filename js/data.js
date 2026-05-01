@@ -171,5 +171,14 @@ export const LAST_NAMES = [
 export const COLLEGES = [
   "Maryland","UCLA","Wake Forest","Indiana","North Carolina","Virginia","Creighton",
   "Duke","Akron","Syracuse","Georgetown","St. Louis","Notre Dame","Penn State",
-  "SMU","Stanford","Clemson","Oregon State","New Hampshire","Kentucky"
+  "SMU","Stanford","Clemson","Oregon State","New Hampshire","Kentucky","Louisville",
+  "Michigan State","Michigan","Ohio State","Wisconsin","Washington","Portland",
+  "Santa Clara","Cal Poly","UC Santa Barbara","San Diego State","Loyola Marymount",
+  "South Florida","UCF","Florida International","South Carolina","Charlotte",
+  "James Madison","William & Mary","UNC Greensboro","VCU","Princeton","Yale",
+  "Brown","Harvard","Cornell","Columbia","Boston College","Providence","Seton Hall",
+  "Marquette","Xavier","Butler","Denver","Air Force","Memphis","Tulsa","Oral Roberts",
+  "Saint Louis University","Bradley","Missouri State","Western Michigan","Bowling Green",
+  "Marshall","West Virginia","Pittsburgh","Temple","Rutgers","Monmouth","Hofstra",
+  "Northeastern","University at Albany","Iona","Fairleigh Dickinson","UMass Lowell"
 ];

@@ -2257,10 +2257,10 @@ function renderFotmobPitch(match, minute = 1) {
 
   const clamp = (min, val, max) => Math.max(min, Math.min(max, val));
   const lineupBands = rowCount => {
-    if (rowCount <= 3) return [13.5, 26.0, 39.0];
-    if (rowCount === 4) return [13.5, 24.0, 34.5, 44.5];
-    if (rowCount === 5) return [13.0, 21.3, 29.8, 37.8, 45.0];
-    return [12.5, 19.6, 26.8, 34.0, 40.8, 46.0];
+    if (rowCount <= 3) return [16.0, 28.5, 40.0];
+    if (rowCount === 4) return [16.0, 26.0, 35.0, 43.5];
+    if (rowCount === 5) return [15.5, 23.4, 30.8, 37.8, 44.2];
+    return [15.0, 21.8, 28.2, 34.4, 39.8, 44.8];
   };
   const buildRowMap = layout => {
     const ys = [...new Set(layout.map(slot => Number((slot?.y ?? 0.5).toFixed(3))))].sort((a, b) => b - a);
@@ -2275,7 +2275,7 @@ function renderFotmobPitch(match, minute = 1) {
     const rowKey = Number((slot?.y ?? 0.5).toFixed(3));
     const band = rowMap.get(rowKey) ?? 25;
     const laneRaw = clamp(0.06, slot?.x ?? 0.5, 0.94);
-    const topPct = clamp(20, 18 + laneRaw * 60, 80);
+    const topPct = clamp(23, 20 + laneRaw * 54, 77.5);
     const leftPct = side === 'home' ? band : 100 - band;
     return { left: leftPct + '%', top: topPct + '%' };
   };
@@ -3609,9 +3609,21 @@ function renderGarberMode() {
         <div><label>Potential</label><input id="garberPlayerPotential" type="number" min="1" max="99" value="${Number(selected.potential || selected.overall || 1)}" /></div>
         <div><label>Age</label><input id="garberPlayerAge" type="number" min="15" max="45" value="${Number(selected.age || 18)}" /></div>
         <div><label>Value</label><input id="garberPlayerValue" type="number" min="0" step="10000" value="${Number(selected.value || selected.marketValue || 0)}" /></div>
+        <div><label>Position</label><select id="garberPlayerPos">${['GK','LB','CB','RB','CDM','CM','CAM','LM','RM','LW','RW','ST'].map(pos => `<option value="${pos}" ${String(selected.position||'')===pos?'selected':''}>${pos}</option>`).join('')}</select></div>
+        <div><label>Club</label><select id="garberPlayerClub"><option value="">Free Agent</option>${(state.teams||[]).map(t => `<option value="${t.id}" ${String(selected.clubId||'')===String(t.id)?'selected':''}>${escapeHtml(t.name)}</option>`).join('')}</select></div>
+        <div><label>Salary</label><input id="garberPlayerSalary" type="number" min="0" step="25000" value="${Number(selected.contract?.salary || 0)}" /></div>
+        <div><label>Contract Years Left</label><input id="garberPlayerYears" type="number" min="0" max="8" value="${Number(selected.contract?.yearsLeft || 0)}" /></div>
+        <div><label>Designation</label><select id="garberPlayerDesignation"><option value="">None</option>${['DP','TAM','U22'].map(d => `<option value="${d}" ${String(selected.designation||'')===d?'selected':''}>${d}</option>`).join('')}</select></div>
+        <div><label>Morale</label><input id="garberPlayerMorale" type="number" min="1" max="100" value="${Number(selected.morale || 50)}" /></div>
+        <div><label>Pace</label><input id="garberAttrPace" type="number" min="1" max="99" value="${Number(selected.attributes?.pace || 1)}" /></div>
+        <div><label>Shooting</label><input id="garberAttrShooting" type="number" min="1" max="99" value="${Number(selected.attributes?.shooting || 1)}" /></div>
+        <div><label>Passing</label><input id="garberAttrPassing" type="number" min="1" max="99" value="${Number(selected.attributes?.passing || 1)}" /></div>
+        <div><label>Dribbling</label><input id="garberAttrDribbling" type="number" min="1" max="99" value="${Number(selected.attributes?.dribbling || 1)}" /></div>
+        <div><label>Defense</label><input id="garberAttrDefense" type="number" min="1" max="99" value="${Number(selected.attributes?.defense || 1)}" /></div>
+        <div><label>Physical</label><input id="garberAttrPhysical" type="number" min="1" max="99" value="${Number(selected.attributes?.physical || 1)}" /></div>
       </div>
-      <div class="flex" style="margin-top:12px;"><button id="garberApplyPlayerBtn" class="primary-btn" type="button">Save Player Changes</button></div>
-      <div class="note" style="margin-top:10px;">Tip: use Garber Mode to hot-fix ratings, league economics, or run commissioner sandbox saves.</div>` : '<div class="note">No player selected.</div>'}
+      <div class="flex" style="margin-top:12px;gap:10px;flex-wrap:wrap;"><button id="garberApplyPlayerBtn" class="primary-btn" type="button">Save Player Changes</button><button id="garberMaxPotentialBtn" class="ghost-btn" type="button">Set Potential = 99</button><button id="garberResetMoraleBtn" class="ghost-btn" type="button">Reset Morale = 75</button></div>
+      <div class="note" style="margin-top:10px;">Tip: use Garber Mode to hot-fix ratings, attributes, contracts, league economics, or run commissioner sandbox saves.</div>` : '<div class="note">No player selected.</div>'}
     </div>
     <div class="panel"><div class="panel-head"><h3>Season Draft Board</h3><span>Live scouting board from opening day</span></div>
       <table><thead><tr><th>Name</th><th>College</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th class="num">POT</th></tr></thead><tbody>
@@ -4156,12 +4168,30 @@ function bindPageEvents() {
     const nextValue = Number($('#garberPlayerValue')?.value || player.value || player.marketValue || 0);
     player.value = Math.max(0, nextValue);
     player.marketValue = Math.max(0, nextValue);
+    player.position = $('#garberPlayerPos')?.value || player.position;
+    const clubVal = $('#garberPlayerClub')?.value;
+    player.clubId = clubVal ? Number(clubVal) : null;
+    player.designation = $('#garberPlayerDesignation')?.value || null;
+    player.morale = clamp(Number($('#garberPlayerMorale')?.value || player.morale || 50), 1, 100);
+    player.contract ||= {};
+    player.contract.salary = Math.max(0, Number($('#garberPlayerSalary')?.value || player.contract.salary || 0));
+    player.contract.yearsLeft = clamp(Number($('#garberPlayerYears')?.value || player.contract.yearsLeft || 0), 0, 8);
+    player.attributes ||= {};
+    player.attributes.pace = clamp(Number($('#garberAttrPace')?.value || player.attributes.pace || 1), 1, 99);
+    player.attributes.shooting = clamp(Number($('#garberAttrShooting')?.value || player.attributes.shooting || 1), 1, 99);
+    player.attributes.passing = clamp(Number($('#garberAttrPassing')?.value || player.attributes.passing || 1), 1, 99);
+    player.attributes.dribbling = clamp(Number($('#garberAttrDribbling')?.value || player.attributes.dribbling || 1), 1, 99);
+    player.attributes.defense = clamp(Number($('#garberAttrDefense')?.value || player.attributes.defense || 1), 1, 99);
+    player.attributes.physical = clamp(Number($('#garberAttrPhysical')?.value || player.attributes.physical || 1), 1, 99);
     player.importedOverall = player.overall;
     player.importedPotential = player.potential;
+    hydratePlayer(player, state.season?.year || 2026);
     await persist();
     toast(`${player.name} updated.`, 'success');
     await renderPage();
   });
+  $('#garberMaxPotentialBtn')?.addEventListener('click', async () => { const p = byPlayerId(garberSelectedPlayerId); if (!p) return; p.potential = 99; p.importedPotential = 99; await persist(); toast(`${p.name} potential set to 99.`, 'success'); await renderPage(); });
+  $('#garberResetMoraleBtn')?.addEventListener('click', async () => { const p = byPlayerId(garberSelectedPlayerId); if (!p) return; p.morale = 75; await persist(); toast(`${p.name} morale reset.`, 'success'); await renderPage(); });
 
   $$(".nav-jump-btn").forEach(btn => btn.addEventListener("click", async () => {
     currentPage = btn.dataset.targetPage || "dashboard";
