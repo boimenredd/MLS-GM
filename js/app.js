@@ -63,6 +63,7 @@ let simLeftView = "home";
 let simRightView = "away";
 let livePitchScene = null;
 let weeklyScheduleWeek = 1;
+let garberSelectedPlayerId = "";
 
 const tableSortState = {
   roster:        { key: "positionOrder", dir: "asc" },
@@ -78,6 +79,7 @@ function avg(arr = []) {
   const nums = (arr || []).map(v => Number(v)).filter(v => Number.isFinite(v));
   return nums.length ? (nums.reduce((s, v) => s + v, 0) / nums.length) : 0;
 }
+function clamp(min, val, max) { return Math.max(min, Math.min(max, val)); }
 
 
 const INITIAL_MLS_COACHES = [
@@ -1031,6 +1033,9 @@ function normalizeState(st) {
   st.draft.year ||= (st.season.year || 2026) + 1;
   st.draft.currentPickIndex ||= 0;
   st.draft.currentRound ||= 1;
+  if (!Array.isArray(st.draft.pool) || !st.draft.pool.length) {
+    try { initializeDraft(st); } catch (e) { console.warn('initializeDraft failed during normalizeState', e); }
+  }
 
   const startYear = (st.season.year || 2026) + 1;
   for (let year = startYear; year < startYear + 3; year++) {
@@ -2177,7 +2182,7 @@ function renderFotmobCoachAndBench(match, minute = 1) {
       return `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(outgoing || { name: '—' }, 'player-photo-inline')}<span class="num">${escapeHtml(getPlayerDisplayNumber(outgoing) || '—')}</span><div><strong>${escapeHtml(outgoing?.name || 'Player out')}</strong><small>${escapeHtml(outgoing?.position || '')}</small></div></div><div class="fotmob-table-mid">${ev.minute || 0}'</div><div class="fotmob-table-player right">${playerPhoto(incoming || { name: '—' }, 'player-photo-inline')}<div><strong>${escapeHtml(incoming?.name || 'Player in')}</strong><small>${escapeHtml(incoming?.position || '')}</small></div><span class="num">${escapeHtml(getPlayerDisplayNumber(incoming) || '—')}</span></div></div>`;
     }).join('');
   };
-  const benchList = (players = []) => players.map(p => `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(p,'player-photo-inline')}<span class="num">${escapeHtml(getPlayerDisplayNumber(p))}</span><div><strong>${escapeHtml(p.name || 'Unknown')}</strong><small>${escapeHtml(p.position || '')}</small></div></div><div class="fotmob-table-mid">${playerStatusIcons(p) || '—'}</div><div class="fotmob-table-rating">${getLivePlayerRating(p, minute).toFixed(1)}</div></div>`).join('') || `<div class="note">No bench listed.</div>`;
+  const benchList = (players = []) => players.map(p => { const summary = liveEventSummaryForPlayer(p?.id); const hasPlayed = !!summary.subOn; return `<div class="fotmob-table-row"><div class="fotmob-table-player">${playerPhoto(p,'player-photo-inline')}<span class="num">${escapeHtml(getPlayerDisplayNumber(p))}</span><div><strong>${escapeHtml(p.name || 'Unknown')}</strong><small>${escapeHtml(p.position || '')}</small></div></div><div class="fotmob-table-mid">${playerStatusIcons(p) || '—'}</div><div class="fotmob-table-rating">${hasPlayed ? getLivePlayerRating(p, minute).toFixed(1) : '—'}</div></div>`; }).join('') || `<div class="note">No bench listed.</div>`;
   const hc = document.getElementById('fotmob-home-coach'); if (hc) hc.innerHTML = coachHtml(homeCoach);
   const ac = document.getElementById('fotmob-away-coach'); if (ac) ac.innerHTML = coachHtml(awayCoach);
   const subs = document.getElementById('fotmob-subs'); if (subs) subs.innerHTML = `<div>${subRows('home') || '<div class="note">No substitutions yet.</div>'}</div><div>${subRows('away') || '<div class="note">No substitutions yet.</div>'}</div>`;
@@ -2252,10 +2257,10 @@ function renderFotmobPitch(match, minute = 1) {
 
   const clamp = (min, val, max) => Math.max(min, Math.min(max, val));
   const lineupBands = rowCount => {
-    if (rowCount <= 3) return [5.4, 25.0, 43.7];
-    if (rowCount === 4) return [5.4, 18.4, 31.0, 43.7];
-    if (rowCount === 5) return [5.4, 15.2, 24.7, 34.1, 43.7];
-    return [5.4, 12.9, 20.5, 28.0, 35.5, 43.7];
+    if (rowCount <= 3) return [13.5, 26.0, 39.0];
+    if (rowCount === 4) return [13.5, 24.0, 34.5, 44.5];
+    if (rowCount === 5) return [13.0, 21.3, 29.8, 37.8, 45.0];
+    return [12.5, 19.6, 26.8, 34.0, 40.8, 46.0];
   };
   const buildRowMap = layout => {
     const ys = [...new Set(layout.map(slot => Number((slot?.y ?? 0.5).toFixed(3))))].sort((a, b) => b - a);
@@ -2270,7 +2275,7 @@ function renderFotmobPitch(match, minute = 1) {
     const rowKey = Number((slot?.y ?? 0.5).toFixed(3));
     const band = rowMap.get(rowKey) ?? 25;
     const laneRaw = clamp(0.06, slot?.x ?? 0.5, 0.94);
-    const topPct = clamp(17, 13 + laneRaw * 74, 84);
+    const topPct = clamp(20, 18 + laneRaw * 60, 80);
     const leftPct = side === 'home' ? band : 100 - band;
     return { left: leftPct + '%', top: topPct + '%' };
   };
@@ -3554,12 +3559,74 @@ function renderBudget() {
   </div>`;
 }
 
+
+function draftBoardReveal(player, week = 1) {
+  const id = String(player?.id || player?.name || 'draft');
+  let seed = 0;
+  for (let i = 0; i < id.length; i++) seed = ((seed * 31) + id.charCodeAt(i)) % 100000;
+  const progress = Math.max(0, Math.min(1, ((week || 1) - 1) / 33));
+  const variance = ((seed % 200) / 100 - 1) * (2.4 * (1 - progress));
+  const growth = Math.max(0, ((player?.potential || 0) - (player?.overall || 0)) * (0.08 + progress * 0.22));
+  const displayedOverall = clamp(Math.round((player?.overall || 0) + variance + growth), 35, player?.potential || 99);
+  const displayedPotential = clamp(Math.round(Math.max(displayedOverall + 1, (player?.potential || displayedOverall) + variance * 0.35)), displayedOverall + 1, 80);
+  return { ...player, displayedOverall, displayedPotential };
+}
+
+function getVisibleDraftBoard() {
+  const week = state?.calendar?.week || 1;
+  return (state?.draft?.pool || [])
+    .map(p => draftBoardReveal(p, week))
+    .sort((a, b) => (b.displayedPotential + b.displayedOverall * 0.5) - (a.displayedPotential + a.displayedOverall * 0.5));
+}
+
+function renderGarberMode() {
+  state.leagueSettings ||= {
+    salaryCap: Number(getUserTeam(state)?.budget?.salaryCap || 6425000),
+    gamBase: Number(getUserTeam(state)?.budget?.gam || 3280000),
+    tamBase: Number(getUserTeam(state)?.budget?.tam || 2125000),
+    intlSlots: Number(getUserTeam(state)?.intlSlots || 8),
+  };
+  const settings = state.leagueSettings;
+  const allPlayers = (state.players || []).slice().sort((a,b) => String(a.name||'').localeCompare(String(b.name||'')));
+  if (!garberSelectedPlayerId || !allPlayers.find(p => String(p.id) === String(garberSelectedPlayerId))) garberSelectedPlayerId = allPlayers[0]?.id || '';
+  const selected = allPlayers.find(p => String(p.id) === String(garberSelectedPlayerId)) || null;
+  return `${pageHead('Garber Mode', 'Commissioner tools for league tuning, roster edits, and sandbox control')}
+  <div class="panel" style="margin-bottom:16px;"><div class="panel-head"><h3>League Controls</h3><span>Commissioner settings</span></div>
+    <div class="grid-4" style="gap:12px;">
+      <div><label>Salary Cap</label><input id="garberSalaryCap" type="number" value="${Number(settings.salaryCap || 6425000)}" /></div>
+      <div><label>Base GAM</label><input id="garberGam" type="number" value="${Number(settings.gamBase || 3280000)}" /></div>
+      <div><label>Base TAM</label><input id="garberTam" type="number" value="${Number(settings.tamBase || 2125000)}" /></div>
+      <div><label>Intl Slots</label><input id="garberIntlSlots" type="number" min="0" max="20" value="${Number(settings.intlSlots || 8)}" /></div>
+    </div>
+    <div class="flex" style="margin-top:12px;"><button id="garberApplyLeagueBtn" class="primary-btn" type="button">Apply League Settings</button></div>
+  </div>
+  <div class="grid-2">
+    <div class="panel"><div class="panel-head"><h3>Player Editor</h3><span>Edit any player</span></div>
+      <label>Select Player</label>
+      <select id="garberPlayerSelect">${allPlayers.map(p => `<option value="${p.id}" ${String(p.id)===String(garberSelectedPlayerId)?'selected':''}>${escapeHtml(p.name)} · ${escapeHtml(p.position)} · ${escapeHtml(byTeamId(p.clubId)?.shortName || 'FA')}</option>`).join('')}</select>
+      ${selected ? `<div class="grid-4" style="gap:12px;margin-top:12px;">
+        <div><label>Overall</label><input id="garberPlayerOverall" type="number" min="1" max="99" value="${Number(selected.overall || 1)}" /></div>
+        <div><label>Potential</label><input id="garberPlayerPotential" type="number" min="1" max="99" value="${Number(selected.potential || selected.overall || 1)}" /></div>
+        <div><label>Age</label><input id="garberPlayerAge" type="number" min="15" max="45" value="${Number(selected.age || 18)}" /></div>
+        <div><label>Value</label><input id="garberPlayerValue" type="number" min="0" step="10000" value="${Number(selected.value || selected.marketValue || 0)}" /></div>
+      </div>
+      <div class="flex" style="margin-top:12px;"><button id="garberApplyPlayerBtn" class="primary-btn" type="button">Save Player Changes</button></div>
+      <div class="note" style="margin-top:10px;">Tip: use Garber Mode to hot-fix ratings, league economics, or run commissioner sandbox saves.</div>` : '<div class="note">No player selected.</div>'}
+    </div>
+    <div class="panel"><div class="panel-head"><h3>Season Draft Board</h3><span>Live scouting board from opening day</span></div>
+      <table><thead><tr><th>Name</th><th>College</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th class="num">POT</th></tr></thead><tbody>
+      ${getVisibleDraftBoard().slice(0, 30).map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.college || '—')}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.displayedOverall}</td><td class="num">${p.displayedPotential}</td></tr>`).join('') || '<tr><td colspan="6">Draft board unavailable.</td></tr>'}
+      </tbody></table>
+    </div>
+  </div>`;
+}
+
 function renderDraft() {
   const phaseIsDraft = state.season.phase === "Draft";
   const draft = state.draft || {};
   const currentPick = phaseIsDraft && draft.order?.length ? getCurrentDraftPick(state) : null;
   const onClockTeam = currentPick ? byTeamId(currentPick.ownerTeamId) : null;
-  const board = (draft.pool || []).slice().sort((a, b) => (b.potential + b.overall * 0.5) - (a.potential + a.overall * 0.5));
+  const board = getVisibleDraftBoard();
   const ownedPicks = getUserDraftPicks([state.season.year + 1, state.season.year + 2]);
 
   return `${pageHead("MLS SuperDraft", phaseIsDraft ? "Live draft room with AI picks and draft-day trades" : "Expanded draft board, larger player pool, and lower-ceiling MLS-ready prospects")}
@@ -3576,7 +3643,7 @@ function renderDraft() {
     <div class="panel">
       <div class="panel-head"><h3>Draft Board</h3><span>${board.length}</span></div>
       <table><thead><tr><th>Name</th><th>College</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th class="num">POT</th>${phaseIsDraft && currentPick?.ownerTeamId===state.userTeamId ? `<th></th>` : ``}</tr></thead><tbody>
-        ${board.slice(0, 80).map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.college || "—")}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td>${phaseIsDraft && currentPick?.ownerTeamId===state.userTeamId ? `<td><button class="small-btn draft-pick-btn" data-id="${p.id}">Draft</button></td>` : ``}</tr>`).join("") || `<tr><td colspan="7">Board not available yet.</td></tr>`}
+        ${board.slice(0, 80).map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.college || "—")}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.displayedOverall ?? p.overall}</td><td class="num">${p.displayedPotential ?? p.potential}</td>${phaseIsDraft && currentPick?.ownerTeamId===state.userTeamId ? `<td><button class="small-btn draft-pick-btn" data-id="${p.id}">Draft</button></td>` : ``}</tr>`).join("") || `<tr><td colspan="7">Board not available yet.</td></tr>`}
       </tbody></table>
     </div>
     <div>
@@ -3976,6 +4043,7 @@ async function renderPage() {
   else if (currentPage==="trade")          html = renderTrade();
   else if (currentPage==="budget")         html = renderBudget();
   else if (currentPage==="draft")          html = renderDraft();
+  else if (currentPage==="garber")         html = renderGarberMode();
   else if (currentPage==="team")           html = renderTeamPage();
   else if (currentPage==="playoffs")       html = renderPlayoffs();
   else if (currentPage==="openCup")        html = renderOpenCup();
@@ -4061,6 +4129,40 @@ function bindPageEvents() {
   }));
   $$(".box-score-btn").forEach(btn => btn.addEventListener("click", () => showMatchDetail(btn.dataset.id, "box")));
   $$(".recap-btn").forEach(btn => btn.addEventListener("click", () => showMatchDetail(btn.dataset.id, "recap")));
+  $('#garberPlayerSelect')?.addEventListener('change', async ev => { garberSelectedPlayerId = ev.target.value || ''; await renderPage(); });
+  $('#garberApplyLeagueBtn')?.addEventListener('click', async () => {
+    state.leagueSettings ||= {};
+    state.leagueSettings.salaryCap = Number($('#garberSalaryCap')?.value || state.leagueSettings.salaryCap || 6425000);
+    state.leagueSettings.gamBase = Number($('#garberGam')?.value || state.leagueSettings.gamBase || 3280000);
+    state.leagueSettings.tamBase = Number($('#garberTam')?.value || state.leagueSettings.tamBase || 2125000);
+    state.leagueSettings.intlSlots = Number($('#garberIntlSlots')?.value || state.leagueSettings.intlSlots || 8);
+    (state.teams || []).forEach(team => {
+      team.budget ||= {};
+      team.budget.salaryCap = state.leagueSettings.salaryCap;
+      if (typeof team.budget.gam !== 'number' || team.budget.gam < state.leagueSettings.gamBase) team.budget.gam = state.leagueSettings.gamBase;
+      if (typeof team.budget.tam !== 'number' || team.budget.tam < state.leagueSettings.tamBase) team.budget.tam = state.leagueSettings.tamBase;
+      team.intlSlots = state.leagueSettings.intlSlots;
+    });
+    await persist();
+    toast('League settings updated in Garber Mode.', 'success');
+    await renderPage();
+  });
+  $('#garberApplyPlayerBtn')?.addEventListener('click', async () => {
+    const player = byPlayerId(garberSelectedPlayerId);
+    if (!player) return;
+    player.overall = clamp(Number($('#garberPlayerOverall')?.value || player.overall || 1), 1, 99);
+    player.potential = clamp(Number($('#garberPlayerPotential')?.value || player.potential || player.overall || 1), player.overall, 99);
+    player.age = clamp(Number($('#garberPlayerAge')?.value || player.age || 18), 15, 45);
+    const nextValue = Number($('#garberPlayerValue')?.value || player.value || player.marketValue || 0);
+    player.value = Math.max(0, nextValue);
+    player.marketValue = Math.max(0, nextValue);
+    player.importedOverall = player.overall;
+    player.importedPotential = player.potential;
+    await persist();
+    toast(`${player.name} updated.`, 'success');
+    await renderPage();
+  });
+
   $$(".nav-jump-btn").forEach(btn => btn.addEventListener("click", async () => {
     currentPage = btn.dataset.targetPage || "dashboard";
     $$(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page === currentPage));
