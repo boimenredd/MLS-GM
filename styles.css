@@ -5465,3 +5465,75 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
   .fotmob-player-name{font-size:10px !important;max-width:74px !important;}
   .gb-grid-v36{grid-template-columns:1fr 1fr !important;}
 }
+
+/* --- v38 lineup name overlap fix --- */
+.fotmob-pitch{
+  overflow:hidden !important;
+}
+.fotmob-player{
+  width:78px !important;
+  z-index:3 !important;
+}
+.fotmob-player-avatar-wrap{
+  height:42px !important;
+}
+.fotmob-player-avatar,
+.player-photo-fallback.fotmob-player-avatar.allow-initials,
+.player-photo-shell.fotmob-player-avatar{
+  width:42px !important;
+  height:42px !important;
+}
+.fotmob-player-head{
+  top:-19px !important;
+}
+.fotmob-player-rating{
+  min-width:30px !important;
+  height:20px !important;
+  font-size:11px !important;
+}
+.fotmob-player-rating.best{
+  min-width:40px !important;
+}
+.fotmob-player-notes{
+  top:20px !important;
+  transform:translateX(16px) !important;
+  max-width:54px !important;
+  gap:1px !important;
+}
+.fotmob-player-notes.away{
+  transform:translateX(14px) !important;
+}
+.fotmob-player-minute{
+  font-size:9px !important;
+}
+.fotmob-player-name{
+  margin-top:4px !important;
+  max-width:78px !important;
+  font-size:10px !important;
+  line-height:1 !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  position:relative !important;
+  z-index:4 !important;
+}
+.fotmob-player-number{
+  font-size:10px !important;
+}
+.fotmob-player-metric-wrap:empty{
+  display:none !important;
+  min-height:0 !important;
+  margin:0 !important;
+}
+.fotmob-player-metric-wrap{
+  margin-top:2px !important;
+  min-height:16px !important;
+}
+.fotmob-player-metric{
+  font-size:10px !important;
+  padding:1px 6px !important;
+}
+@media (max-width: 900px){
+  .fotmob-player{width:72px !important;}
+  .fotmob-player-name{max-width:72px !important;font-size:9px !important;}
+}
