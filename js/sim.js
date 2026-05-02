@@ -3154,3 +3154,276 @@ export function runOffseason(state) {
     state.schedule = matches.sort((a, b) => a.week - b.week || String(a.homeTeamId).localeCompare(String(b.homeTeamId)));
   };
 })();
+
+// ===== v33 rating/sim/second-team patch =====
+(function(){
+  const SOUTH_AMERICAN_NATIONS_V33 = ['Argentina','Brazil','Colombia','Uruguay','Paraguay','Chile','Peru','Ecuador','Venezuela','Bolivia'];
+  const NEXT_PRO_TEAM_SUFFIX_V33 = {
+    'Atlanta United FC':'Atlanta United 2',
+    'Austin FC':'Austin FC II',
+    'Charlotte FC':'Crown Legacy FC',
+    'Chicago Fire FC':'Chicago Fire II',
+    'Colorado Rapids':'Colorado Rapids 2',
+    'Columbus Crew':'Columbus Crew 2',
+    'D.C. United':'D.C. United 2',
+    'FC Cincinnati':'FC Cincinnati 2',
+    'FC Dallas':'North Texas SC',
+    'Houston Dynamo FC':'Houston Dynamo 2',
+    'Inter Miami CF':'Inter Miami II',
+    'LA Galaxy':'Ventura County FC',
+    'Los Angeles FC':'LAFC 2',
+    'Minnesota United FC':'MNUFC2',
+    'CF Montréal':'CF Montréal U23',
+    'Nashville SC':'Huntsville City FC',
+    'New England Revolution':'New England Revolution II',
+    'New York City FC':'New York City FC II',
+    'New York Red Bulls':'New York Red Bulls II',
+    'Orlando City SC':'Orlando City B',
+    'Philadelphia Union':'Philadelphia Union II',
+    'Portland Timbers':'Timbers2',
+    'Real Salt Lake':'Real Monarchs',
+    'San Diego FC':'San Diego FC II',
+    'San Jose Earthquakes':'The Town FC',
+    'Seattle Sounders FC':'Tacoma Defiance',
+    'Sporting Kansas City':'Sporting KC II',
+    'St. Louis City SC':'St. Louis CITY2',
+    'Toronto FC':'Toronto FC II',
+    'Vancouver Whitecaps FC':'Whitecaps FC 2',
+  };
+  const POS_POOL_V33 = ['GK','LB','CB','CB','RB','CDM','CM','CM','CAM','LW','RW','ST'];
+
+  function randV33(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+  function clampV33(n, min, max) { return Math.max(min, Math.min(max, n)); }
+  function playerInitialNameV33(nation) {
+    return `${pick(FIRST_NAMES)} ${pick(LAST_NAMES)}`;
+  }
+  function nextProRatingCurveV33(age) {
+    const base = age <= 17 ? randV33(39, 51) : age <= 19 ? randV33(43, 56) : age <= 21 ? randV33(46, 59) : randV33(49, 62);
+    const potential = clampV33(base + randV33(3, age <= 19 ? 18 : age <= 21 ? 13 : 8), base, 74);
+    return { overall: base, potential };
+  }
+  function createNextProPlayerV33(team, i) {
+    const age = randV33(16, 24);
+    const nationality = Math.random() < 0.82 ? (team.country === 'Canada' && Math.random() < 0.45 ? 'Canada' : 'USA') : pick(SOUTH_AMERICAN_NATIONS_V33);
+    const position = POS_POOL_V33[i % POS_POOL_V33.length] || pick(POS_POOL_V33);
+    const { overall, potential } = nextProRatingCurveV33(age);
+    const attrs = {
+      pace: clampV33(overall + randV33(-5, 9), 28, 78),
+      shooting: clampV33(overall + randV33(-8, 6), 25, 76),
+      passing: clampV33(overall + randV33(-7, 7), 28, 76),
+      dribbling: clampV33(overall + randV33(-6, 8), 28, 78),
+      defense: clampV33(overall + (['GK','CB','LB','RB','CDM'].includes(position) ? randV33(-3, 9) : randV33(-12, 2)), 24, 76),
+      physical: clampV33(overall + randV33(-4, 8), 28, 78),
+    };
+    return hydratePlayer({
+      id: uuid('np'),
+      name: playerInitialNameV33(nationality),
+      age,
+      nationality,
+      domestic: nationality === 'USA' || nationality === 'Canada',
+      position,
+      overall,
+      potential,
+      clubId: null,
+      nextProClubId: team.id,
+      secondTeam: true,
+      contract: { yearsLeft: randV33(1, 3), salary: randV33(30000, 90000), status: 'MLS NEXT Pro' },
+      attributes: attrs,
+      morale: randV33(52, 82),
+      stats: { gp:0, goals:0, assists:0, ratingSum:0, matchRatings:[] },
+      notes: 'MLS NEXT Pro second-team player',
+    }, state?.season?.year || 2026);
+  }
+
+  function ensureNextProStateV33(state) {
+    state.nextPro ||= { year: state.season?.year || 2026, teams: [], rosters: {}, standings: {}, schedule: [] };
+    if (state.nextPro.year !== (state.season?.year || 2026)) state.nextPro = { year: state.season.year, teams: [], rosters: {}, standings: {}, schedule: [] };
+    if (!state.nextPro.teams.length) {
+      state.nextPro.teams = (state.teams || []).map(t => ({
+        id: `np_${t.id}`,
+        parentTeamId: t.id,
+        name: NEXT_PRO_TEAM_SUFFIX_V33[t.name] || `${t.shortName || t.name} II`,
+        conference: t.conference,
+      }));
+    }
+    for (const nt of state.nextPro.teams) {
+      state.nextPro.rosters[nt.id] ||= [];
+      while (state.nextPro.rosters[nt.id].length < 22) {
+        const parent = state.teams.find(t => t.id === nt.parentTeamId) || {};
+        state.nextPro.rosters[nt.id].push(createNextProPlayerV33(parent, state.nextPro.rosters[nt.id].length));
+      }
+      state.nextPro.rosters[nt.id] = state.nextPro.rosters[nt.id].filter(Boolean).slice(0, 28);
+      state.nextPro.standings[nt.id] ||= { teamId: nt.id, played:0, wins:0, draws:0, losses:0, gf:0, ga:0, gd:0, points:0 };
+    }
+    if (!state.nextPro.schedule.length) {
+      const ids = state.nextPro.teams.map(t => t.id);
+      const matches = [];
+      for (let week = 1; week <= 28; week++) {
+        const shuffled = ids.slice().sort(() => Math.random() - 0.5);
+        for (let i = 0; i < shuffled.length - 1; i += 2) {
+          const flip = (week + i) % 2 === 0;
+          matches.push({ id: uuid('npm'), week, played:false, homeTeamId: flip ? shuffled[i] : shuffled[i+1], awayTeamId: flip ? shuffled[i+1] : shuffled[i], result:null });
+        }
+      }
+      state.nextPro.schedule = matches;
+    }
+    return state.nextPro;
+  }
+
+  function nextProTeamPowerV33(state, teamId) {
+    const roster = state.nextPro?.rosters?.[teamId] || [];
+    return roster.slice().sort((a,b)=>(b.overall||0)-(a.overall||0)).slice(0,11).reduce((sum,p)=>sum+(p.overall||50),0) / 11 || 50;
+  }
+  function applyNextProResultV33(state, match) {
+    const table = state.nextPro.standings;
+    const hr = table[match.homeTeamId], ar = table[match.awayTeamId];
+    if (!hr || !ar) return;
+    const hg = match.result.homeGoals, ag = match.result.awayGoals;
+    hr.played++; ar.played++;
+    hr.gf += hg; hr.ga += ag; ar.gf += ag; ar.ga += hg;
+    hr.gd = hr.gf - hr.ga; ar.gd = ar.gf - ar.ga;
+    if (hg > ag) { hr.wins++; ar.losses++; hr.points += 3; }
+    else if (ag > hg) { ar.wins++; hr.losses++; ar.points += 3; }
+    else { hr.draws++; ar.draws++; hr.points++; ar.points++; }
+  }
+  function simNextProMatchV33(state, match) {
+    if (match.played) return;
+    const hp = nextProTeamPowerV33(state, match.homeTeamId);
+    const ap = nextProTeamPowerV33(state, match.awayTeamId);
+    const hxg = clamp(1.15 + (hp - ap) * 0.025 + randFloat(-0.18, 0.30), 0.15, 3.2);
+    const axg = clamp(0.95 + (ap - hp) * 0.022 + randFloat(-0.20, 0.26), 0.1, 2.9);
+    const homeGoals = poisson(hxg);
+    const awayGoals = poisson(axg);
+    match.played = true;
+    match.result = { homeGoals, awayGoals, homeXg:Number(hxg.toFixed(2)), awayXg:Number(axg.toFixed(2)) };
+    const hRoster = (state.nextPro.rosters[match.homeTeamId] || []).slice().sort((a,b)=>(b.overall||0)-(a.overall||0)).slice(0,11);
+    const aRoster = (state.nextPro.rosters[match.awayTeamId] || []).slice().sort((a,b)=>(b.overall||0)-(a.overall||0)).slice(0,11);
+    const award = (roster, goals, conceded, result) => {
+      roster.forEach((p, idx) => {
+        p.stats ||= { gp:0, goals:0, assists:0, ratingSum:0, matchRatings:[] };
+        p.stats.gp++;
+        let r = 6.2 + (result === 'W' ? .25 : result === 'D' ? .06 : -.14) + randFloat(-.35,.35);
+        if (idx > 6 && goals) { const g = Math.random() < goals / 8 ? 1 : 0; p.stats.goals += g; r += g * .55; }
+        if (idx > 4 && goals && Math.random() < goals / 7) { p.stats.assists++; r += .25; }
+        if ((p.position === 'GK' || ['CB','LB','RB'].includes(p.position)) && conceded === 0) r += .28;
+        r = clamp(Number(r.toFixed(1)), 5.4, 8.9);
+        p.stats.ratingSum += r;
+        p.stats.matchRatings.push({ rating:r, minutes:90, dateLabel:`NP Week ${state.calendar?.week || match.week}`, goals:0, assists:0 });
+        if (p.stats.matchRatings.length > 20) p.stats.matchRatings.shift();
+      });
+    };
+    award(hRoster, homeGoals, awayGoals, homeGoals > awayGoals ? 'W' : homeGoals === awayGoals ? 'D' : 'L');
+    award(aRoster, awayGoals, homeGoals, awayGoals > homeGoals ? 'W' : homeGoals === awayGoals ? 'D' : 'L');
+    applyNextProResultV33(state, match);
+  }
+  function simNextProWeekV33(state, week) {
+    const np = ensureNextProStateV33(state);
+    (np.schedule || []).filter(m => m.week === Math.min(28, week) && !m.played).forEach(m => simNextProMatchV33(state, m));
+  }
+
+  const __v33AdvanceOneWeek = advanceOneWeek;
+  advanceOneWeek = function(state) {
+    const oldWeek = state.calendar?.week || 1;
+    ensureNextProStateV33(state);
+    __v33AdvanceOneWeek(state);
+    simNextProWeekV33(state, oldWeek);
+  };
+
+  const __v33GiveStatsBase = giveStats;
+  giveStats = function(state, match, teamId, gf, ga, xg, shots, sot, yc, rc, result, forcedStarters = null) {
+    const starters = Array.isArray(forcedStarters) && forcedStarters.length
+      ? forcedStarters
+      : state.players.filter(p => p.clubId === teamId).sort((a,b)=>b.overall-a.overall).slice(0,11);
+    const bench = state.players.filter(p => p.clubId === teamId && !starters.find(s => s.id === p.id)).sort((a,b)=>b.overall-a.overall).slice(0,7);
+    const subCount = Math.min(5, Math.max(2, randV33(2, 5)));
+    const usedBench = bench.slice(0, subCount);
+    const players = [...starters, ...usedBench];
+    const team = state.teams.find(t => t.id === teamId);
+    const opponent = state.teams.find(t => t.id === (teamId === match.homeTeamId ? match.awayTeamId : match.homeTeamId));
+    const playerEvents = new Map();
+    for (const event of match.result.events || []) {
+      if (!event.scorerId) continue;
+      const scorer = state.players.find(p => p.id === event.scorerId);
+      const assist = event.assistId ? state.players.find(p => p.id === event.assistId) : null;
+      if (scorer?.clubId === teamId) {
+        if (!playerEvents.has(scorer.id)) playerEvents.set(scorer.id, { goals:0, assists:0, yellows:0, reds:0 });
+        playerEvents.get(scorer.id).goals++;
+      }
+      if (assist?.clubId === teamId) {
+        if (!playerEvents.has(assist.id)) playerEvents.set(assist.id, { goals:0, assists:0, yellows:0, reds:0 });
+        playerEvents.get(assist.id).assists++;
+      }
+    }
+    const resultBonus = result === 'win' ? 0.32 : result === 'draw' ? 0.06 : -0.18;
+    const cleanSheet = ga === 0;
+    match.result.playerRatings ||= {};
+    players.forEach((p, idx) => {
+      const isStarter = starters.some(s => s.id === p.id);
+      const minutes = isStarter ? (usedBench.length && idx < usedBench.length ? randV33(58, 88) : 90) : randV33(8, 35);
+      const ev = playerEvents.get(p.id) || { goals:0, assists:0, yellows:0, reds:0 };
+      const pos = normalizeGeneratedPosition(p.position || 'CM');
+      const bucket = posBucket(pos);
+      let rating = 6.05 + resultBonus;
+      rating += (p.overall - 60) * 0.012;
+      rating += randFloat(-0.34, 0.36);
+      rating += ev.goals * (bucket === 'ATT' ? 0.78 : bucket === 'MID' ? 0.88 : 1.05);
+      rating += ev.assists * 0.42;
+      if (cleanSheet && (bucket === 'GK' || bucket === 'DEF')) rating += bucket === 'GK' ? 0.55 : 0.36;
+      if (bucket === 'GK') {
+        rating += Math.max(-0.55, Math.min(0.38, (sot - gf) * 0.05 - ga * 0.16));
+      } else if (bucket === 'DEF') {
+        rating += Math.max(-0.35, Math.min(0.32, (cleanSheet ? .18 : -ga * .06) + (shots < 10 ? .08 : 0)));
+      } else if (bucket === 'MID') {
+        rating += Math.max(-0.25, Math.min(0.30, (xg - 1.0) * .09 + (gf ? .05 : 0)));
+      } else {
+        rating += Math.max(-0.28, Math.min(0.34, (xg - 1.0) * .11 + (shots > 10 ? .08 : 0)));
+      }
+      rating -= ev.yellows * .18 + ev.reds * 1.2;
+      if (!isStarter) rating += .05 - Math.max(0, 25 - minutes) * .006;
+      rating = clamp(Number(rating.toFixed(1)), ev.reds ? 4.4 : 5.0, 10.0);
+
+      p.stats ||= {};
+      p.stats.gp = (p.stats.gp || 0) + 1;
+      p.stats.starts = (p.stats.starts || 0) + (isStarter ? 1 : 0);
+      p.stats.minutes = (p.stats.minutes || 0) + minutes;
+      p.stats.goals = (p.stats.goals || 0) + ev.goals;
+      p.stats.assists = (p.stats.assists || 0) + ev.assists;
+      p.stats.yellows = (p.stats.yellows || 0) + ev.yellows;
+      p.stats.reds = (p.stats.reds || 0) + ev.reds;
+      p.stats.ratingSum = Number((p.stats.ratingSum || 0) + rating);
+      p.stats.matchRatings ||= [];
+      const row = { matchId: match.id, rating, opponent: opponent?.name || 'Unknown', result, score: `${gf}-${ga}`, minutes, goals: ev.goals, assists: ev.assists, yellows: ev.yellows, reds: ev.reds, dateLabel: `Week ${state.calendar.week}` };
+      p.stats.matchRatings.push(row);
+      if (p.stats.matchRatings.length > 36) p.stats.matchRatings.shift();
+      match.result.playerRatings[p.id] = row;
+    });
+  };
+
+  const __v33MaybeExternalOffer = maybeExternalOffer;
+  maybeExternalOffer = function(state) {
+    const userTeam = getUserTeam(state);
+    const standings = state.standings?.[userTeam.conference]?.find(r => r.teamId === userTeam.id);
+    const players = getTeamPlayers(state, userTeam.id)
+      .filter(p => p.age >= 18 && p.contract?.status !== 'Draft Eligible')
+      .sort((a,b)=>(b.potential||0)-(a.potential||0) || (b.overall||0)-(a.overall||0));
+    if (!players.length) return;
+    const week = state.calendar?.week || 1;
+    const transferWindowBoost = (week <= 6 || (week >= 18 && week <= 24)) ? 0.08 : 0;
+    const tableBoost = standings && standings.points < Math.max(10, standings.played * 1.05) ? 0.04 : 0;
+    const chance = (userTeam._rebuildMode ? 0.20 : 0.10) + transferWindowBoost + tableBoost;
+    if (Math.random() > chance) return;
+    const targetPool = players.slice(0, Math.min(players.length, 18)).filter(p => !(p.designation === 'DP' && (p.overall || 0) >= 76) || Math.random() < 0.35);
+    const target = pick(targetPool.length ? targetPool : players);
+    const yearsLeft = Math.max(0, Number(target.contract?.yearsLeft || 1));
+    const ageUpside = Math.max(0, 26 - (target.age || 25)) * 220000;
+    const production = (target.stats?.goals || 0) * 210000 + (target.stats?.assists || 0) * 135000 + (target.stats?.gp || 0) * 35000;
+    const scarcity = ['ST','CAM','LW','RW','GK'].includes(target.position) ? 450000 : ['CB','CDM'].includes(target.position) ? 260000 : 160000;
+    const statusBonus = target.designation === 'DP' ? 1600000 : target.designation === 'U22' ? 950000 : target.designation === 'TAM' ? 520000 : 0;
+    const base = (target.overall || 60) ** 2 * 1800 + (target.potential || target.overall || 60) * 65000 + ageUpside + production + scarcity + statusBonus + yearsLeft * 210000;
+    const offer = Math.round(Math.max(target.contract?.salary || 0, base) * randFloat(0.92, 1.45) / 25000) * 25000;
+    const bidders = state.teams.filter(t => t.id !== userTeam.id).sort(() => Math.random() - 0.5);
+    state.pendingOffer = { id: uuid('offer'), playerId: target.id, bidClub: bidders[0]?.name || 'MLS Club', amount: offer };
+    addTransaction(state, 'Offer', `${state.pendingOffer.bidClub} offered ${offer.toLocaleString()} for ${target.name}.`);
+  };
+
+})();

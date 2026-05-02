@@ -2104,7 +2104,7 @@ function buildFotmobLiveShell(match) {
     <div class="fotmob-live-shell">
       <div class="fotmob-live-head">
         <div class="fotmob-live-meta">${escapeHtml(state.season.phase)} · Week ${match.week}</div>
-        <div class="fotmob-live-meta">${escapeHtml(getUserTeam(state).stadium || 'MLS Venue')}</div>
+        <div class="fotmob-live-meta">${escapeHtml((byTeamId(match.homeTeamId)?.stadium || byTeamId(match.homeTeamId)?.name || 'MLS Venue'))}</div>
       </div>
       <div class="fotmob-score-hero">
         <div class="fotmob-score-team left"><div class="fotmob-score-name" id="sim-home-name"></div><div class="fotmob-goal-list" id="sim-home-goals"></div></div>
@@ -5093,4 +5093,321 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
       try { await renderPage(); } catch {}
     }
   }, 600);
+})();
+
+// ===== v33 final UI patch =====
+(function(){
+  const US_FIRST_V33 = ['Alex','Jordan','Mason','Carter','Noah','Logan','Ethan','Aiden','Mateo','Diego','Julian','Caleb','Wyatt','Owen','Luke','Isaac','Miles','Nolan','Adrian','Sebastian'];
+  const US_LAST_V33 = ['Smith','Johnson','Miller','Brown','Davis','Wilson','Anderson','Thomas','Moore','Martin','Clark','Lewis','Walker','Hall','Allen','Young','King','Wright','Scott','Green'];
+  const SA_FIRST_V33 = ['Mateo','Santiago','Thiago','Bruno','Rafael','Nico','Joaquin','Lautaro','Emiliano','Andres'];
+  const SA_LAST_V33 = ['Silva','Santos','Pereira','Gomez','Alvarez','Romero','Torres','Ramirez','Vega','Morales'];
+  const NEXT_PRO_NAMES_V33 = {
+    'Atlanta United FC':'Atlanta United 2','Austin FC':'Austin FC II','Charlotte FC':'Crown Legacy FC','Chicago Fire FC':'Chicago Fire II','Colorado Rapids':'Colorado Rapids 2','Columbus Crew':'Columbus Crew 2','D.C. United':'D.C. United 2','FC Cincinnati':'FC Cincinnati 2','FC Dallas':'North Texas SC','Houston Dynamo FC':'Houston Dynamo 2','Inter Miami CF':'Inter Miami II','LA Galaxy':'Ventura County FC','Los Angeles FC':'LAFC 2','Minnesota United FC':'MNUFC2','CF Montréal':'CF Montréal U23','Nashville SC':'Huntsville City FC','New England Revolution':'New England Revolution II','New York City FC':'New York City FC II','New York Red Bulls':'New York Red Bulls II','Orlando City SC':'Orlando City B','Philadelphia Union':'Philadelphia Union II','Portland Timbers':'Timbers2','Real Salt Lake':'Real Monarchs','San Diego FC':'San Diego FC II','San Jose Earthquakes':'The Town FC','Seattle Sounders FC':'Tacoma Defiance','Sporting Kansas City':'Sporting KC II','St. Louis City SC':'St. Louis CITY2','Toronto FC':'Toronto FC II','Vancouver Whitecaps FC':'Whitecaps FC 2'
+  };
+  const POS_NEXT_V33 = ['GK','LB','CB','CB','RB','CDM','CM','CM','CAM','LW','RW','ST','CB','CM','ST','LW','RB','GK','CDM','RW','LB','CAM'];
+  const clampV33 = (n,min,max)=>Math.max(min,Math.min(max,n));
+  const randV33 = (min,max)=>Math.floor(Math.random()*(max-min+1))+min;
+  const ratingColorClassV33 = value => {
+    const n = Number(value || 0);
+    if (n >= 7) return 'rating-good';
+    if (n >= 5) return 'rating-warn';
+    return 'rating-bad';
+  };
+  const ratingPillV33 = value => `<span class="match-rating-pill ${ratingColorClassV33(value)}">${Number(value || 0).toFixed(1)}</span>`;
+
+  const __pageHeadV33 = pageHead;
+  pageHead = function(title, sub) {
+    return `<div class="page-head"><div><div class="page-title">${escapeHtml(title)}</div></div></div>`;
+  };
+
+  function nextProPlayerNameV33(isSouthAmerican) {
+    return isSouthAmerican ? `${pick(SA_FIRST_V33)} ${pick(SA_LAST_V33)}` : `${pick(US_FIRST_V33)} ${pick(US_LAST_V33)}`;
+  }
+  function createNextProAppPlayerV33(teamId, i) {
+    const age = randV33(16, 24);
+    const southAmerican = Math.random() < 0.17;
+    const position = POS_NEXT_V33[i % POS_NEXT_V33.length] || pick(POS_NEXT_V33);
+    const overall = age <= 17 ? randV33(39,51) : age <= 19 ? randV33(43,56) : age <= 21 ? randV33(46,59) : randV33(49,62);
+    const potential = clampV33(overall + randV33(3, age <= 19 ? 18 : age <= 21 ? 13 : 8), overall, 74);
+    const attrs = {
+      pace: clampV33(overall + randV33(-5,9), 25, 78),
+      shooting: clampV33(overall + randV33(-8,6), 22, 76),
+      passing: clampV33(overall + randV33(-7,7), 24, 76),
+      dribbling: clampV33(overall + randV33(-6,8), 24, 78),
+      defense: clampV33(overall + (['GK','CB','LB','RB','CDM'].includes(position) ? randV33(-3,9) : randV33(-12,2)), 20, 76),
+      physical: clampV33(overall + randV33(-4,8), 25, 78),
+    };
+    return hydratePlayer({
+      id:`np_${teamId}_${Date.now().toString(36)}_${i}_${Math.random().toString(36).slice(2,5)}`,
+      name: nextProPlayerNameV33(southAmerican),
+      age,
+      nationality: southAmerican ? pick(['Argentina','Brazil','Colombia','Uruguay','Paraguay','Chile','Peru','Ecuador','Venezuela']) : 'USA',
+      domestic:true,
+      position,
+      overall,
+      potential,
+      secondTeam:true,
+      nextProClubId: teamId,
+      contract:{ yearsLeft:randV33(1,3), salary:randV33(30000,90000), status:'MLS NEXT Pro' },
+      attributes:attrs,
+      morale:randV33(52,82),
+      stats:{ gp:0, goals:0, assists:0, ratingSum:0, matchRatings:[] },
+      notes:'MLS NEXT Pro second-team player'
+    }, state?.season?.year || 2026);
+  }
+  function ensureNextProAppStateV33() {
+    state.nextPro ||= { year:state.season?.year || 2026, teams:[], rosters:{}, standings:{}, schedule:[] };
+    if (state.nextPro.year !== (state.season?.year || 2026)) state.nextPro = { year:state.season.year, teams:[], rosters:{}, standings:{}, schedule:[] };
+    if (!state.nextPro.teams.length) {
+      state.nextPro.teams = (state.teams || []).map(t => ({ id:`np_${t.id}`, parentTeamId:t.id, name:NEXT_PRO_NAMES_V33[t.name] || `${t.shortName || t.name} II`, conference:t.conference }));
+    }
+    for (const nt of state.nextPro.teams) {
+      state.nextPro.rosters[nt.id] ||= [];
+      while (state.nextPro.rosters[nt.id].length < 22) state.nextPro.rosters[nt.id].push(createNextProAppPlayerV33(nt.id, state.nextPro.rosters[nt.id].length));
+      state.nextPro.standings[nt.id] ||= { teamId:nt.id, played:0, wins:0, draws:0, losses:0, gf:0, ga:0, gd:0, points:0 };
+    }
+    return state.nextPro;
+  }
+
+  const __normalizeStateV33 = normalizeState;
+  normalizeState = function(st) {
+    const out = __normalizeStateV33(st);
+    if (out) {
+      state = out;
+      ensureNextProAppStateV33();
+    }
+    return out;
+  };
+
+  const __renderAcademyOldV33 = renderAcademy;
+  renderAcademy = function() {
+    const team = getUserTeam(state);
+    const prospects = getTeamAcademy(state, team.id);
+    const np = ensureNextProAppStateV33();
+    const nt = np.teams.find(t => t.parentTeamId === team.id);
+    const roster = (np.rosters[nt?.id] || []).slice().sort((a,b)=>(b.potential||0)-(a.potential||0)||(b.overall||0)-(a.overall||0));
+    const table = Object.values(np.standings || {}).sort((a,b)=>(b.points||0)-(a.points||0)||(b.gd||0)-(a.gd||0));
+    return `${pageHead("Youth Academy","")}
+      <div class="grid-2 academy-v33-grid">
+        <div class="panel">
+          <div class="panel-head"><h3>Academy Prospects</h3><span>${prospects.length} players</span></div>
+          <table><thead><tr><th>Name</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th class="num">POT</th><th></th></tr></thead><tbody>
+            ${prospects.map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td><td class="num"><button class="small-btn academy-callup-btn" data-id="${p.id}">Call Up</button></td></tr>`).join("")}
+          </tbody></table>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>${escapeHtml(nt?.name || 'Second Team')}</h3><span>MLS NEXT Pro side</span></div>
+          <table class="tight-table"><thead><tr><th>Name</th><th>Pos</th><th class="num">Age</th><th class="num">OVR</th><th class="num">POT</th><th class="num">Apps</th><th class="num">★</th></tr></thead><tbody>
+            ${roster.slice(0,24).map(p => `<tr><td>${escapeHtml(p.name)}</td><td>${escapeHtml(p.position)}</td><td class="num">${p.age}</td><td class="num">${p.overall}</td><td class="num">${p.potential}</td><td class="num">${p.stats?.gp || 0}</td><td class="num">${p.stats?.gp ? ratingPillV33((p.stats.ratingSum || 0) / Math.max(1,p.stats.gp)) : '—'}</td></tr>`).join('')}
+          </tbody></table>
+        </div>
+      </div>
+      <div class="panel mt12">
+        <div class="panel-head"><h3>MLS NEXT Pro Table</h3><span>Side league sims with the season</span></div>
+        <table class="tight-table"><thead><tr><th>#</th><th>Club</th><th class="num">GP</th><th class="num">W</th><th class="num">D</th><th class="num">L</th><th class="num">GD</th><th class="num">Pts</th></tr></thead><tbody>
+          ${table.slice(0,16).map((r,i) => { const t = np.teams.find(x => x.id === r.teamId); return `<tr class="${t?.parentTeamId === team.id ? 'user-nextpro-row' : ''}"><td>${i+1}</td><td>${escapeHtml(t?.name || 'MLS NEXT Pro')}</td><td class="num">${r.played||0}</td><td class="num">${r.wins||0}</td><td class="num">${r.draws||0}</td><td class="num">${r.losses||0}</td><td class="num">${(r.gd||0)>0?'+':''}${r.gd||0}</td><td class="num">${r.points||0}</td></tr>`; }).join('')}
+        </tbody></table>
+      </div>`;
+  };
+
+  function matchRatingsForTeamV33(match, teamId) {
+    const stored = match?.result?.playerRatings || {};
+    let rows = Object.entries(stored).map(([pid,row]) => ({ player: byPlayerId(pid), ...row })).filter(row => row.player?.clubId === teamId);
+    if (!rows.length) {
+      rows = getTeamPlayers(state, teamId).map(player => {
+        const found = (player.stats?.matchRatings || []).slice().reverse().find(r => r.matchId === match.id || r.dateLabel === `Week ${match.week}`);
+        return found ? { player, ...found } : null;
+      }).filter(Boolean);
+    }
+    return rows.sort((a,b)=>(b.rating||0)-(a.rating||0));
+  }
+
+  showMatchDetail = function(matchId, mode = "box") {
+    const match = (state?.schedule || []).find(m => m.id === matchId);
+    if (!match || !match.played || !match.result) return toast("That match has not been completed yet.", "warn");
+    const home = byTeamId(match.homeTeamId);
+    const away = byTeamId(match.awayTeamId);
+    const res = match.result;
+    const goalRows = (res.events || []).map(ev => {
+      const scorer = ev.scorerId ? byPlayerId(ev.scorerId) : null;
+      const assist = ev.assistId ? byPlayerId(ev.assistId) : null;
+      return `<div class="detail-event-row"><span>${ev.minute}'</span><strong>⚽ ${escapeHtml(scorer?.name || "Unknown scorer")}</strong><em>${assist ? `👟 ${escapeHtml(assist.name)}` : "Unassisted"}</em></div>`;
+    }).join("") || `<div class="note">No goal events logged.</div>`;
+    const ratingTable = (team, rows) => `<div class="panel-lite mt12"><div class="panel-head"><h3>${escapeHtml(team.name)} Ratings</h3><span>${rows.length}</span></div><table class="tight-table box-rating-table"><thead><tr><th>Player</th><th>Pos</th><th class="num">Min</th><th class="num">G</th><th class="num">A</th><th class="num">★</th></tr></thead><tbody>${rows.map(r => `<tr><td>${escapeHtml(r.player?.name || 'Player')}</td><td>${escapeHtml(r.player?.position || '—')}</td><td class="num">${r.minutes || 90}</td><td class="num">${r.goals || 0}</td><td class="num">${r.assists || 0}</td><td class="num">${ratingPillV33(r.rating)}</td></tr>`).join('') || `<tr><td colspan="6">No ratings stored for this match.</td></tr>`}</tbody></table></div>`;
+    if (mode === "recap") {
+      showInfoOverlay("Match Recap", `<div class="match-recap-hero"><strong>${escapeHtml(home.name)}</strong><span>${res.homeGoals} – ${res.awayGoals}</span><strong>${escapeHtml(away.name)}</strong></div><div class="panel-lite mt12"><div class="panel-head"><h3>Key Moments</h3><span>Goals</span></div>${goalRows}</div>`);
+      return;
+    }
+    const homeRows = matchRatingsForTeamV33(match, home.id);
+    const awayRows = matchRatingsForTeamV33(match, away.id);
+    showInfoOverlay("Box Score", `<div class="match-recap-hero"><strong>${escapeHtml(home.name)}</strong><span>${res.homeGoals} – ${res.awayGoals}</span><strong>${escapeHtml(away.name)}</strong></div><table class="tight-table info-score-table"><thead><tr><th>Club</th><th class="num">Goals</th><th class="num">Shots</th><th class="num">SOT</th><th class="num">xG</th><th class="num">Poss</th><th class="num">YC</th><th class="num">RC</th></tr></thead><tbody><tr><td>${escapeHtml(home.name)}</td><td class="num">${res.homeGoals}</td><td class="num">${res.homeShots}</td><td class="num">${res.homeSot}</td><td class="num">${(res.homeXg || 0).toFixed(2)}</td><td class="num">${res.homePoss}%</td><td class="num">${res.homeYellows || 0}</td><td class="num">${res.homeReds || 0}</td></tr><tr><td>${escapeHtml(away.name)}</td><td class="num">${res.awayGoals}</td><td class="num">${res.awayShots}</td><td class="num">${res.awaySot}</td><td class="num">${(res.awayXg || 0).toFixed(2)}</td><td class="num">${res.awayPoss}%</td><td class="num">${res.awayYellows || 0}</td><td class="num">${res.awayReds || 0}</td></tr></tbody></table><div class="grid-2">${ratingTable(home, homeRows)}${ratingTable(away, awayRows)}</div><div class="panel-lite mt12"><div class="panel-head"><h3>Goal Log</h3><span>Events</span></div>${goalRows}</div>`);
+  };
+
+  const __buildAutoLineupOldV33 = buildAutoLineup;
+  buildAutoLineup = function(players, positions, benchCount = 9) {
+    const pool = [...(players || [])].filter(Boolean).sort((a,b)=>(b.overall||0)-(a.overall||0)||(b.potential||0)-(a.potential||0));
+    const lineup = new Array(positions.length).fill(null);
+    const assigned = new Set();
+    const slots = positions.map((position, idx) => ({ position, idx }));
+    const roleGroup = pos => ({ GK:'GK', LB:'DEF', RB:'DEF', CB:'DEF', CDM:'MID', CM:'MID', CAM:'MID', LM:'MID', RM:'MID', LW:'ATT', RW:'ATT', ST:'ATT' }[normalizePosition(pos)] || 'MID');
+    const choose = slot => pool.filter(p => !assigned.has(p.id))
+      .filter(p => normalizePosition(slot.position) === 'GK' ? normalizePosition(p.position) === 'GK' : normalizePosition(p.position) !== 'GK')
+      .map(player => {
+        const fit = lineupFitScore(player, slot.position);
+        const groupMatch = roleGroup(player.position) === roleGroup(slot.position) ? 8 : -10;
+        const ageCurve = player.age <= 22 ? 1.5 : player.age >= 32 ? -1.0 : 0;
+        const morale = ((player.morale || 70) - 70) * .04;
+        const score = fit + (player.overall || 0) * .44 + (player.potential || 0) * .08 + groupMatch + ageCurve + morale;
+        return { player, fit, score };
+      }).sort((a,b)=>b.score-a.score || b.fit-a.fit || (b.player.overall||0)-(a.player.overall||0))[0];
+    const orderedSlots = slots.slice().sort((a,b) => (roleGroup(a.position) === 'GK' ? -1 : roleGroup(b.position) === 'GK' ? 1 : 0) || a.idx - b.idx);
+    for (const slot of orderedSlots) {
+      const chosen = choose(slot);
+      if (!chosen) continue;
+      lineup[slot.idx] = { playerId: chosen.player.id, role: (ROLES[slot.position] || [slot.position])[0], fitScore: chosen.fit };
+      assigned.add(chosen.player.id);
+    }
+    const topPlayers = pool.filter(p => normalizePosition(p.position) !== 'GK').slice(0, 13);
+    for (const star of topPlayers) {
+      if (assigned.has(star.id)) continue;
+      let best = null;
+      for (const slot of slots.filter(s => normalizePosition(s.position) !== 'GK')) {
+        const current = pool.find(p => p.id === lineup[slot.idx]?.playerId);
+        if (!current) continue;
+        const starFit = lineupFitScore(star, slot.position);
+        const curFit = lineupFitScore(current, slot.position);
+        const gain = (star.overall || 0) - (current.overall || 0) + (starFit - curFit) * .65;
+        if (starFit >= 70 && (!best || gain > best.gain)) best = { slot, current, gain, starFit };
+      }
+      if (best && best.gain > 2.0) {
+        assigned.delete(best.current.id);
+        lineup[best.slot.idx] = { playerId: star.id, role:(ROLES[best.slot.position] || [best.slot.position])[0], fitScore:best.starFit };
+        assigned.add(star.id);
+      }
+    }
+    const bench = [];
+    const benchPool = pool.filter(p => !assigned.has(p.id));
+    const add = fn => { const idx = benchPool.findIndex(p => fn(p) && !bench.includes(p.id)); if (idx >= 0 && bench.length < benchCount) bench.push(benchPool.splice(idx,1)[0].id); };
+    add(p => normalizePosition(p.position) === 'GK');
+    add(p => ['CB','LB','RB'].includes(normalizePosition(p.position)));
+    add(p => ['CB','LB','RB'].includes(normalizePosition(p.position)));
+    add(p => ['CDM','CM','CAM'].includes(normalizePosition(p.position)));
+    add(p => ['CDM','CM','CAM'].includes(normalizePosition(p.position)));
+    add(p => ['LW','RW','LM','RM'].includes(normalizePosition(p.position)));
+    add(p => ['LW','RW','ST'].includes(normalizePosition(p.position)));
+    add(p => normalizePosition(p.position) === 'ST');
+    add(p => true);
+    while (bench.length < benchCount && benchPool.length) bench.push(benchPool.shift().id);
+    return { lineup, bench: bench.slice(0, benchCount) };
+  };
+
+  applySubstitutionToPack = function(pack, playerId = null) {
+    if (!pack || !(pack.bench || []).length) return null;
+    const minute = livePitchScene?.currentMinute || 60;
+    const sameGroup = pos => ({ LB:'DEF', RB:'DEF', CB:'DEF', LWB:'DEF', RWB:'DEF', CDM:'MID', CM:'MID', CAM:'MID', LM:'MID', RM:'MID', LW:'ATT', RW:'ATT', ST:'ATT', GK:'GK' }[normalizePosition(pos)] || 'OTHER');
+    let incoming;
+    if (playerId) {
+      const benchIdx = (pack.bench || []).findIndex(p => p.id === playerId);
+      if (benchIdx < 0) return null;
+      incoming = pack.bench.splice(benchIdx, 1)[0];
+    } else {
+      const bestBench = (pack.bench || []).filter(p => normalizePosition(p.position) !== 'GK').map((p, idx) => ({ p, idx, score:(p.overall||0) + ((p.morale||70)-70)*.05 + (minute > 70 && ['ST','LW','RW','CAM'].includes(p.position) ? 2 : 0) })).sort((a,b)=>b.score-a.score)[0];
+      if (!bestBench) return null;
+      incoming = pack.bench.splice(bestBench.idx, 1)[0];
+    }
+    if (!incoming || normalizePosition(incoming.position) === 'GK') return null;
+    const candidates = (pack.xi || []).map((entry, idx) => ({ idx, entry, player:entry.player, fit:lineupFitScore(incoming, entry.position), energy:getLivePlayerEnergy(entry.player, minute), rating:getLivePlayerRating(entry.player, minute) }))
+      .filter(row => row.player && normalizePosition(row.player.position) !== 'GK')
+      .sort((a,b) => {
+        const sameA = sameGroup(a.entry.position) === sameGroup(incoming.position) ? 1 : 0;
+        const sameB = sameGroup(b.entry.position) === sameGroup(incoming.position) ? 1 : 0;
+        const tiredA = (100 - a.energy) + Math.max(0, 6.4 - a.rating) * 15;
+        const tiredB = (100 - b.energy) + Math.max(0, 6.4 - b.rating) * 15;
+        return sameB - sameA || tiredB - tiredA || a.rating - b.rating || b.fit - a.fit;
+      });
+    const choice = candidates[0];
+    if (!choice) return null;
+    const outgoing = choice.player;
+    pack.xi[choice.idx] = { position: choice.entry.position, player: incoming };
+    if (outgoing) pack.bench.push(outgoing);
+    return { incoming, outgoing, outPlayerId: outgoing?.id || null };
+  };
+
+  renderFotmobPitch = function(match, minute = 1) {
+    const pitch = document.getElementById('fotmob-pitch');
+    if (!pitch || !livePitchScene) return;
+    const hp = livePitchScene.homePack;
+    const ap = livePitchScene.awayPack;
+    const homeLayout = FORMATION_LAYOUT[livePitchScene.homeFormation] || FORMATION_LAYOUT['4-3-3'];
+    const awayLayout = FORMATION_LAYOUT[livePitchScene.awayFormation] || FORMATION_LAYOUT['4-3-3'];
+    const rows = layout => [...new Set(layout.map(slot => Number((slot?.y ?? .5).toFixed(3))))].sort((a,b)=>b-a);
+    const bandsFor = count => count <= 3 ? [7.5,27,45] : count === 4 ? [7,19.5,33,45.5] : [7,17,27.5,38,46];
+    const rowMap = layout => { const ys = rows(layout); const bands = bandsFor(ys.length); const map = new Map(); ys.forEach((y,i)=>map.set(y,bands[i] ?? 45)); return map; };
+    const hRows = rowMap(homeLayout), aRows = rowMap(awayLayout);
+    const yLanes = [14,25,36,48,60,72,84];
+    const makeCoords = (slot, side, map) => {
+      const rowKey = Number((slot?.y ?? .5).toFixed(3));
+      const band = map.get(rowKey) ?? 25;
+      const x = Math.max(.06, Math.min(.94, slot?.x ?? .5));
+      const lane = yLanes[Math.max(0, Math.min(yLanes.length - 1, Math.round(x * (yLanes.length - 1))))];
+      return { left: (side === 'home' ? band : 100 - band) + '%', top: lane + '%' };
+    };
+    const allLiveXi = [...(hp?.xi || []), ...(ap?.xi || [])].map(({ player }) => player).filter(Boolean);
+    const bestRating = allLiveXi.length ? Math.max(...allLiveXi.map(p => getLivePlayerRating(p, minute))) : 0;
+    const renderSide = (entries, layout, map, side) => entries.map((entry, idx) => {
+      const player = entry.player;
+      if (!player) return '';
+      const pos = makeCoords(layout[idx] || {x:.5,y:.5}, side, map);
+      const ratingValue = getLivePlayerRating(player, minute);
+      const isBest = minute >= 90 && ratingValue >= bestRating - .001 && bestRating >= 7;
+      const icons = liveEventSummaryForPlayer(player.id);
+      const notes = [];
+      if (icons.latestMinute) notes.push(`<span class="fotmob-player-minute">${icons.latestMinute}'</span>`);
+      if (icons.goals) notes.push(liveEventChip('goal','Goal', icons.goals > 1 ? icons.goals : null));
+      if (icons.assists) notes.push(liveEventChip('assist','Assist', icons.assists > 1 ? icons.assists : null));
+      if (icons.yellows) notes.push(liveEventChip('yellow','Yellow card'));
+      if (icons.reds) notes.push(liveEventChip('red','Red card'));
+      if (icons.subOn) notes.push(liveEventChip('subOn','Subbed on'));
+      if (icons.subOff) notes.push(liveEventChip('subOff','Subbed off'));
+      return `<div class="fotmob-player fotmob-player-${side}" style="left:${pos.left};top:${pos.top};"><div class="fotmob-player-head"><div class="fotmob-player-rating ${ratingColorClassV33(ratingValue)} ${isBest ? 'best' : ''}">${ratingValue.toFixed(1)}${isBest ? '<span class="rating-star">★</span>' : ''}</div></div><div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar allow-initials')}</div>${notes.length ? `<div class="fotmob-player-notes ${side}">${notes.join('')}</div>` : ''}<div class="fotmob-player-name"><span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(getShortPlayerName(player))}</div>${livePitchMetric ? `<div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>` : ``}</div>`;
+    }).join('');
+    const btn = (key,label) => `<button type="button" class="fotmob-filter-btn ${livePitchMetric === key ? 'active' : ''}" data-pitch-metric="${key}">${label}</button>`;
+    pitch.innerHTML = `<div class="fotmob-pitch-filter-row">${btn('transfer','Transfer value')}${btn('age','Age')}${btn('country','Country')}</div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, hRows, 'home')}${renderSide(ap?.xi || [], awayLayout, aRows, 'away')}`;
+    pitch.querySelectorAll('[data-pitch-metric]').forEach(btn => btn.addEventListener('click', () => { const nextMetric = btn.dataset.pitchMetric || null; livePitchMetric = livePitchMetric === nextMetric ? null : nextMetric; renderFotmobPitch(match, minute); }));
+    const homeAvg = hp ? avg((hp.xi || []).map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+    const awayAvg = ap ? avg((ap.xi || []).map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+    const hEl = document.getElementById('fotmob-home-team-rating'); if (hEl) hEl.textContent = homeAvg;
+    const aEl = document.getElementById('fotmob-away-team-rating'); if (aEl) aEl.textContent = awayAvg;
+    const hf = document.getElementById('fotmob-home-formation'); if (hf) hf.textContent = livePitchScene.homeFormation;
+    const af = document.getElementById('fotmob-away-formation'); if (af) af.textContent = livePitchScene.awayFormation;
+    const homeTeam = byTeamId(match.homeTeamId), awayTeam = byTeamId(match.awayTeamId);
+    const homeName = document.getElementById('fotmob-home-lineup-name'); if (homeName) homeName.textContent = homeTeam?.name || 'Home';
+    const awayName = document.getElementById('fotmob-away-lineup-name'); if (awayName) awayName.textContent = awayTeam?.name || 'Away';
+    const homeLogo = document.getElementById('fotmob-home-lineup-logo'); if (homeLogo) homeLogo.innerHTML = homeTeam ? teamLogoMark(homeTeam, 'fotmob-lineup-crest') : '';
+    const awayLogo = document.getElementById('fotmob-away-lineup-logo'); if (awayLogo) awayLogo.innerHTML = awayTeam ? teamLogoMark(awayTeam, 'fotmob-lineup-crest') : '';
+  };
+
+  function removeNewsNavV33() {
+    document.querySelectorAll('[data-page="news"]').forEach(el => el.remove());
+    if (currentPage === 'news') { currentPage = 'social'; renderPage(); }
+  }
+  document.addEventListener('DOMContentLoaded', removeNewsNavV33);
+  setTimeout(removeNewsNavV33, 300);
+  setTimeout(removeNewsNavV33, 1200);
+
+  document.addEventListener('click', ev => {
+    const leavingLive = simInProgress && !ev.target.closest('#matchSimOverlay') && document.getElementById('matchSimOverlay')?.classList.contains('open');
+    if (leavingLive && !confirm('Are you sure you want to exit the live sim?')) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+  }, true);
+
+  setTimeout(async () => {
+    if (state) {
+      ensureNextProAppStateV33();
+      try { await persist(); } catch {}
+      try { await renderPage(); } catch {}
+    }
+  }, 800);
 })();

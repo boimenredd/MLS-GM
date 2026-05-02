@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>MLS Top Goalscorers Builder</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#111;font-family:-apple-system,"Helvetica Neue",Helvetica,Arial,sans-serif;padding:16px;color:#fff}
+.ctl{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.sbox{display:flex;align-items:center;gap:7px;background:#191919;border:1px solid #252525;border-radius:6px;padding:6px 12px}
+.sbox b{color:#333;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.sbox input{background:none;border:none;color:#fff;font-size:14px;font-weight:800;width:54px;outline:none;font-family:inherit}
+.ebtn{background:#0055ee;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:12px;font-weight:700;cursor:pointer}
+.ebtn:hover{background:#0044cc}
+.ebtn:disabled{background:#222;color:#444;cursor:not-allowed}
+.igrid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:14px}
+.ic{background:#161616;border:1px solid #1e1e1e;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:4px}
+.cbar{height:3px;border-radius:2px}
+.ilbl{color:#252525;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.drop{height:66px;background:#0c0c0c;border:1.5px dashed #1a1a1a;border-radius:3px;overflow:hidden;display:flex;align-items:center;justify-content:center;color:#1e1e1e;font-size:10px;cursor:pointer;text-align:center;line-height:1.4;flex-shrink:0}
+.drop:hover{border-color:#2a2a2a;color:#2a2a2a}
+.drop img{width:100%;height:100%;object-fit:cover;object-position:top center;display:block}
+.ic input[type=text],.ic input[type=number],.ic select{background:#0c0c0c;border:1px solid #181818;color:#aaa;border-radius:3px;padding:3px 5px;font-size:10px;width:100%;outline:none;font-family:inherit}
+.ic input[type=number]{font-size:12px;font-weight:800;color:#fff}
+.sr{display:flex;align-items:center;gap:4px}
+.sr em{color:#1e1e1e;font-size:9px;width:20px;flex-shrink:0;font-style:normal}
+/* color picker always visible */
+.bgrow{display:flex;align-items:center;gap:6px}
+.bgrow label{color:#444;font-size:9px}
+.bgrow input[type=color]{width:28px;height:18px;border:none;padding:0;cursor:pointer;border-radius:2px;background:none}
+#cw{display:block}
+.snote{color:#1a1a1a;font-size:11px;text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="ctl">
+  <div class="sbox"><b>Season</b><input type="text" id="sval" value="2026" oninput="draw()"></div>
+  <button class="ebtn" id="ebtn" onclick="doExp()">&#8595; Export PNG (1568&#215;782)</button>
+</div>
+<div class="igrid" id="igrid"></div>
+<canvas id="cw"></canvas>
+<p class="snote" id="snote"></p>
+<script>
+const W=1568,H=782;
+const CXS=[373,613,853,1093,1333];
+const CWS=[235,235,235,235,235];
+
+// Row y positions (equal heights: 90,90,88)
+const GY=498,GH=90,GAY=588,GAH=3;
+const AY=596,AH=90,AGY=686,AGH=3;
+const GPY=694,GPH=88;
+
+const C={
+  bg:'rgb(187,189,192)',lpBg:'rgb(187,189,192)',lpBdr:'rgb(172,175,182)',
+  colDiv:'rgb(130,131,133)',nameBg:'rgb(227,228,232)',phBdr:'rgb(172,174,180)',
+  mainDiv:'rgb(183,185,194)',
+  gLbl:'rgb(199,202,213)',gCell:'rgb(215,217,223)',gaDiv:'rgb(169,172,180)',
+  aLbl:'rgb(192,196,207)',aCell:'rgb(204,206,217)',agDiv:'rgb(161,164,174)',
+  gpLbl:'rgb(189,192,204)',gpCell:'rgb(197,199,211)',
+  txt:'rgb(14,15,20)'
+};
+
+const TEAMS={"Inter Miami":"#F4A7BE","LAFC":"#C49A6C","Nashville SC":"#ECE83A","FC Cincinnati":"#F05323","New York City FC":"#6CACE4","Atlanta United":"#80000A","Austin FC":"#00B140","Charlotte FC":"#1A85C8","Chicago Fire":"#C0102B","Colorado Rapids":"#862633","Columbus Crew":"#FEDD00","D.C. United":"#231F20","FC Dallas":"#BF0D3E","Houston Dynamo":"#F4911E","LA Galaxy":"#00245D","Minnesota United":"#3A1777","CF Montreal":"#003DA5","New England Revolution":"#003087","New York Red Bulls":"#ED1E36","Orlando City":"#633492","Philadelphia Union":"#071B2C","Portland Timbers":"#004812","Real Salt Lake":"#B30838","San Jose Earthquakes":"#0D4C86","Seattle Sounders":"#5D9732","Sporting KC":"#002F6C","St. Louis City SC":"#C0102B","Toronto FC":"#B81137","Vancouver Whitecaps":"#9CCAE2","San Diego FC":"#003087"};
+const DEFS=["Inter Miami","LAFC","Nashville SC","FC Cincinnati","New York City FC"];
+const P=DEFS.map(t=>({bg:TEAMS[t],fn:'',ln:'',tl:'',g:'',a:'',gp:'',img:null}));
+
+const LOGO=new Image(); LOGO.onload=draw;
+LOGO.src='https://images.seeklogo.com/logo-png/52/2/major-league-soccer-crest-logo-png_seeklogo-523550.png';
+const F='"Helvetica Neue",Helvetica,Arial,sans-serif';
+
+function draw(){
+  const cv=document.getElementById('cw');
+  const mw=cv.parentElement.clientWidth||window.innerWidth-36;
+  const sc=Math.min(1,mw/W);
+  cv.width=W; cv.height=H;
+  cv.style.width=Math.floor(W*sc)+'px';
+  cv.style.height=Math.floor(H*sc)+'px';
+  document.getElementById('snote').textContent='Preview '+Math.round(sc*100)+'% · Export = 1568×782px';
+  const c=cv.getContext('2d');
+  c.textBaseline='middle';
+
+  // 1. BG
+  c.fillStyle=C.bg; c.fillRect(0,0,W,H);
+
+  // 2. Photo zones
+  for(let i=0;i<5;i++){
+    c.fillStyle=P[i].bg; c.fillRect(CXS[i],0,CWS[i],367);
+    if(P[i].img){
+      const im=P[i].img,ta=CWS[i]/367,ia=im.naturalWidth/im.naturalHeight;
+      let sx=0,sy=0,sw=im.naturalWidth,sh=im.naturalHeight;
+      if(ia>ta){sw=sh*ta;sx=(im.naturalWidth-sw)/2;}else{sh=sw/ta;}
+      c.drawImage(im,sx,sy,sw,sh,CXS[i],0,CWS[i],367);
+    }
+  }
+
+  // 3. Photo border
+  c.fillStyle=C.phBdr;
+  for(let i=0;i<5;i++) c.fillRect(CXS[i],367,CWS[i],4);
+
+  // 4. Name strips
+  c.fillStyle=C.nameBg;
+  for(let i=0;i<5;i++) c.fillRect(CXS[i],371,CWS[i],102);
+
+  // 5. Name text — BOTH first and last name bold, equal spacing
+  c.textAlign='center';
+  for(let i=0;i<5;i++){
+    const mx=CXS[i]+CWS[i]/2, p=P[i];
+    const hf=p.fn!=='', hl=p.ln!=='', ht=p.tl!=='';
+    const SZ=20, TSZ=13, LH=26;
+    const nb=(hf?1:0)+(hl?1:0)+(ht?1:0);
+    let ty=371+(102-nb*LH)/2+LH/2;
+    c.fillStyle=C.txt;
+    if(hf){c.font='700 '+SZ+'px '+F; c.fillText(p.fn,mx,ty); ty+=LH;}
+    if(hl){c.font='700 '+SZ+'px '+F; c.fillText(p.ln,mx,ty); ty+=LH;}
+    if(ht){c.font='700 '+TSZ+'px '+F;c.fillText(p.tl,mx,ty);}
+  }
+
+  // 6. Column dividers
+  c.fillStyle=C.colDiv;
+  for(const x of [608,848,1088,1328]) c.fillRect(x,0,5,473);
+
+  // 7. Left panel
+  c.fillStyle=C.lpBg; c.fillRect(0,0,369,473);
+  c.fillStyle=C.lpBdr; c.fillRect(369,0,4,473);
+
+  // 8. MLS Logo — draw with transparent bg so it blends with panel
+  if(LOGO.complete&&LOGO.naturalWidth>0){
+    // Scale to fit 62x66 area, keeping aspect ratio
+    const lw=62, lh=Math.round(62*LOGO.naturalHeight/LOGO.naturalWidth);
+    c.drawImage(LOGO,18,14,lw,lh);
+  }
+
+  // 9. Title
+  c.save();
+  c.beginPath(); c.rect(0,0,365,468); c.clip();
+  c.textBaseline='middle'; c.textAlign='left'; c.fillStyle=C.txt;
+  let fs=62; c.font='800 '+fs+'px '+F;
+  while(c.measureText('Goalscorers').width>330&&fs>28){fs--;c.font='800 '+fs+'px '+F;}
+  c.fillText('Top',18,156);
+  c.font='800 '+fs+'px '+F;
+  c.fillText('Goalscorers',18,213);
+  c.font='400 21px '+F;
+  c.fillText(document.getElementById('sval').value+' Season',18,273);
+  c.restore();
+
+  // 10. Main H-div
+  // no main separator
+
+  // 11. Stat rows — ALL EQUAL HEIGHT
+  c.textBaseline='middle';
+  function row(lbl,vals,y,h,lb,cb,dh,dc){
+    c.fillStyle=lb; c.fillRect(0,y,369,h);
+    c.fillStyle=C.lpBdr; c.fillRect(369,y,4,h);
+    c.fillStyle=cb; for(let i=0;i<5;i++) c.fillRect(CXS[i],y,CWS[i],h);
+    c.fillStyle=C.colDiv; for(const x of [608,848,1088,1328]) c.fillRect(x,y,5,h);
+    if(dh>0){c.fillStyle=dc; c.fillRect(0,y+h,W,dh);}
+    const mid=y+h/2;
+    c.fillStyle=C.txt; c.textAlign='left';
+    c.font='300 24px '+F; c.fillText(lbl,20,mid);
+    c.textAlign='center';
+    c.font='600 38px '+F;
+    for(let i=0;i<5;i++){
+      if(vals[i]!==''&&vals[i]!=null){c.fillStyle=C.txt;c.fillText(vals[i],CXS[i]+CWS[i]/2,mid);}
+    }
+  }
+  row('Goals',  P.map(p=>p.g),  GY,GH,  C.gLbl, C.gCell, GAH,C.gaDiv);
+  row('Assists',P.map(p=>p.a),  AY,AH,  C.aLbl, C.aCell, AGH,C.agDiv);
+  row('Games',  P.map(p=>p.gp), GPY,GPH,C.gpLbl,C.gpCell,0,'');
+}
+
+function buildUI(){
+  const g=document.getElementById('igrid');
+  for(let i=0;i<5;i++){
+    const t=DEFS[i], col=TEAMS[t];
+    const opts=Object.keys(TEAMS).map(k=>`<option value="${k}"${k===t?' selected':''}>${k}</option>`).join('');
+    const d=document.createElement('div'); d.className='ic';
+    d.innerHTML=
+      `<div class="cbar" id="cb${i}" style="background:${col}"></div>`+
+      `<div class="ilbl">Player ${i+1}</div>`+
+      `<label class="drop"><span id="pds${i}">📷 Photo</span>`+
+        `<input type="file" accept="image/*" style="display:none" onchange="loadPh(${i},this)"></label>`+
+      `<input type="text" placeholder="First name" oninput="P[${i}].fn=this.value;draw()">`+
+      `<input type="text" placeholder="Last name" oninput="P[${i}].ln=this.value;draw()">`+
+      `<input type="text" placeholder="Team label" oninput="P[${i}].tl=this.value;draw()">`+
+      `<select onchange="setTeam(${i},this.value)">${opts}</select>`+
+      `<div class="bgrow"><label>BG color:</label><input type="color" id="bgc${i}" value="${col}" oninput="setBg(${i},this.value)"></div>`+
+      `<div class="sr"><em>Goals</em><input type="number" min="0" placeholder="-" oninput="P[${i}].g=this.value;draw()"></div>`+
+      `<div class="sr"><em>Ast</em><input type="number" min="0" placeholder="-" oninput="P[${i}].a=this.value;draw()"></div>`+
+      `<div class="sr"><em>GP</em><input type="number" min="0" placeholder="-" oninput="P[${i}].gp=this.value;draw()"></div>`;
+    g.appendChild(d);
+  }
+}
+function loadPh(i,inp){
+  if(!inp.files[0])return;
+  const r=new FileReader();
+  r.onload=e=>{const im=new Image();im.onload=()=>{P[i].img=im;draw();};im.src=e.target.result;
+    document.getElementById('pds'+i).textContent='✓ Loaded';};
+  r.readAsDataURL(inp.files[0]);
+}
+function setTeam(i,t){
+  const col=TEAMS[t]||'#888888';
+  setBg(i,col);
+}
+function setBg(i,col){
+  P[i].bg=col;
+  document.getElementById('cb'+i).style.background=col;
+  document.getElementById('bgc'+i).value=col;
+  draw();
+}
+function doExp(){
+  const btn=document.getElementById('ebtn');btn.disabled=true;btn.textContent='Saving...';
+  const cv=document.getElementById('cw');const ps=cv.style.cssText;
+  cv.width=W*2;cv.height=H*2;cv.style.cssText=`width:${W*2}px;height:${H*2}px`;
+  cv.getContext('2d').scale(2,2);draw();
+  const url=cv.toDataURL('image/png');
+  cv.width=W;cv.height=H;cv.style.cssText=ps;draw();
+  const a=document.createElement('a');
+  a.download='mls_'+document.getElementById('sval').value+'.png';
+  a.href=url;a.click();
+  btn.disabled=false;btn.textContent='↓ Export PNG (1568×782)';
+}
+buildUI();draw();window.addEventListener('resize',draw);
+</script>
+</body>
+</html>
