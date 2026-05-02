@@ -5411,3 +5411,381 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
     }
   }, 800);
 })();
+
+/* --- v34 live sim and social polish overrides --- */
+(() => {
+  try {
+    if (typeof SOCIAL_ACCOUNT_META !== 'undefined') {
+      Object.assign(SOCIAL_ACCOUNT_META, {
+        '@MLS': { name: 'MLS', badge: 'Official', tone: 'official' },
+        '@ExtraTimeLive': { name: 'ExtraTime Live', badge: 'Pundit', tone: 'pundit' },
+        '@TomBogertDesk': { name: 'Tom Bogert Desk', badge: 'Rumor', tone: 'rumor' },
+        '@MLSMoves': { name: 'MLS Moves', badge: 'Rumor', tone: 'rumor' },
+        '@DataZoneMLS': { name: 'DataZone MLS', badge: 'Stats', tone: 'stats' },
+        '@MLSNextScout': { name: 'MLS NEXT Scout', badge: 'Scout', tone: 'scout' },
+        '@NorthEndNoise': { name: 'North End Noise', badge: 'Ultras', tone: 'fan' },
+        '@SouthWardXI': { name: 'South Ward XI', badge: 'Ultras', tone: 'fan' },
+        '@TacticsBoard': { name: 'Tactics Board', badge: 'Analysis', tone: 'stats' },
+        '@MLSInsider': { name: 'MLS Insider', badge: 'League', tone: 'official' },
+        '@SupportersShield': { name: 'Supporters Shield Watch', badge: 'Standings', tone: 'stats' },
+        '@TheThirdSub': { name: 'The Third Sub', badge: 'Depth Chart', tone: 'pundit' },
+        '@GoalkeeperUnion': { name: 'Goalkeeper Union', badge: 'Keeper Watch', tone: 'stats' },
+        '@TouchlineTakes': { name: 'Touchline Takes', badge: 'Pundit', tone: 'pundit' },
+        '@LeagueSource': { name: 'League Source', badge: 'Insider', tone: 'rumor' }
+      });
+    }
+  } catch {}
+
+  const lineupNameV34 = player => {
+    const raw = getShortPlayerName(player) || player?.name || '—';
+    return raw.length > 11 ? `${raw.slice(0, 10)}…` : raw;
+  };
+
+  const liveExitGuardV34 = ev => {
+    const overlayOpen = !!document.getElementById('matchSimOverlay')?.classList.contains('open');
+    if (simInProgress || overlayOpen) {
+      ev.preventDefault();
+      ev.returnValue = 'Are you sure you want to exit the live sim?';
+      return ev.returnValue;
+    }
+  };
+  window.addEventListener('beforeunload', liveExitGuardV34);
+  document.addEventListener('click', ev => {
+    const overlay = document.getElementById('matchSimOverlay');
+    if (!overlay?.classList.contains('open')) return;
+    const closeIntent = ev.target.closest('.modal-close,.close-btn,[data-close-modal],[data-close-overlay],.close-x,.nav-link,.sidebar-link,.topnav button');
+    if ((simInProgress || overlay.classList.contains('open')) && closeIntent && !ev.target.closest('#matchSimOverlay .sim-speed-opt')) {
+      if (!confirm('Are you sure you want to exit the live sim?')) {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+    }
+  }, true);
+
+  renderGoldenBootSocialCard = function(rows = [], week = state?.calendar?.week || 1) {
+    if (!rows.length) return '';
+    return `
+      <div class="social-goldenboot-card social-goldenboot-card-v34">
+        <div class="social-gb-frame">
+          <div class="social-gb-post-head">
+            <div class="social-gb-brandmark">M</div>
+            <div class="social-gb-post-copy">
+              <div class="social-gb-kicker"><span>MLS</span><span>Golden Boot</span></div>
+              <div class="social-gb-headline">Official league update</div>
+            </div>
+            <div class="social-gb-week">Week ${escapeHtml(String(week))}</div>
+          </div>
+          <div class="social-gb-board">
+            <div class="social-gb-board-top">
+              <span class="social-gb-league-pill">MLS</span>
+              <strong>Golden Boot Race</strong>
+              <em>${escapeHtml(String(state?.season?.year || ''))}</em>
+            </div>
+            <div class="social-gb-grid">${rows.slice(0, 5).map((row, idx) => `
+              <div class="social-gb-item">
+                <div class="social-gb-rank">${idx + 1}</div>
+                <div class="social-gb-name">${escapeHtml(row.player?.name || '—')}</div>
+                <div class="social-gb-team">${escapeHtml(row.team?.name || row.team?.shortName || '')}</div>
+                <div class="social-gb-stats">${escapeHtml(String(row.goals))} G&nbsp;&nbsp;${escapeHtml(String(row.assists))} A&nbsp;&nbsp;${escapeHtml(String(row.gp))} GP</div>
+              </div>`).join('')}
+            </div>
+          </div>
+        </div>
+      </div>`;
+  };
+
+  generateSocialPostsForWeek = function(week = state?.calendar?.week || 1) {
+    if (!state) return [];
+    ensureSocialFeedState(state);
+    const key = `${state.season.year}-${week}`;
+    if (state.socialWeekGenerated[key]) return [];
+    state.socialWeekGenerated[key] = true;
+    const posts = [];
+    const playedThisWeek = (state.schedule || []).filter(m => m.week === week && m.played && m.result);
+    const sortGoalFest = playedThisWeek.slice().sort((a, b) => (((b.result?.homeGoals || 0) + (b.result?.awayGoals || 0)) - ((a.result?.homeGoals || 0) + (a.result?.awayGoals || 0))));
+    const addPost = (account, kind, text, extra = {}) => posts.push(socialPost(account, kind, text, { week, ...extra }));
+
+    sortGoalFest.slice(0, 3).forEach((m, idx) => {
+      const h = byTeamId(m.homeTeamId), a = byTeamId(m.awayTeamId), r = m.result || {};
+      const scoreText = `${h?.shortName || h?.name} ${r.homeGoals}-${r.awayGoals} ${a?.shortName || a?.name}`;
+      addPost(idx === 0 ? '@MLS' : '@MLSInsider', 'Match Result', scoreText, { headline: idx === 0 ? 'Full-time' : 'League recap' });
+      addPost(idx === 0 ? '@ExtraTimeLive' : '@TouchlineTakes', 'Pundit', `${scoreText}. ${r.homeGoals + r.awayGoals >= 4 ? 'Plenty of chances at both ends.' : 'A tighter one than the scoreline suggests.'}`);
+    });
+
+    const keyPlayers = (state.players || []).filter(p => p.clubId).slice().sort((a, b) => ((b.stats?.goals || 0) + (b.stats?.assists || 0)) - ((a.stats?.goals || 0) + (a.stats?.assists || 0)) || ((b.stats?.gp || 0) - (a.stats?.gp || 0)));
+    const star = keyPlayers[0];
+    const hot = keyPlayers[1];
+    if (star) {
+      const team = byTeamId(star.clubId);
+      addPost('@DataZoneMLS', 'Stats', `${star.name} is up to ${star.stats?.goals || 0} goals and ${star.stats?.assists || 0} assists in ${star.stats?.gp || 0} matches for ${team?.shortName || team?.name}.`, { headline: 'Top attacking output' });
+      addPost('@TacticsBoard', 'Analysis', `${star.name} keeps finding space between the lines. ${team?.shortName || team?.name} are building around that final-third quality.`);
+    }
+    if (hot) {
+      const team = byTeamId(hot.clubId);
+      addPost('@TheThirdSub', 'Depth Chart', `${hot.name} is making a real case for more minutes at ${team?.shortName || team?.name}.`);
+    }
+
+    const golden = getGoldenBootBoard(5);
+    if (golden.length) {
+      const leader = golden[0];
+      addPost('@MLS', 'Golden Boot', `${leader.player?.name || 'The leader'} leads the race with ${leader.goals} goals.`, { headline: 'Golden Boot update', cardType: 'goldenBoot', goldenRows: golden });
+    }
+
+    const prospects = getVisibleDraftBoard().slice(0, 5);
+    if (prospects.length) {
+      const risers = prospects.slice(0, 3).map(p => `${p.name} (${p.position}, ${p.displayedOverall ?? p.overall}/${p.displayedPotential ?? p.potential})`).join(' · ');
+      addPost('@MLSNextScout', 'Scouting Report', `Risers this week: ${risers}.`, { headline: 'College + academy watch' });
+    }
+
+    const rumorPool = (state.players || []).filter(p => p.clubId && p.age >= 18).slice().sort((a, b) => (b.potential || 0) - (a.potential || 0) || (b.overall || 0) - (a.overall || 0));
+    const rumor = rumorPool[Math.floor(Math.random() * Math.min(rumorPool.length, 60))];
+    if (rumor) {
+      const team = byTeamId(rumor.clubId);
+      addPost(Math.random() < 0.5 ? '@TomBogertDesk' : '@MLSMoves', 'Transfer Rumor', `${team?.shortName || team?.name} are receiving interest in ${rumor.name}, while internal talks over his value continue.`);
+      addPost('@LeagueSource', 'Insider', `${rumor.name} is one of several names being monitored around the league heading into the next window.`);
+    }
+
+    const supporters = ['Matchday atmosphere was loud again.', 'Ultras showed up in a big way this week.', 'That tifo and noise level matched the occasion.', 'Supporters pushed the team through the final stretch.'];
+    addPost(Math.random() < 0.5 ? '@NorthEndNoise' : '@SouthWardXI', 'Supporters', supporters[Math.floor(Math.random() * supporters.length)]);
+
+    const tableLeaders = ['East', 'West'].map(conf => (state.standings?.[conf] || []).slice().sort((a, b) => b.points - a.points || b.gd - a.gd || b.wins - a.wins)[0]).filter(Boolean);
+    if (tableLeaders.length === 2) {
+      addPost('@SupportersShield', 'Table Watch', `${byTeamId(tableLeaders[0].teamId)?.shortName || 'East leader'} lead the East on ${tableLeaders[0].points} pts. ${byTeamId(tableLeaders[1].teamId)?.shortName || 'West leader'} lead the West on ${tableLeaders[1].points} pts.`);
+    }
+
+    const keepers = (state.players || []).filter(p => p.clubId && normalizePosition(p.position) === 'GK').slice().sort((a, b) => (b.stats?.cleanSheets || 0) - (a.stats?.cleanSheets || 0) || (b.overall || 0) - (a.overall || 0));
+    if (keepers[0]) {
+      const keeperTeam = byTeamId(keepers[0].clubId);
+      addPost('@GoalkeeperUnion', 'Keeper Watch', `${keepers[0].name} has ${keepers[0].stats?.cleanSheets || 0} clean sheets for ${keeperTeam?.shortName || keeperTeam?.name}.`);
+    }
+
+    state.socialFeed.unshift(...posts);
+    state.socialFeed = state.socialFeed.slice(0, 280);
+    return posts;
+  };
+
+  renderSocialFeed = function() {
+    ensureSocialFeedState(state);
+    const posts = state.socialFeed || [];
+    return `${pageHead('MLS Social', '')}
+      <div class="cards social-summary-cards">
+        <div class="card"><div class="card-label">Posts</div><div class="card-value">${posts.length}</div></div>
+        <div class="card"><div class="card-label">Week</div><div class="card-value">${state.calendar.week}</div></div>
+        <div class="card"><div class="card-label">Accounts</div><div class="card-value">${Object.keys(SOCIAL_ACCOUNT_META).length}</div></div>
+      </div>
+      <div class="panel social-feed-panel social-feed-panel-v34">
+        <div class="panel-head"><h3>MLS Timeline</h3><button id="generateSocialBtn" class="small-btn" type="button">Generate This Week</button></div>
+        <div class="social-account-strip">${Object.entries(SOCIAL_ACCOUNT_META).map(([handle, meta]) => `<span class="social-account-chip ${meta.tone || ''}">${escapeHtml(handle)} · ${escapeHtml(meta.badge || '')}</span>`).join('')}</div>
+        <div class="social-feed-list">
+          ${posts.map(p => {
+            const meta = SOCIAL_ACCOUNT_META[p.account] || { name: p.account, badge: p.kind, tone: '' };
+            const avatarText = (meta.name || p.account).split(' ').map(v => v[0]).slice(0, 2).join('').toUpperCase() || 'M';
+            return `<article class="social-post ${meta.tone || ''} ${p.cardType ? 'has-card' : ''}">
+              <div class="social-avatar">${escapeHtml(avatarText)}</div>
+              <div class="social-body">
+                <div class="social-meta"><strong>${escapeHtml(meta.name || p.account)}</strong><span>${escapeHtml(p.kind)}</span><em>Week ${p.week}</em></div>
+                ${p.headline ? `<div class="social-headline">${escapeHtml(p.headline)}</div>` : ''}
+                ${p.text ? `<p>${escapeHtml(p.text)}</p>` : ''}
+                ${p.cardType === 'goldenBoot' ? renderGoldenBootSocialCard(p.goldenRows || [], p.week) : ''}
+              </div>
+            </article>`;
+          }).join('') || `<div class="note">No posts yet. Sim a week or generate this week.</div>`}
+        </div>
+      </div>`;
+  };
+
+  renderFotmobPitch = function(match, minute = 1) {
+    const pitch = document.getElementById('fotmob-pitch');
+    if (!pitch || !livePitchScene) return;
+    const hp = livePitchScene.homePack;
+    const ap = livePitchScene.awayPack;
+    const homeLayout = FORMATION_LAYOUT[livePitchScene.homeFormation] || FORMATION_LAYOUT['4-3-3'];
+    const awayLayout = FORMATION_LAYOUT[livePitchScene.awayFormation] || FORMATION_LAYOUT['4-3-3'];
+    const uniqueRows = layout => [...new Set(layout.map(slot => Number((slot?.y ?? 0.5).toFixed(3))))].sort((a, b) => b - a);
+    const bandsFor = count => count <= 3 ? [11, 28, 44] : count === 4 ? [10, 20.5, 31.5, 43.5] : [10, 18.5, 27.5, 36.5, 44.5];
+    const rowMap = layout => {
+      const rows = uniqueRows(layout);
+      const bands = bandsFor(rows.length);
+      const map = new Map();
+      rows.forEach((y, i) => map.set(y, bands[i] ?? 44));
+      return map;
+    };
+    const hRows = rowMap(homeLayout), aRows = rowMap(awayLayout);
+    const yLanes = [15, 26, 37, 49, 61, 73, 85];
+    const laneFor = x => yLanes[Math.max(0, Math.min(yLanes.length - 1, Math.round(Math.max(0.06, Math.min(0.94, x ?? 0.5)) * (yLanes.length - 1))))];
+    const makeCoords = (slot, side, map) => {
+      const rowKey = Number((slot?.y ?? 0.5).toFixed(3));
+      const band = map.get(rowKey) ?? 27;
+      return { left: (side === 'home' ? band : 100 - band) + '%', top: laneFor(slot?.x) + '%' };
+    };
+    const allLiveXi = [...(hp?.xi || []), ...(ap?.xi || [])].map(({ player }) => player).filter(Boolean);
+    const bestRating = allLiveXi.length ? Math.max(...allLiveXi.map(p => getLivePlayerRating(p, minute))) : 0;
+    const renderSide = (entries, layout, map, side) => entries.map((entry, idx) => {
+      const player = entry.player;
+      if (!player) return '';
+      const pos = makeCoords(layout[idx] || { x: 0.5, y: 0.5 }, side, map);
+      const ratingValue = getLivePlayerRating(player, minute);
+      const isBest = minute >= 90 && ratingValue >= bestRating - 0.001 && bestRating >= 7;
+      const summary = liveEventSummaryForPlayer(player.id);
+      const notes = [];
+      if (summary.latestMinute) notes.push(`<span class="fotmob-player-minute">${summary.latestMinute}'</span>`);
+      if (summary.goals) notes.push(liveEventChip('goal', 'Goal', null));
+      if (summary.assists) notes.push(liveEventChip('assist', 'Assist', null));
+      if (summary.yellows) notes.push(liveEventChip('yellow', 'Yellow card', null));
+      if (summary.reds) notes.push(liveEventChip('red', 'Red card', null));
+      if (summary.subOn) notes.push(liveEventChip('subOn', 'Subbed on', null));
+      if (summary.subOff) notes.push(liveEventChip('subOff', 'Subbed off', null));
+      return `<div class="fotmob-player fotmob-player-${side}" style="left:${pos.left};top:${pos.top};">
+        <div class="fotmob-player-head"><div class="fotmob-player-rating ${ratingColorClassV33(ratingValue)} ${isBest ? 'best' : ''}">${ratingValue.toFixed(1)}${isBest ? '<span class="rating-star">★</span>' : ''}</div></div>
+        <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar allow-initials')}</div>
+        ${notes.length ? `<div class="fotmob-player-notes ${side}">${notes.join('')}</div>` : ''}
+        <div class="fotmob-player-name" title="${escapeAttr(player?.name || '')}"><span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(lineupNameV34(player))}</div>
+        ${livePitchMetric ? `<div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>` : ''}
+      </div>`;
+    }).join('');
+    const btn = (key, label) => `<button type="button" class="fotmob-filter-btn ${livePitchMetric === key ? 'active' : ''}" data-pitch-metric="${key}">${label}</button>`;
+    pitch.innerHTML = `<div class="fotmob-pitch-filter-row">${btn('transfer', 'Transfer value')}${btn('age', 'Age')}${btn('country', 'Country')}</div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, hRows, 'home')}${renderSide(ap?.xi || [], awayLayout, aRows, 'away')}`;
+    pitch.querySelectorAll('[data-pitch-metric]').forEach(button => button.addEventListener('click', () => {
+      const nextMetric = button.dataset.pitchMetric || null;
+      livePitchMetric = livePitchMetric === nextMetric ? null : nextMetric;
+      renderFotmobPitch(match, minute);
+    }));
+    const homeAvg = hp ? avg((hp.xi || []).map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+    const awayAvg = ap ? avg((ap.xi || []).map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+    const hEl = document.getElementById('fotmob-home-team-rating'); if (hEl) hEl.textContent = homeAvg;
+    const aEl = document.getElementById('fotmob-away-team-rating'); if (aEl) aEl.textContent = awayAvg;
+    const hf = document.getElementById('fotmob-home-formation'); if (hf) hf.textContent = livePitchScene.homeFormation;
+    const af = document.getElementById('fotmob-away-formation'); if (af) af.textContent = livePitchScene.awayFormation;
+    const homeTeam = byTeamId(match.homeTeamId), awayTeam = byTeamId(match.awayTeamId);
+    const homeName = document.getElementById('fotmob-home-lineup-name'); if (homeName) homeName.textContent = homeTeam?.name || 'Home';
+    const awayName = document.getElementById('fotmob-away-lineup-name'); if (awayName) awayName.textContent = awayTeam?.name || 'Away';
+    const homeLogo = document.getElementById('fotmob-home-lineup-logo'); if (homeLogo) homeLogo.innerHTML = homeTeam ? teamLogoMark(homeTeam, 'fotmob-lineup-crest') : '';
+    const awayLogo = document.getElementById('fotmob-away-lineup-logo'); if (awayLogo) awayLogo.innerHTML = awayTeam ? teamLogoMark(awayTeam, 'fotmob-lineup-crest') : '';
+  };
+})();
+
+/* --- v34 social feed safe override --- */
+(() => {
+  const SOCIAL_ACCOUNT_META_V34 = {
+    '@MLS': { name: 'MLS', badge: 'Official', tone: 'official' },
+    '@MLSInsider': { name: 'MLS Insider', badge: 'League', tone: 'official' },
+    '@ExtraTimeLive': { name: 'ExtraTime Live', badge: 'Pundit', tone: 'pundit' },
+    '@TouchlineTakes': { name: 'Touchline Takes', badge: 'Pundit', tone: 'pundit' },
+    '@TomBogertDesk': { name: 'Tom Bogert Desk', badge: 'Rumor', tone: 'rumor' },
+    '@MLSMoves': { name: 'MLS Moves', badge: 'Rumor', tone: 'rumor' },
+    '@LeagueSource': { name: 'League Source', badge: 'Insider', tone: 'rumor' },
+    '@DataZoneMLS': { name: 'DataZone MLS', badge: 'Stats', tone: 'stats' },
+    '@TacticsBoard': { name: 'Tactics Board', badge: 'Analysis', tone: 'stats' },
+    '@GoalkeeperUnion': { name: 'Goalkeeper Union', badge: 'Keeper Watch', tone: 'stats' },
+    '@SupportersShield': { name: 'Supporters Shield Watch', badge: 'Standings', tone: 'stats' },
+    '@MLSNextScout': { name: 'MLS NEXT Scout', badge: 'Scout', tone: 'scout' },
+    '@NorthEndNoise': { name: 'North End Noise', badge: 'Ultras', tone: 'fan' },
+    '@SouthWardXI': { name: 'South Ward XI', badge: 'Ultras', tone: 'fan' },
+    '@TheThirdSub': { name: 'The Third Sub', badge: 'Depth Chart', tone: 'pundit' }
+  };
+  const mkPost = (handle, kind, text, extra = {}) => ({ id: `soc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, week: extra.week || state.calendar.week || 1, year: state.season.year, day: state.calendar.absoluteDay || 0, account: handle, kind, text, ...extra });
+
+  generateSocialPostsForWeek = function(week = state?.calendar?.week || 1) {
+    if (!state) return [];
+    ensureSocialFeedState(state);
+    const key = `${state.season.year}-${week}`;
+    if (state.socialWeekGenerated[key]) return [];
+    state.socialWeekGenerated[key] = true;
+    const posts = [];
+    const add = (a, k, t, extra = {}) => posts.push(mkPost(a, k, t, { week, ...extra }));
+    const playedThisWeek = (state.schedule || []).filter(m => m.week === week && m.played && m.result);
+    const goalFests = playedThisWeek.slice().sort((a, b) => (((b.result?.homeGoals || 0) + (b.result?.awayGoals || 0)) - ((a.result?.homeGoals || 0) + (a.result?.awayGoals || 0))));
+
+    goalFests.slice(0, 3).forEach((m, i) => {
+      const h = byTeamId(m.homeTeamId), a = byTeamId(m.awayTeamId), r = m.result || {};
+      const score = `${h?.shortName || h?.name} ${r.homeGoals}-${r.awayGoals} ${a?.shortName || a?.name}`;
+      add(i === 0 ? '@MLS' : '@MLSInsider', 'Match Result', score, { headline: i === 0 ? 'Full-time' : 'League recap' });
+      add(i === 0 ? '@ExtraTimeLive' : '@TouchlineTakes', 'Pundit', `${score}. ${r.homeGoals + r.awayGoals >= 4 ? 'Plenty of chances at both ends.' : 'A tighter one than the scoreline suggests.'}`);
+    });
+
+    const allPlayers = (state.players || []).filter(p => p.clubId);
+    const keyPlayers = allPlayers.slice().sort((a, b) => ((b.stats?.goals || 0) + (b.stats?.assists || 0)) - ((a.stats?.goals || 0) + (a.stats?.assists || 0)) || ((b.stats?.gp || 0) - (a.stats?.gp || 0)));
+    const star = keyPlayers[0], hot = keyPlayers[1];
+    if (star) {
+      const team = byTeamId(star.clubId);
+      add('@DataZoneMLS', 'Stats', `${star.name} is up to ${star.stats?.goals || 0} goals and ${star.stats?.assists || 0} assists in ${star.stats?.gp || 0} matches for ${team?.shortName || team?.name}.`, { headline: 'Top attacking output' });
+      add('@TacticsBoard', 'Analysis', `${star.name} keeps finding space between the lines. ${team?.shortName || team?.name} are leaning on that final-third quality.`);
+    }
+    if (hot) {
+      const team = byTeamId(hot.clubId);
+      add('@TheThirdSub', 'Depth Chart', `${hot.name} is making a real case for more minutes at ${team?.shortName || team?.name}.`);
+    }
+
+    const golden = getGoldenBootBoard(5);
+    if (golden.length) {
+      const leader = golden[0];
+      add('@MLS', 'Golden Boot', `${leader.player?.name || 'The leader'} leads the race with ${leader.goals} goals.`, { headline: 'Golden Boot update', cardType: 'goldenBoot', goldenRows: golden });
+    }
+
+    const prospects = getVisibleDraftBoard().slice(0, 5);
+    if (prospects.length) {
+      const risers = prospects.slice(0, 3).map(p => `${p.name} (${p.position}, ${p.displayedOverall ?? p.overall}/${p.displayedPotential ?? p.potential})`).join(' · ');
+      add('@MLSNextScout', 'Scouting Report', `Risers this week: ${risers}.`, { headline: 'College + academy watch' });
+    }
+
+    const rumorPool = allPlayers.filter(p => p.age >= 18).slice().sort((a, b) => (b.potential || 0) - (a.potential || 0) || (b.overall || 0) - (a.overall || 0));
+    const rumor = rumorPool[Math.floor(Math.random() * Math.min(rumorPool.length, 60))];
+    if (rumor) {
+      const team = byTeamId(rumor.clubId);
+      add(Math.random() < 0.5 ? '@TomBogertDesk' : '@MLSMoves', 'Transfer Rumor', `${team?.shortName || team?.name} are receiving interest in ${rumor.name}, while internal talks over his value continue.`);
+      add('@LeagueSource', 'Insider', `${rumor.name} is one of several names being monitored around the league heading into the next window.`);
+    }
+
+    const supporters = ['Matchday atmosphere was loud again.', 'Ultras showed up in a big way this week.', 'That tifo and noise level matched the occasion.', 'Supporters pushed the team through the final stretch.'];
+    add(Math.random() < 0.5 ? '@NorthEndNoise' : '@SouthWardXI', 'Supporters', supporters[Math.floor(Math.random() * supporters.length)]);
+
+    const tableLeaders = ['East', 'West'].map(conf => (state.standings?.[conf] || []).slice().sort((a, b) => b.points - a.points || b.gd - a.gd || b.wins - a.wins)[0]).filter(Boolean);
+    if (tableLeaders.length === 2) add('@SupportersShield', 'Table Watch', `${byTeamId(tableLeaders[0].teamId)?.shortName || 'East leader'} lead the East on ${tableLeaders[0].points} pts. ${byTeamId(tableLeaders[1].teamId)?.shortName || 'West leader'} lead the West on ${tableLeaders[1].points} pts.`);
+
+    const keepers = allPlayers.filter(p => normalizePosition(p.position) === 'GK').slice().sort((a, b) => (b.stats?.cleanSheets || 0) - (a.stats?.cleanSheets || 0) || (b.overall || 0) - (a.overall || 0));
+    if (keepers[0]) {
+      const kt = byTeamId(keepers[0].clubId);
+      add('@GoalkeeperUnion', 'Keeper Watch', `${keepers[0].name} has ${keepers[0].stats?.cleanSheets || 0} clean sheets for ${kt?.shortName || kt?.name}.`);
+    }
+
+    state.socialFeed.unshift(...posts);
+    state.socialFeed = state.socialFeed.slice(0, 280);
+    return posts;
+  };
+
+  renderSocialFeed = function() {
+    ensureSocialFeedState(state);
+    const posts = state.socialFeed || [];
+    return `${pageHead('MLS Social', '')}
+      <div class="cards social-summary-cards">
+        <div class="card"><div class="card-label">Posts</div><div class="card-value">${posts.length}</div></div>
+        <div class="card"><div class="card-label">Week</div><div class="card-value">${state.calendar.week}</div></div>
+        <div class="card"><div class="card-label">Accounts</div><div class="card-value">${Object.keys(SOCIAL_ACCOUNT_META_V34).length}</div></div>
+      </div>
+      <div class="panel social-feed-panel social-feed-panel-v34">
+        <div class="panel-head"><h3>MLS Timeline</h3><button id="generateSocialBtn" class="small-btn" type="button">Generate This Week</button></div>
+        <div class="social-account-strip">${Object.entries(SOCIAL_ACCOUNT_META_V34).map(([handle, meta]) => `<span class="social-account-chip ${meta.tone || ''}">${escapeHtml(handle)} · ${escapeHtml(meta.badge || '')}</span>`).join('')}</div>
+        <div class="social-feed-list">
+          ${posts.map(p => {
+            const meta = SOCIAL_ACCOUNT_META_V34[p.account] || { name: p.account, badge: p.kind, tone: '' };
+            const avatarText = (meta.name || p.account).split(' ').map(v => v[0]).slice(0, 2).join('').toUpperCase() || 'M';
+            return `<article class="social-post ${meta.tone || ''} ${p.cardType ? 'has-card' : ''}">
+              <div class="social-avatar">${escapeHtml(avatarText)}</div>
+              <div class="social-body">
+                <div class="social-meta"><strong>${escapeHtml(meta.name || p.account)}</strong><span>${escapeHtml(p.kind)}</span><em>Week ${p.week}</em></div>
+                ${p.headline ? `<div class="social-headline">${escapeHtml(p.headline)}</div>` : ''}
+                ${p.text ? `<p>${escapeHtml(p.text)}</p>` : ''}
+                ${p.cardType === 'goldenBoot' ? renderGoldenBootSocialCard(p.goldenRows || [], p.week) : ''}
+              </div>
+            </article>`;
+          }).join('') || `<div class="note">No posts yet. Sim a week or generate this week.</div>`}
+        </div>
+      </div>`;
+  };
+
+  setTimeout(() => {
+    try {
+      if (typeof currentPage !== 'undefined' && currentPage === 'social') renderPage();
+    } catch {}
+  }, 50);
+})();
