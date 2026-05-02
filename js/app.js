@@ -882,6 +882,7 @@ function renderCoachProfile(coachId) {
 
 function syncCoachStats(st) {
   ensureCoachState(st);
+  ensureSocialFeedState(st);
   for (const coach of st.coaches || []) {
     if (!coach.teamId) continue;
     const team = byTeamId(coach.teamId, st);
@@ -1324,71 +1325,67 @@ function buildAutoLineup(players, positions, benchCount = 9) {
   const assigned = new Set();
   const slots = positions.map((position, idx) => ({ position, idx }));
 
-  // Lock the strongest goalkeeper first.
+  const chooseForSlot = slot => pool
+    .filter(p => !assigned.has(p.id))
+    .filter(p => normalizePosition(slot.position) === 'GK' ? normalizePosition(p.position) === 'GK' : normalizePosition(p.position) !== 'GK')
+    .map(player => {
+      const fit = lineupFitScore(player, slot.position);
+      const bestOwnSlot = Math.max(...slots.filter(s => normalizePosition(s.position) !== 'GK').map(s => lineupFitScore(player, s.position)));
+      const starPriority = (player.overall || 0) >= 72 ? 7 : (player.overall || 0) >= 68 ? 3 : 0;
+      return { player, fit, score: fit + (player.overall || 0) * 0.33 + (player.potential || 0) * 0.08 + starPriority - Math.max(0, bestOwnSlot - fit) * 0.28 };
+    })
+    .sort((a,b)=>b.score-a.score || b.fit-a.fit || (b.player.overall||0)-(a.player.overall||0))[0];
+
   const gkSlot = slots.find(s => normalizePosition(s.position) === 'GK');
   if (gkSlot) {
     const bestGk = pool.filter(p => normalizePosition(p.position) === 'GK').sort((a,b)=>lineupFitScore(b,'GK')-lineupFitScore(a,'GK')||(b.overall||0)-(a.overall||0))[0];
-    if (bestGk) {
-      lineup[gkSlot.idx] = { playerId: bestGk.id, role: (ROLES[gkSlot.position] || [gkSlot.position])[0], fitScore: lineupFitScore(bestGk, gkSlot.position) };
-      assigned.add(bestGk.id);
-    }
+    if (bestGk) { lineup[gkSlot.idx] = { playerId: bestGk.id, role: (ROLES[gkSlot.position] || [gkSlot.position])[0], fitScore: lineupFitScore(bestGk, gkSlot.position) }; assigned.add(bestGk.id); }
   }
 
   const outfieldSlots = slots.filter(s => normalizePosition(s.position) !== 'GK');
-  // Fill scarce positions first so CB/FB/wingback spots do not get ruined.
   outfieldSlots.sort((a,b) => {
-    const ap = pool.filter(p => !assigned.has(p.id) && lineupFitScore(p, a.position) >= 78).length;
-    const bp = pool.filter(p => !assigned.has(p.id) && lineupFitScore(p, b.position) >= 78).length;
-    return ap - bp;
+    const scarcity = pos => pool.filter(p => !assigned.has(p.id) && normalizePosition(p.position) !== 'GK' && lineupFitScore(p, pos) >= 86).length;
+    return scarcity(a.position) - scarcity(b.position);
   });
-
   for (const slot of outfieldSlots) {
-    const choice = pool
-      .filter(p => !assigned.has(p.id) && normalizePosition(p.position) !== 'GK')
-      .map(player => ({ player, fit: lineupFitScore(player, slot.position), overall: player.overall || 0 }))
-      .sort((a,b) => (b.fit-a.fit) || (b.overall-a.overall))[0];
-    if (!choice) continue;
-    lineup[slot.idx] = { playerId: choice.player.id, role: (ROLES[slot.position] || [slot.position])[0], fitScore: choice.fit };
-    assigned.add(choice.player.id);
+    const choice = chooseForSlot(slot);
+    if (choice) { lineup[slot.idx] = { playerId: choice.player.id, role: (ROLES[slot.position] || [slot.position])[0], fitScore: choice.fit }; assigned.add(choice.player.id); }
   }
 
-  // Force elite outfielders into the XI if they have any playable slot.
-  const eliteOutfield = pool.filter(p => normalizePosition(p.position) !== 'GK').slice(0, Math.min(12, pool.length));
-  for (const elite of eliteOutfield) {
-    if (assigned.has(elite.id)) continue;
-    let bestSwap = null;
+  // Make sure the actual best players do not get left out because of a rigid position slot.
+  const topOutfield = pool.filter(p => normalizePosition(p.position) !== 'GK').slice(0, 13);
+  for (const star of topOutfield) {
+    if (assigned.has(star.id)) continue;
+    let best = null;
     for (const slot of outfieldSlots) {
       const current = pool.find(p => p.id === lineup[slot.idx]?.playerId);
       if (!current) continue;
-      const eliteFit = lineupFitScore(elite, slot.position);
-      const currFit = lineupFitScore(current, slot.position);
-      const value = (elite.overall || 0) - (current.overall || 0) + (eliteFit - currFit) * 0.9;
-      if (eliteFit >= 72 && (!bestSwap || value > bestSwap.value)) {
-        bestSwap = { slot, value, eliteFit, current };
-      }
+      const starFit = lineupFitScore(star, slot.position);
+      const currentFit = lineupFitScore(current, slot.position);
+      const gain = (star.overall || 0) - (current.overall || 0) + (starFit - currentFit) * 0.55;
+      if (starFit >= 68 && (!best || gain > best.gain)) best = { slot, current, starFit, gain };
     }
-    if (bestSwap && (bestSwap.value >= 6 || (elite.overall || 0) >= ((bestSwap.current?.overall || 0) + 4))) {
-      assigned.delete(bestSwap.current.id);
-      lineup[bestSwap.slot.idx] = { playerId: elite.id, role: (ROLES[bestSwap.slot.position] || [bestSwap.slot.position])[0], fitScore: bestSwap.eliteFit };
-      assigned.add(elite.id);
+    if (best && (best.gain >= 2.4 || (star.overall || 0) >= (best.current.overall || 0) + 3)) {
+      assigned.delete(best.current.id);
+      lineup[best.slot.idx] = { playerId: star.id, role: (ROLES[best.slot.position] || [best.slot.position])[0], fitScore: best.starFit };
+      assigned.add(star.id);
     }
   }
 
   const bench = [];
   const benchNeed = Math.max(benchCount || 0, 0);
   const benchPool = pool.filter(p => !assigned.has(p.id));
-  const groups = [
-    p => normalizePosition(p.position) === 'GK',
-    p => ['CB','LB','RB','LWB','RWB'].includes(normalizePosition(p.position)),
-    p => ['CDM','CM','CAM'].includes(normalizePosition(p.position)),
-    p => ['LW','RW','LM','RM'].includes(normalizePosition(p.position)),
-    p => normalizePosition(p.position) === 'ST',
-  ];
-  for (const matcher of groups) {
-    if (bench.length >= benchNeed) break;
-    const idx = benchPool.findIndex(matcher);
-    if (idx >= 0) bench.push(benchPool.splice(idx,1)[0].id);
-  }
+  const addBench = matcher => {
+    const idx = benchPool.findIndex(p => matcher(p) && !bench.includes(p.id));
+    if (idx >= 0 && bench.length < benchNeed) bench.push(benchPool.splice(idx,1)[0].id);
+  };
+  addBench(p => normalizePosition(p.position) === 'GK');
+  addBench(p => ['CB','LB','RB','LWB','RWB'].includes(normalizePosition(p.position)));
+  addBench(p => ['CB','LB','RB','LWB','RWB'].includes(normalizePosition(p.position)));
+  addBench(p => ['CDM','CM','CAM'].includes(normalizePosition(p.position)));
+  addBench(p => ['CDM','CM','CAM'].includes(normalizePosition(p.position)));
+  addBench(p => ['LW','RW','LM','RM'].includes(normalizePosition(p.position)));
+  addBench(p => normalizePosition(p.position) === 'ST');
   while (bench.length < benchNeed && benchPool.length) bench.push(benchPool.shift().id);
   return { lineup, bench };
 }
@@ -2257,10 +2254,10 @@ function renderFotmobPitch(match, minute = 1) {
 
   const clamp = (min, val, max) => Math.max(min, Math.min(max, val));
   const lineupBands = rowCount => {
-    if (rowCount <= 3) return [16.0, 28.5, 40.0];
-    if (rowCount === 4) return [16.0, 26.0, 35.0, 43.5];
-    if (rowCount === 5) return [15.5, 23.4, 30.8, 37.8, 44.2];
-    return [15.0, 21.8, 28.2, 34.4, 39.8, 44.8];
+    if (rowCount <= 3) return [18.0, 30.5, 41.5];
+    if (rowCount === 4) return [18.0, 27.5, 36.0, 44.0];
+    if (rowCount === 5) return [17.0, 24.8, 31.8, 38.4, 44.6];
+    return [16.5, 23.0, 29.2, 35.3, 40.6, 45.0];
   };
   const buildRowMap = layout => {
     const ys = [...new Set(layout.map(slot => Number((slot?.y ?? 0.5).toFixed(3))))].sort((a, b) => b - a);
@@ -2275,7 +2272,7 @@ function renderFotmobPitch(match, minute = 1) {
     const rowKey = Number((slot?.y ?? 0.5).toFixed(3));
     const band = rowMap.get(rowKey) ?? 25;
     const laneRaw = clamp(0.06, slot?.x ?? 0.5, 0.94);
-    const topPct = clamp(23, 20 + laneRaw * 54, 77.5);
+    const topPct = clamp(24, 21 + laneRaw * 52, 76);
     const leftPct = side === 'home' ? band : 100 - band;
     return { left: leftPct + '%', top: topPct + '%' };
   };
@@ -3094,7 +3091,8 @@ function renderWeeklySchedule() {
     const homeCoach = getTeamCoach(home.id);
     const awayCoach = getTeamCoach(away.id);
     const result = m.result || {};
-    return `<div class="week-mini-card ${completed ? 'is-complete' : ''}">
+    const isUserGame = m.homeTeamId === state.userTeamId || m.awayTeamId === state.userTeamId;
+    return `<div class="week-mini-card ${completed ? 'is-complete' : ''} ${isUserGame ? 'user-team-game' : ''}">
       <div class="week-mini-teams">
         <div class="week-mini-team" style="--team-primary:${homePalette.primary};--team-secondary:${homePalette.secondary};--team-text:${homePalette.text};">
           <div class="week-mini-crest">${teamLogoMark(home, 'mini-team-logo')}</div>
@@ -3385,6 +3383,16 @@ function renderTrade() {
 }
 
 
+
+function canManuallySetDesignation(player, designation) {
+  const d = designation === "None" || designation === "" ? null : designation;
+  if (designation === "Auto") return { ok: true };
+  if (d === "U22" && Number(player.age || 0) > 23) return { ok:false, reason:"U22 only" };
+  if (d === "TAM" && Number(player.contract?.salary || 0) <= 803125 && Number(player.overall || 0) < 66) return { ok:false, reason:"TAM not needed" };
+  if (d !== "DP" && typeof isMandatoryDP === "function" && isMandatoryDP(player)) return { ok:false, reason:"Must be DP" };
+  return { ok:true };
+}
+
 function designationBudgetCharge(player) {
   if (!player) return 0;
   if (player.designation === "DP") return 803125;
@@ -3528,7 +3536,7 @@ function renderBudget() {
             { value: "DP", label: "DP" },
             { value: "U22", label: "U22" },
             { value: "TAM", label: "TAM" },
-          ].map(opt => `<option value="${opt.value}" ${((p.designationMode || "auto") === "auto" ? "Auto" : (p.designation || "None"))===opt.value?"selected":""}>${opt.label}</option>`).join('')}</select></td>
+          ].map(opt => { const allowed = canManuallySetDesignation(p, opt.value); return `<option value="${opt.value}" ${((p.designationMode || "auto") === "auto" ? "Auto" : (p.designation || "None"))===opt.value?"selected":""} ${allowed.ok ? "" : "disabled"} title="${escapeAttr(allowed.reason || "")}">${opt.label}${allowed.ok ? "" : " — blocked"}</option>`; }).join('')}</select></td>
         </tr>`).join('')}
       </tbody></table>
       <div class="flex" style="margin-top:10px;"><button id="saveBudgetBtn" class="primary-btn" type="button">Save Designations</button></div>
@@ -3632,6 +3640,105 @@ function renderGarberMode() {
     </div>
   </div>`;
 }
+
+
+function ensureSocialFeedState(st = state) {
+  st.socialFeed ||= [];
+  st.socialWeekGenerated ||= {};
+  return st.socialFeed;
+}
+
+function getGoldenBootBoard(limit = 5) {
+  const rows = (state?.players || [])
+    .filter(p => p?.clubId && p?.stats)
+    .map(p => ({
+      player: p,
+      team: byTeamId(p.clubId),
+      goals: Number(p.stats.goals || 0),
+      assists: Number(p.stats.assists || 0),
+      gp: Number(p.stats.gp || 0),
+    }))
+    .filter(r => r.goals > 0 || r.assists > 0 || r.gp > 0)
+    .sort((a, b) =>
+      (b.goals - a.goals) ||
+      (b.assists - a.assists) ||
+      ((b.player?.name || '').replace(/\s/g,'').length - (a.player?.name || '').replace(/\s/g,'').length) ||
+      String(a.player?.name || '').localeCompare(String(b.player?.name || ''))
+    );
+  return rows.slice(0, limit);
+}
+
+function generateSocialPostsForWeek(week = state?.calendar?.week || 1) {
+  if (!state) return [];
+  ensureSocialFeedState(state);
+  const key = `${state.season.year}-${week}`;
+  if (state.socialWeekGenerated[key]) return [];
+  state.socialWeekGenerated[key] = true;
+  const posts = [];
+  const add = (account, kind, text, tone = '') => posts.push({
+    id: `soc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    week,
+    year: state.season.year,
+    day: state.calendar.absoluteDay || 0,
+    account,
+    kind,
+    tone,
+    text,
+  });
+
+  const playedThisWeek = (state.schedule || []).filter(m => m.week === week && m.played && m.result);
+  const bestMatch = playedThisWeek.slice().sort((a,b) => ((b.result.homeGoals||0)+(b.result.awayGoals||0)) - ((a.result.homeGoals||0)+(a.result.awayGoals||0)))[0];
+  if (bestMatch) {
+    const h = byTeamId(bestMatch.homeTeamId), a = byTeamId(bestMatch.awayTeamId), r = bestMatch.result;
+    add('@MLS', 'Match Result', `Full-time spotlight: ${h?.shortName || h?.name} ${r.homeGoals}-${r.awayGoals} ${a?.shortName || a?.name}. Matchday ${week} keeps the table moving.`);
+    const winner = r.homeGoals === r.awayGoals ? null : (r.homeGoals > r.awayGoals ? h : a);
+    add('@MLSPunditDesk', 'Pundit Take', winner ? `${winner.name} made a statement this week. The playoff race is starting to separate contenders from noise.` : `Draws like this are why MLS tables stay chaotic. Neither side will feel done with this matchup.`);
+    add('@SectionSupporters', 'Ultras', `Away end was loud, home end answered, and Matchday ${week} had proper edge. MLS crowds are heating up.`);
+  }
+
+  const golden = getGoldenBootBoard(5);
+  if (golden.length) {
+    add('@MLS', 'Golden Boot', `Golden Boot watch: ${golden.map((r,i)=>`${i+1}. ${r.player.name} (${r.goals}G, ${r.assists}A, ${r.gp}GP)`).join(' · ')}.`);
+  }
+
+  const prospects = getVisibleDraftBoard().slice(0, 3);
+  if (prospects.length) add('@MLSNextScout', 'Scouting Report', `Scouting board risers: ${prospects.map(p => `${p.name} (${p.position}, ${p.displayedOverall || p.overall}/${p.displayedPotential || p.potential})`).join(', ')}. Clubs are tracking college talent early.`);
+
+  const players = (state.players || []).filter(p => p.clubId).sort((a,b)=>(b.overall||0)-(a.overall||0));
+  const rumor = players[Math.floor(Math.random() * Math.min(players.length, 35))];
+  if (rumor) {
+    const team = byTeamId(rumor.clubId);
+    add('@TransferWireMLS', 'Transfer Rumor', `${team?.shortName || team?.name} are expected to receive interest for ${rumor.name}. Sources say the front office would need a serious offer to even consider it.`);
+  }
+
+  const statGuy = players.filter(p => p.stats?.goals || p.stats?.assists).sort((a,b)=>((b.stats.goals||0)+(b.stats.assists||0))-((a.stats.goals||0)+(a.stats.assists||0)))[0];
+  if (statGuy) add('@DataZoneMLS', 'Stats', `${statGuy.name} is producing: ${statGuy.stats.goals || 0} goals, ${statGuy.stats.assists || 0} assists, ${statGuy.stats.gp || 0} apps. Underlying value keeps climbing.`);
+
+  state.socialFeed.unshift(...posts);
+  state.socialFeed = state.socialFeed.slice(0, 180);
+  return posts;
+}
+
+function renderSocialFeed() {
+  ensureSocialFeedState(state);
+  const posts = state.socialFeed || [];
+  return `${pageHead("MLS Social", "Rumors, scouting, match results, stats, ultras, pundits, and official MLS posts")}
+  <div class="cards">
+    <div class="card"><div class="card-label">Posts</div><div class="card-value">${posts.length}</div><div class="card-note">Updates when weeks are simulated</div></div>
+    <div class="card"><div class="card-label">Week</div><div class="card-value">${state.calendar.week}</div><div class="card-note">${escapeHtml(state.season.phase)}</div></div>
+    <div class="card"><div class="card-label">Golden Boot Leader</div><div class="card-value">${escapeHtml(getGoldenBootBoard(1)[0]?.player?.name || '—')}</div><div class="card-note">${getGoldenBootBoard(1)[0]?.goals || 0} goals</div></div>
+  </div>
+  <div class="panel social-feed-panel">
+    <div class="panel-head"><h3>Social Timeline</h3><button id="generateSocialBtn" class="small-btn" type="button">Generate This Week</button></div>
+    <div class="social-feed-list">
+      ${posts.map(p => `<article class="social-post ${p.account === '@MLS' ? 'official' : ''}">
+        <div class="social-avatar">${p.account === '@MLS' ? 'MLS' : escapeHtml((p.account || '@').replace('@','').slice(0,2).toUpperCase())}</div>
+        <div class="social-body"><div class="social-meta"><strong>${escapeHtml(p.account)}</strong><span>${escapeHtml(p.kind)}</span><em>Week ${p.week}</em></div><p>${escapeHtml(p.text)}</p></div>
+      </article>`).join('') || `<div class="note">No posts yet. Sim a week or generate this week.</div>`}
+    </div>
+  </div>`;
+}
+
 
 function renderDraft() {
   const phaseIsDraft = state.season.phase === "Draft";
@@ -4064,6 +4171,7 @@ async function renderPage() {
   else if (currentPage==="leagueHistory")  html = renderLeagueHistory();
   else if (currentPage==="power")          html = renderPowerRankings();
   else if (currentPage==="news")           html = renderNewsFeed();
+  else if (currentPage==="social")         html = renderSocialFeed();
   else if (currentPage==="freeAgents")     html = renderFreeAgents();
   else if (currentPage==="proposals")      html = renderTradeProposals();
   else if (currentPage==="ratings")        html = renderPlayerRatings();
@@ -4107,6 +4215,7 @@ function bindPageEvents() {
   $("#simWeekOnlyBtn")?.addEventListener("click", async () => {
     if (weeklyScheduleWeek !== state.calendar.week) return toast("You cannot simulate a future matchday before the current week is complete.", "warn");
     state.schedule.filter(m => m.week === weeklyScheduleWeek && !m.played).forEach(m => simulateMatch(state, m));
+    generateSocialPostsForWeek(weeklyScheduleWeek);
     autoAdvanceMatchdayIfComplete();
     await persist(); await renderPage(); toast(`Matchday ${weeklyScheduleWeek} simulated.`, "success");
   });
@@ -4232,7 +4341,7 @@ function bindPageEvents() {
   $("#saveBudgetBtn")?.addEventListener("click", async () => {
     let error = "";
     $$(".budget-designation-select").forEach(sel => {
-      const result = setPlayerDesignation(state, sel.dataset.id, sel.value);
+      const player = byPlayerId(sel.dataset.id); const allowed = canManuallySetDesignation(player, sel.value); const result = allowed.ok ? setPlayerDesignation(state, sel.dataset.id, sel.value) : { ok:false, reason: `${player?.name || "Player"} cannot use that roster designation.` };
       if (!result.ok && !error) error = result.reason || "Could not update designation.";
     });
     if (error) return toast(error, "warn");
@@ -4470,7 +4579,9 @@ function populateTeamSelect() {
 async function advanceUntil(predicate, maxSteps = 500) {
   let steps = 0;
   while (!predicate() && steps < maxSteps) {
+    const oldWeek = state.calendar.week || 1;
     advanceOneWeek(state);
+    generateSocialPostsForWeek(oldWeek);
     if (state.season.phase === "Offseason") runGreenCardOffseason(state);
     steps += 1;
   }
@@ -4523,7 +4634,9 @@ function bindTopLevel() {
   $("#simOneBtn")?.addEventListener("click", async () => {
     if (!state) return;
     if (state.season.phase !== "Regular Season") {
+      const oldWeek = state.calendar.week || 1;
       advanceOneWeek(state);
+      generateSocialPostsForWeek(oldWeek);
       if (state.season.phase==="Offseason") runGreenCardOffseason(state);
       await persist(); await renderPage(); return;
     }
@@ -4535,6 +4648,7 @@ function bindTopLevel() {
     await playLiveMatch(next);
     if (!simAbortRequested) {
       state.schedule.filter(m => m.week===next.week && !m.played).forEach(m => simulateMatch(state,m));
+      generateSocialPostsForWeek(next.week);
     }
     autoAdvanceMatchdayIfComplete();
     await persist(); await renderPage();
@@ -4542,7 +4656,9 @@ function bindTopLevel() {
 
   $("#simWeekBtn")?.addEventListener("click", async () => {
     if (!state) return;
+    const oldWeek = state.calendar.week || 1;
     advanceOneWeek(state);
+    generateSocialPostsForWeek(oldWeek);
     if (state.season.phase==="Offseason") runGreenCardOffseason(state);
     await persist(); await renderPage();
   });
@@ -4550,7 +4666,9 @@ function bindTopLevel() {
   $("#simMonthBtn")?.addEventListener("click", async () => {
     if (!state) return;
     for (let i = 0; i < 4; i++) {
+      const oldWeek = state.calendar.week || 1;
       advanceOneWeek(state);
+      generateSocialPostsForWeek(oldWeek);
       if (state.season.phase==="Offseason") runGreenCardOffseason(state);
       if (state.season.phase !== "Regular Season") break;
     }
@@ -4638,3 +4756,5 @@ if (document.readyState === "loading") {
 } else {
   __runBoot();
 }
+
+window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventDefault(); ev.returnValue = "Are you sure you want to exit the live sim?"; return ev.returnValue; } });

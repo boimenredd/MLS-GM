@@ -1652,11 +1652,19 @@ function maybeInjurePlayers(state) {
 
 function maybeExternalOffer(state) {
   const userTeam = getUserTeam(state);
-  const players  = getTeamPlayers(state, userTeam.id).filter(p => p.age >= 20);
-  if (!players.length || Math.random() > 0.16) return;
+  const players  = getTeamPlayers(state, userTeam.id)
+    .filter(p => p.age >= 19 && p.contract?.status !== "Draft Eligible")
+    .sort((a,b)=>(b.overall||0)-(a.overall||0) || (b.potential||0)-(a.potential||0));
+  const chance = userTeam._rebuildMode ? 0.22 : 0.14;
+  if (!players.length || Math.random() > chance) return;
 
-  const target = pick(players.slice(0, 12));
-  const offer  = Math.round(target.contract.salary * randFloat(1.3, 3.2) + target.overall * 55000);
+  const target = pick(players.slice(0, Math.min(16, players.length)));
+  const yearsLeft = Math.max(0, Number(target.contract?.yearsLeft || 1));
+  const production = (target.stats?.goals || 0) * 180000 + (target.stats?.assists || 0) * 120000 + (target.stats?.ratingSum || 0) * 8000;
+  const ageUpside = Math.max(0, 25 - (target.age || 25)) * 175000;
+  const dpPremium = target.designation === "DP" ? 1200000 : target.designation === "U22" ? 850000 : target.designation === "TAM" ? 450000 : 0;
+  const base = (target.overall || 60) * 95000 + (target.potential || target.overall || 60) * 45000 + ageUpside + production + dpPremium;
+  const offer = Math.round(Math.max(target.contract?.salary || 0, base) * randFloat(0.82, 1.32) + yearsLeft * 180000);
   state.pendingOffer = {
     id:       uuid("offer"),
     playerId: target.id,
@@ -1976,13 +1984,16 @@ function draftPickValue(pickObj, currentSeasonYear) {
 
 function playerTradeValue(player) {
   return Math.round(
-    player.overall * 18000 +
-    player.potential * 9000 +
-    Math.max(0, 24 - player.age) * 12000 -
-    Math.min(player.contract?.salary || 0, 4000000) * 0.18 +
-    (player.designation === "DP" ? 280000 : 0) +
-    (player.designation === "U22" ? 220000 : 0) +
-    (player.homegrown ? 90000 : 0)
+    player.overall * 26000 +
+    player.potential * 14000 +
+    Math.max(0, 25 - player.age) * 18000 +
+    (player.stats?.goals || 0) * 95000 +
+    (player.stats?.assists || 0) * 65000 -
+    Math.min(player.contract?.salary || 0, 5000000) * 0.14 +
+    (player.designation === "DP" ? 420000 : 0) +
+    (player.designation === "U22" ? 360000 : 0) +
+    (player.designation === "TAM" ? 180000 : 0) +
+    (player.homegrown ? 140000 : 0)
   );
 }
 
