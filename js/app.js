@@ -79,6 +79,18 @@ function avg(arr = []) {
   const nums = (arr || []).map(v => Number(v)).filter(v => Number.isFinite(v));
   return nums.length ? (nums.reduce((s, v) => s + v, 0) / nums.length) : 0;
 }
+
+
+// v37: global rating color helper used by multiple live-sim overrides.
+function ratingColorClassV33(value) {
+  const n = Number(value || 0);
+  if (n >= 7) return 'good';
+  if (n >= 5) return 'warn';
+  return 'bad';
+}
+function ratingPillV33(value) {
+  return `<span class="match-rating-pill ${ratingColorClassV33(value)}">${Number(value || 0).toFixed(1)}</span>`;
+}
 function clamp(min, val, max) { return Math.max(min, Math.min(max, val)); }
 
 
