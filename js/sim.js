@@ -2930,3 +2930,227 @@ export function simulateToSeasonEnd(state) {
 export function runOffseason(state) {
   finalizeOffseason(state);
 }
+
+// ===== v32 gameplay patch =====
+(function(){
+  const __v32PlayerSelectionLoad = player => {
+    const logs = (player?.stats?.matchRatings || []).slice(-4);
+    const recentMinutes = logs.reduce((sum, row) => sum + Number(row?.minutes || 0), 0);
+    const fatigue = recentMinutes / 360;
+    const endurance = Number(player?.detailed?.physical?.stamina || player?.attributes?.physical || 60);
+    return { recentMinutes, fatigue, endurance };
+  };
+
+  const __v32MatchImportance = (state, match, teamA, teamB) => {
+    let score = 1;
+    if (match?.type && match.type !== 'Regular Season') score += 0.65;
+    score += rivalryBoost(teamA?.name || '', teamB?.name || '') * 1.15;
+    if (teamA?.conference && teamA?.conference === teamB?.conference) score += 0.08;
+    return score;
+  };
+
+  const __v32SelectSimulatedXi = (state, team, opponent, match) => {
+    const roster = state.players.filter(p => p.clubId === team.id && (!p.injuredUntil || p.injuredUntil < (state.calendar?.absoluteDay || 0)));
+    const importance = __v32MatchImportance(state, match, team, opponent);
+    const sameWeekMatches = (state.schedule || []).filter(m => m.week === match.week && (m.homeTeamId === team.id || m.awayTeamId === team.id)).length;
+    const congestion = Math.max(0, sameWeekMatches - 1);
+    const massiveGame = importance >= 1.22;
+
+    const bucket = pos => {
+      const n = normalizeGeneratedPosition(pos || 'CM');
+      if (n === 'GK') return 'GK';
+      if (['LB', 'RB', 'CB'].includes(n)) return 'DEF';
+      if (['CDM', 'CM', 'CAM', 'LM', 'RM'].includes(n)) return 'MID';
+      return 'ATT';
+    };
+    const slots = [
+      { bucket: 'GK', count: 1 },
+      { bucket: 'DEF', count: 4 },
+      { bucket: 'MID', count: 3 },
+      { bucket: 'ATT', count: 3 },
+    ];
+
+    const scored = roster.map(player => {
+      const load = __v32PlayerSelectionLoad(player);
+      const enduranceBoost = (load.endurance - 60) * 0.07;
+      const youthRotation = !massiveGame && congestion > 0 && (player.age || 24) <= 23 ? 1.5 : 0;
+      const veteranRotation = !massiveGame && congestion > 0 && (player.age || 24) >= 30 ? -1.2 : 0;
+      const fatiguePenalty = !massiveGame ? load.fatigue * (congestion > 0 ? 5.8 : 2.9) : load.fatigue * 1.6;
+      const moraleBoost = ((player.morale || 70) - 70) * 0.03;
+      const upside = Math.max(0, (player.potential || player.overall || 0) - (player.overall || 0)) * 0.08;
+      const score = (player.overall || 0) + enduranceBoost + moraleBoost + upside + youthRotation + veteranRotation - fatiguePenalty;
+      return { player, score };
+    }).sort((a, b) => b.score - a.score || (b.player.overall || 0) - (a.player.overall || 0));
+
+    const chosen = [];
+    const picked = new Set();
+    for (const slot of slots) {
+      const pool = scored.filter(row => bucket(row.player.position) === slot.bucket && !picked.has(row.player.id));
+      for (const row of pool.slice(0, slot.count)) {
+        chosen.push(row.player);
+        picked.add(row.player.id);
+      }
+    }
+    for (const row of scored) {
+      if (chosen.length >= 11) break;
+      if (!picked.has(row.player.id)) {
+        chosen.push(row.player);
+        picked.add(row.player.id);
+      }
+    }
+    return chosen.slice(0, 11);
+  };
+
+  giveStats = function(state, match, teamId, gf, ga, xg, shots, sot, yc, rc, result, forcedStarters = null) {
+    const starters = Array.isArray(forcedStarters) && forcedStarters.length
+      ? forcedStarters
+      : state.players.filter(p => p.clubId === teamId).sort((a,b)=>b.overall-a.overall).slice(0,11);
+    const bench = state.players.filter(p => p.clubId === teamId && !starters.find(s => s.id === p.id)).sort((a,b)=>b.overall-a.overall).slice(0,7);
+    const players = [...starters, ...bench.slice(0, Math.min(3, bench.length))];
+    const team = state.teams.find(t => t.id === teamId);
+    const resultBonus = result === 'win' ? 0.28 : result === 'draw' ? 0.06 : -0.18;
+    const playerEvents = new Map();
+    for (const event of match.result.events || []) {
+      const id = teamId === match.homeTeamId ? (event.side === 'home' ? event.scorerId : event.assistId) : (event.side === 'away' ? event.scorerId : event.assistId);
+      if (!id) continue;
+      if (!playerEvents.has(id)) playerEvents.set(id, {});
+      const row = playerEvents.get(id);
+      if (id === event.scorerId) row.goals = (row.goals || 0) + 1;
+      if (id === event.assistId) row.assists = (row.assists || 0) + 1;
+    }
+    players.forEach((p, idx) => {
+      p.stats ||= {};
+      p.stats.gp = (p.stats.gp || 0) + 1;
+      p.stats.starts = (p.stats.starts || 0) + (idx < starters.length ? 1 : 0);
+      p.stats.minutes = (p.stats.minutes || 0) + 90;
+      p.stats.goals = (p.stats.goals || 0) + (playerEvents.get(p.id)?.goals || 0);
+      p.stats.assists = (p.stats.assists || 0) + (playerEvents.get(p.id)?.assists || 0);
+      const base = 6.2 + resultBonus + ((playerEvents.get(p.id)?.goals || 0) * 0.55) + ((playerEvents.get(p.id)?.assists || 0) * 0.28);
+      const perf = clamp(base + randFloat(-0.4, 0.45), 5.6, 9.7);
+      p.stats.ratingSum = Number((p.stats.ratingSum || 0) + perf);
+      p.stats.matchRatings ||= [];
+      p.stats.matchRatings.push({ rating: Number(perf.toFixed(1)), opponent: (teamId === match.homeTeamId ? state.teams.find(t => t.id === match.awayTeamId)?.name : state.teams.find(t => t.id === match.homeTeamId)?.name) || 'Unknown', minutes: 90, goals: playerEvents.get(p.id)?.goals || 0, assists: playerEvents.get(p.id)?.assists || 0, yellows: 0, reds: 0, dateLabel: `Week ${state.calendar.week}` });
+      if (p.stats.matchRatings.length > 30) p.stats.matchRatings.shift();
+    });
+  };
+
+  simulateMatch = function(state, match, opts = {}) {
+    const homeTeam = state.teams.find(t => t.id === match.homeTeamId);
+    const awayTeam = state.teams.find(t => t.id === match.awayTeamId);
+    const homeXi = __v32SelectSimulatedXi(state, homeTeam, awayTeam, match);
+    const awayXi = __v32SelectSimulatedXi(state, awayTeam, homeTeam, match);
+
+    const avgOverall = xi => xi.length ? xi.reduce((sum, p) => sum + Number(p.overall || 60), 0) / xi.length : 60;
+    const avgEndurance = xi => xi.length ? xi.reduce((sum, p) => sum + Number(__v32PlayerSelectionLoad(p).endurance || 60), 0) / xi.length : 60;
+    const attackPower = xi => xi.filter(p => posBucket(normalizeGeneratedPosition(p.position)) === 'ATT').reduce((sum, p) => sum + Number(p.overall || 60), 0) / Math.max(1, xi.filter(p => posBucket(normalizeGeneratedPosition(p.position)) === 'ATT').length);
+    const midfieldPower = xi => xi.filter(p => posBucket(normalizeGeneratedPosition(p.position)) === 'MID').reduce((sum, p) => sum + Number(p.overall || 60), 0) / Math.max(1, xi.filter(p => posBucket(normalizeGeneratedPosition(p.position)) === 'MID').length);
+    const defensePower = xi => xi.filter(p => ['DEF','GK'].includes(posBucket(normalizeGeneratedPosition(p.position)))).reduce((sum, p) => sum + Number(p.overall || 60), 0) / Math.max(1, xi.filter(p => ['DEF','GK'].includes(posBucket(normalizeGeneratedPosition(p.position)))).length);
+
+    const homePower = avgOverall(homeXi);
+    const awayPower = avgOverall(awayXi);
+    const rivalry = rivalryBoost(homeTeam.name, awayTeam.name);
+    const homeAdv = 0.24 + Math.max(-0.05, Math.min(0.11, (avgEndurance(homeXi) - avgEndurance(awayXi)) * 0.004));
+    const homeAttack = attackPower(homeXi), awayAttack = attackPower(awayXi);
+    const homeMid = midfieldPower(homeXi), awayMid = midfieldPower(awayXi);
+    const homeDef = defensePower(homeXi), awayDef = defensePower(awayXi);
+
+    let homeXg = clamp(1.08 + (homePower - awayPower) * 0.016 + (homeAttack - awayDef) * 0.010 + (homeMid - awayMid) * 0.004 + homeAdv + rivalry * 0.48 + randFloat(-0.20, 0.30), 0.15, 3.9);
+    let awayXg = clamp(0.98 + (awayPower - homePower) * 0.015 + (awayAttack - homeDef) * 0.010 + (awayMid - homeMid) * 0.004 + rivalry * 0.22 + randFloat(-0.20, 0.28), 0.1, 3.5);
+
+    let homeGoals = poisson(homeXg), awayGoals = poisson(awayXg), penalties = null, extraTime = false;
+    if (opts.singleElimination && homeGoals === awayGoals) {
+      extraTime = true;
+      homeGoals += poisson(homeXg * 0.16);
+      awayGoals += poisson(awayXg * 0.16);
+      if (homeGoals === awayGoals) {
+        penalties = { home: randInt(3, 6), away: randInt(3, 6) };
+        while (penalties.home === penalties.away) {
+          penalties.home = randInt(3, 7);
+          penalties.away = randInt(3, 7);
+        }
+      }
+    } else if (opts.penaltyOnDraw && homeGoals === awayGoals) {
+      penalties = { home: randInt(2, 6), away: randInt(2, 6) };
+      while (penalties.home === penalties.away) {
+        penalties.home = randInt(2, 7);
+        penalties.away = randInt(2, 7);
+      }
+    }
+
+    const homeShots = Math.max(homeGoals + randInt(6, 13), Math.round(homeXg * 6.9));
+    const awayShots = Math.max(awayGoals + randInt(5, 12), Math.round(awayXg * 6.7));
+    const homeSot = clamp(homeGoals + randInt(1, 5), homeGoals, homeShots);
+    const awaySot = clamp(awayGoals + randInt(1, 5), awayGoals, awayShots);
+    const homePoss = clamp(Math.round(50 + (homeMid - awayMid) * 0.35 + (homePower - awayPower) * 0.22 + randInt(-5, 5)), 34, 66);
+    const awayPoss = 100 - homePoss;
+    const homeYellows = randInt(0, 4), awayYellows = randInt(0, 4), homeReds = Math.random() < 0.04 ? 1 : 0, awayReds = Math.random() < 0.04 ? 1 : 0;
+
+    const events = [];
+    for (let i = 0; i < homeGoals; i++) {
+      const scorer = chooseScorer(homeXi);
+      const assistPool = homeXi.filter(p => p.id !== scorer.id);
+      const assist = Math.random() < 0.74 && assistPool.length ? chooseScorer(assistPool) : null;
+      events.push({ minute: randInt(3, 90), side: 'home', scorerId: scorer.id, assistId: assist?.id || null });
+    }
+    for (let i = 0; i < awayGoals; i++) {
+      const scorer = chooseScorer(awayXi);
+      const assistPool = awayXi.filter(p => p.id !== scorer.id);
+      const assist = Math.random() < 0.74 && assistPool.length ? chooseScorer(assistPool) : null;
+      events.push({ minute: randInt(3, 90), side: 'away', scorerId: scorer.id, assistId: assist?.id || null });
+    }
+    events.sort((a, b) => a.minute - b.minute);
+
+    match.played = true;
+    match.result = { homeGoals, awayGoals, homeXg: Number(homeXg.toFixed(2)), awayXg: Number(awayXg.toFixed(2)), homeShots, awayShots, homeSot, awaySot, homePoss, awayPoss, homeYellows, awayYellows, homeReds, awayReds, events, penalties, extraTime };
+    const homeResult = penalties ? (penalties.home > penalties.away ? 'win' : 'loss') : homeGoals > awayGoals ? 'win' : homeGoals < awayGoals ? 'loss' : 'draw';
+    const awayResult = penalties ? (penalties.away > penalties.home ? 'win' : 'loss') : awayGoals > homeGoals ? 'win' : awayGoals < homeGoals ? 'loss' : 'draw';
+    giveStats(state, match, homeTeam.id, homeGoals, awayGoals, homeXg, homeShots, homeSot, homeYellows, homeReds, homeResult, homeXi);
+    giveStats(state, match, awayTeam.id, awayGoals, homeGoals, awayXg, awayShots, awaySot, awayYellows, awayReds, awayResult, awayXi);
+    if (match.type === 'Regular Season') applyStandings(state, match);
+    return match.result;
+  };
+
+  makeSchedule = function(state) {
+    const teams = [...state.teams];
+    const seededShuffle = (list, salt = 0) => {
+      const arr = [...list];
+      let seed = ((state.season?.year || 2026) * 9301 + 49297 + salt * 233) % 233280;
+      const rand = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+    const buildRoundRobinRounds = teamList => {
+      const ids = seededShuffle(teamList.map(t => t.id), 1);
+      const n = ids.length;
+      let arr = [...ids];
+      const rounds = [];
+      for (let round = 0; round < n - 1; round++) {
+        const pairings = [];
+        for (let i = 0; i < n / 2; i++) {
+          const a = arr[i], b = arr[n - 1 - i];
+          pairings.push(round % 2 === 0 ? [a, b] : [b, a]);
+        }
+        rounds.push(seededShuffle(pairings, round + 4));
+        arr = [arr[0], arr[n - 1], ...arr.slice(1, n - 1)];
+      }
+      return seededShuffle(rounds, 6);
+    };
+    const baseRounds = buildRoundRobinRounds(teams);
+    const extraIndexes = seededShuffle(Array.from({ length: baseRounds.length }, (_, idx) => idx), 12).slice(0, 5);
+    const extraRounds = extraIndexes.map((idx, i) => seededShuffle(baseRounds[idx].map(([home, away], pairIdx) => ((i + pairIdx) % 2 === 0 ? [away, home] : [home, away])), 100 + i));
+    const allRounds = seededShuffle([...baseRounds, ...extraRounds], 22);
+    const matches = [];
+    allRounds.forEach((pairings, idx) => {
+      const week = idx + 1;
+      for (const [homeTeamId, awayTeamId] of pairings) {
+        const homeTeam = teams.find(t => t.id === homeTeamId);
+        const awayTeam = teams.find(t => t.id === awayTeamId);
+        matches.push({ id: uuid('m'), type: 'Regular Season', week, played: false, homeTeamId, awayTeamId, homeConf: homeTeam.conference, awayConf: awayTeam.conference, result: null });
+      }
+    });
+    state.schedule = matches.sort((a, b) => a.week - b.week || String(a.homeTeamId).localeCompare(String(b.homeTeamId)));
+  };
+})();

@@ -4758,3 +4758,339 @@ if (document.readyState === "loading") {
 }
 
 window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventDefault(); ev.returnValue = "Are you sure you want to exit the live sim?"; return ev.returnValue; } });
+
+// ===== v32 UI and commissioner patch =====
+(function(){
+  const MLS_STADIUM_DATA = {
+    'Minnesota United FC': { stadium: 'Allianz Field', location: 'Saint Paul, Minnesota', capacity: 19400 },
+    'Real Salt Lake': { stadium: 'America First Field', location: 'Sandy, Utah', capacity: 20213 },
+    'D.C. United': { stadium: 'Audi Field', location: 'Washington, D.C.', capacity: 20000 },
+    'Charlotte FC': { stadium: 'Bank of America Stadium', location: 'Charlotte, North Carolina', capacity: 38000 },
+    'Vancouver Whitecaps FC': { stadium: 'BC Place', location: 'Vancouver, British Columbia', capacity: 22120 },
+    'Toronto FC': { stadium: 'BMO Field', location: 'Toronto, Ontario', capacity: 45000 },
+    'Los Angeles FC': { stadium: 'BMO Stadium', location: 'Los Angeles, California', capacity: 22000 },
+    'Colorado Rapids': { stadium: "Dick's Sporting Goods Park", location: 'Commerce City, Colorado', capacity: 18061 },
+    'LA Galaxy': { stadium: 'Dignity Health Sports Park', location: 'Carson, California', capacity: 27000 },
+    'St. Louis City SC': { stadium: 'Energizer Park', location: 'St. Louis, Missouri', capacity: 22423 },
+    'New England Revolution': { stadium: 'Gillette Stadium', location: 'Foxborough, Massachusetts', capacity: 20000 },
+    'Nashville SC': { stadium: 'Geodis Park', location: 'Nashville, Tennessee', capacity: 30000 },
+    'Orlando City SC': { stadium: 'Inter&Co Stadium', location: 'Orlando, Florida', capacity: 25500 },
+    'Seattle Sounders FC': { stadium: 'Lumen Field', location: 'Seattle, Washington', capacity: 37722 },
+    'Atlanta United FC': { stadium: 'Mercedes-Benz Stadium', location: 'Atlanta, Georgia', capacity: 42500 },
+    'Inter Miami CF': { stadium: 'Nu Stadium', location: 'Miami, Florida', capacity: 26700 },
+    'San Jose Earthquakes': { stadium: 'PayPal Park', location: 'San Jose, California', capacity: 18000 },
+    'Portland Timbers': { stadium: 'Providence Park', location: 'Portland, Oregon', capacity: 25218 },
+    'Austin FC': { stadium: 'Q2 Stadium', location: 'Austin, Texas', capacity: 20738 },
+    'CF Montréal': { stadium: 'Saputo Stadium', location: 'Montreal, Quebec', capacity: 19619 },
+    'Columbus Crew': { stadium: 'ScottsMiracle-Gro Field', location: 'Columbus, Ohio', capacity: 20371 },
+    'Houston Dynamo FC': { stadium: 'Shell Energy Stadium', location: 'Houston, Texas', capacity: 20656 },
+    'San Diego FC': { stadium: 'Snapdragon Stadium', location: 'San Diego, California', capacity: 35000 },
+    'Chicago Fire FC': { stadium: 'Soldier Field', location: 'Chicago, Illinois', capacity: 24955 },
+    'Sporting Kansas City': { stadium: 'Sporting Park', location: 'Kansas City, Kansas', capacity: 18467 },
+    'New York Red Bulls': { stadium: 'Sports Illustrated Stadium', location: 'Harrison, New Jersey', capacity: 25000 },
+    'Philadelphia Union': { stadium: 'Subaru Park', location: 'Chester, Pennsylvania', capacity: 18500 },
+    'FC Dallas': { stadium: 'Toyota Stadium', location: 'Frisco, Texas', capacity: 19096 },
+    'FC Cincinnati': { stadium: 'TQL Stadium', location: 'Cincinnati, Ohio', capacity: 26000 },
+    'New York City FC': { stadium: 'Yankee Stadium', location: 'The Bronx, New York', capacity: 30321 },
+  };
+  const SOCIAL_ACCOUNT_META = {
+    '@MLS': { name: 'MLS', badge: 'Official', tone: 'official' },
+    '@MLS_PR': { name: 'MLS PR', badge: 'League', tone: 'official' },
+    '@TransferWireMLS': { name: 'Transfer Wire MLS', badge: 'Rumor', tone: 'rumor' },
+    '@MLSNextScout': { name: 'MLS NEXT Scout', badge: 'Scout', tone: 'scout' },
+    '@DataZoneMLS': { name: 'Data Zone MLS', badge: 'Stats', tone: 'stats' },
+    '@ExtraTimeLive': { name: 'Extra Time Live', badge: 'Media', tone: 'media' },
+    '@TomBogertDesk': { name: 'Bogert Desk', badge: 'Insider', tone: 'rumor' },
+    '@NorthEndNoise': { name: 'North End Noise', badge: 'Ultras', tone: 'fan' },
+    '@SouthWardXI': { name: 'South Ward XI', badge: 'Ultras', tone: 'fan' },
+    '@CascadiaPundit': { name: 'Cascadia Pundit', badge: 'Pundit', tone: 'pundit' },
+    '@SupportersShield': { name: 'Supporters Shield Watch', badge: 'Table', tone: 'stats' },
+    '@AmericanSoccerNow': { name: 'American Soccer Now', badge: 'News', tone: 'media' },
+  };
+
+  function applyTeamStadiumData(st) {
+    for (const team of st?.teams || []) {
+      const data = MLS_STADIUM_DATA[team.name] || MLS_STADIUM_DATA[team.shortName];
+      if (!data) continue;
+      team.stadium = data.stadium;
+      team.stadiumLocation = data.location;
+      team.stadiumCapacity = data.capacity;
+    }
+  }
+
+  function designationLockReason(player) {
+    const salary = Number(player?.contract?.salary || 0);
+    return salary >= 1803125 ? 'This player is salary-locked as a DP.' : '';
+  }
+
+  function computeEditedOverall(player) {
+    const profile = getPlayerStatProfile(player);
+    const overall = Math.max(1, Math.min(99, Math.round(profile.positionRating || player.overall || 1)));
+    const age = Number(player.age || 24);
+    const ageHeadroom = age <= 18 ? 16 : age <= 20 ? 13 : age <= 22 ? 10 : age <= 24 ? 7 : age <= 27 ? 4 : age <= 30 ? 2 : 1;
+    const potential = Math.max(overall, Math.min(99, Number(player.potential || overall + ageHeadroom)));
+    return { overall, potential };
+  }
+
+  const __normalizeState = normalizeState;
+  normalizeState = function(st) {
+    const out = __normalizeState(st);
+    applyTeamStadiumData(out);
+    out.garberConfig ||= { developmentRate: 100, transferAggression: 100, simVariance: 100, mediaVolume: 100 };
+    return out;
+  };
+
+  pageHead = function(title, sub) {
+    return `<div class="page-head"><div><div class="page-title">${escapeHtml(title)}</div></div></div>`;
+  };
+
+  canManuallySetDesignation = function(player, designation) {
+    const d = designation === 'None' || designation === '' ? null : designation;
+    if (designation === 'Auto') return { ok: true };
+    if (designationLockReason(player) && d !== 'DP') return { ok: false, reason: 'Locked to DP' };
+    if (d === 'U22' && Number(player.age || 0) > 23) return { ok:false, reason:'U22 only' };
+    if (d === 'TAM' && (Number(player.contract?.salary || 0) <= 803125 || Number(player.overall || 0) < 66)) return { ok:false, reason:'TAM not allowed' };
+    if (d === 'DP' && Number(player.contract?.salary || 0) < 700000 && Number(player.overall || 0) < 72) return { ok:false, reason:'DP not justified' };
+    return { ok:true };
+  };
+
+  renderGarberMode = function() {
+    state.leagueSettings ||= { salaryCap: Number(getUserTeam(state)?.budget?.salaryCap || 6425000), gamBase: Number(getUserTeam(state)?.budget?.gam || 3280000), tamBase: Number(getUserTeam(state)?.budget?.tam || 2125000), intlSlots: Number(getUserTeam(state)?.intlSlots || 8) };
+    state.garberConfig ||= { developmentRate: 100, transferAggression: 100, simVariance: 100, mediaVolume: 100 };
+    return `${pageHead('Garber Mode', '')}
+      <div class="cards garber-summary-cards">
+        <div class="card"><div class="card-label">League Clubs</div><div class="card-value">${state.teams?.length || 0}</div></div>
+        <div class="card"><div class="card-label">Players</div><div class="card-value">${state.players?.length || 0}</div></div>
+        <div class="card"><div class="card-label">Social Posts</div><div class="card-value">${(state.socialFeed || []).length}</div></div>
+        <div class="card"><div class="card-label">Season Year</div><div class="card-value">${state.season.year}</div></div>
+      </div>
+      <div class="grid-2 garber-grid-2">
+        <div class="panel"><div class="panel-head"><h3>League Economy</h3><span>Core roster rules</span></div>
+          <div class="grid-4" style="gap:12px;">
+            <div><label>Salary Cap</label><input id="garberSalaryCap" type="number" value="${Number(state.leagueSettings.salaryCap || 6425000)}" /></div>
+            <div><label>Base GAM</label><input id="garberGam" type="number" value="${Number(state.leagueSettings.gamBase || 3280000)}" /></div>
+            <div><label>Base TAM</label><input id="garberTam" type="number" value="${Number(state.leagueSettings.tamBase || 2125000)}" /></div>
+            <div><label>Intl Slots</label><input id="garberIntlSlots" type="number" min="0" max="20" value="${Number(state.leagueSettings.intlSlots || 8)}" /></div>
+          </div>
+          <div class="flex" style="margin-top:12px;"><button id="garberApplyLeagueBtn" class="primary-btn" type="button">Apply League Settings</button></div>
+        </div>
+        <div class="panel"><div class="panel-head"><h3>Simulation Tuning</h3><span>Commissioner sliders</span></div>
+          <div class="grid-2" style="gap:12px;">
+            <div><label>Development Rate</label><input id="garberDevRate" type="number" min="50" max="200" value="${Number(state.garberConfig.developmentRate || 100)}" /></div>
+            <div><label>Transfer Aggression</label><input id="garberTransferAgg" type="number" min="50" max="200" value="${Number(state.garberConfig.transferAggression || 100)}" /></div>
+            <div><label>Sim Variance</label><input id="garberSimVariance" type="number" min="50" max="200" value="${Number(state.garberConfig.simVariance || 100)}" /></div>
+            <div><label>Media Volume</label><input id="garberMediaVolume" type="number" min="50" max="200" value="${Number(state.garberConfig.mediaVolume || 100)}" /></div>
+          </div>
+          <div class="flex" style="margin-top:12px;"><button id="garberSaveCfgBtn" class="primary-btn" type="button">Save Commissioner Settings</button></div>
+        </div>
+      </div>
+      <div class="grid-2 garber-grid-2 mt12">
+        <div class="panel"><div class="panel-head"><h3>Garber Tools</h3><span>Player editing moved</span></div>
+          <div class="note">Open any player profile and use the purple Commissioner Edit button inside the Ratings tab.</div>
+          <ul class="simple-list">
+            <li>Lineups were tightened up and highlighted better.</li>
+            <li>Schedules now randomize every season.</li>
+            <li>Illegal designations are blocked and locked designations stay locked.</li>
+            <li>Social media now includes official, pundit, scout, rumor, and supporter accounts.</li>
+          </ul>
+        </div>
+        <div class="panel"><div class="panel-head"><h3>Stadium Registry</h3><span>MLS venues loaded</span></div>
+          <div class="table-scroll"><table class="tight-table"><thead><tr><th>Club</th><th>Stadium</th><th>Location</th></tr></thead><tbody>
+          ${(state.teams || []).slice().sort((a,b) => String(a.name).localeCompare(String(b.name))).map(team => `<tr><td>${escapeHtml(team.name)}</td><td>${escapeHtml(team.stadium || '—')}</td><td>${escapeHtml(team.stadiumLocation || '—')}</td></tr>`).join('')}
+          </tbody></table></div>
+        </div>
+      </div>`;
+  };
+
+  ensureSocialFeedState = function(st = state) {
+    st.socialFeed ||= [];
+    st.socialWeekGenerated ||= {};
+    return st.socialFeed;
+  };
+
+  getGoldenBootBoard = function(limit = 5) {
+    return (state?.players || [])
+      .filter(p => p?.clubId && p?.stats)
+      .map(p => ({ player: p, team: byTeamId(p.clubId), goals: Number(p.stats.goals || 0), assists: Number(p.stats.assists || 0), gp: Number(p.stats.gp || 0) }))
+      .filter(r => r.goals > 0 || r.assists > 0 || r.gp > 0)
+      .sort((a, b) => (b.goals - a.goals) || (b.assists - a.assists) || ((b.player?.name || '').replace(/\s/g,'').length - (a.player?.name || '').replace(/\s/g,'').length) || String(a.player?.name || '').localeCompare(String(b.player?.name || '')))
+      .slice(0, limit);
+  };
+
+  function socialPost(handle, kind, text, extra = {}) {
+    return { id: `soc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`, week: extra.week || state.calendar.week || 1, year: state.season.year, day: state.calendar.absoluteDay || 0, account: handle, kind, text, ...extra };
+  }
+
+  function renderGoldenBootSocialCard(rows = []) {
+    if (!rows.length) return '';
+    return `<div class="social-goldenboot-card"><div class="social-gb-head"><span>MLS</span><strong>Golden Boot Race</strong><em>${state.season.year}</em></div><div class="social-gb-grid">${rows.map((row, idx) => `<div class="social-gb-item"><div class="social-gb-rank">${idx + 1}</div><div class="social-gb-name">${escapeHtml(row.player.name)}</div><div class="social-gb-team">${escapeHtml(row.team?.shortName || row.team?.name || '')}</div><div class="social-gb-stats"><span>${row.goals} G</span><span>${row.assists} A</span><span>${row.gp} GP</span></div></div>`).join('')}</div></div>`;
+  }
+
+  generateSocialPostsForWeek = function(week = state?.calendar?.week || 1) {
+    if (!state) return [];
+    ensureSocialFeedState(state);
+    const key = `${state.season.year}-${week}`;
+    if (state.socialWeekGenerated[key]) return [];
+    state.socialWeekGenerated[key] = true;
+    const posts = [];
+    const playedThisWeek = (state.schedule || []).filter(m => m.week === week && m.played && m.result);
+    const mainMatch = playedThisWeek.slice().sort((a,b) => (((b.result?.homeGoals||0)+(b.result?.awayGoals||0)) - ((a.result?.homeGoals||0)+(a.result?.awayGoals||0))))[0];
+    if (mainMatch) {
+      const h = byTeamId(mainMatch.homeTeamId), a = byTeamId(mainMatch.awayTeamId), r = mainMatch.result || {};
+      posts.push(socialPost('@MLS', 'Match Result', `${h?.shortName || h?.name} ${r.homeGoals}-${r.awayGoals} ${a?.shortName || a?.name}`, { headline: 'Full-time', week }));
+      posts.push(socialPost('@ExtraTimeLive', 'Pundit', `${h?.shortName || h?.name} vs ${a?.shortName || a?.name} delivered ${r.homeGoals + r.awayGoals} goals.`, { week }));
+      posts.push(socialPost(Math.random() < 0.5 ? '@NorthEndNoise' : '@SouthWardXI', 'Supporters', `Matchday ${week} had real atmosphere and noise behind it.`, { week }));
+    }
+    const star = (state.players || []).filter(p => p.clubId && (p.stats?.goals || p.stats?.assists)).sort((a,b) => ((b.stats?.goals||0)+(b.stats?.assists||0)) - ((a.stats?.goals||0)+(a.stats?.assists||0)))[0];
+    if (star) {
+      const team = byTeamId(star.clubId);
+      posts.push(socialPost('@DataZoneMLS', 'Stats', `${star.name}: ${star.stats.goals || 0} goals, ${star.stats.assists || 0} assists, ${star.stats.gp || 0} apps for ${team?.shortName || team?.name}.`, { week }));
+    }
+    const golden = getGoldenBootBoard(5);
+    if (golden.length) posts.push(socialPost('@MLS', 'Golden Boot', 'Official league update', { week, cardType: 'goldenBoot', goldenRows: golden }));
+    const prospects = getVisibleDraftBoard().slice(0, 4);
+    if (prospects.length) posts.push(socialPost('@MLSNextScout', 'Scouting Report', `Risers: ${prospects.map(p => `${p.name} (${p.position}, ${p.displayedOverall ?? p.overall}/${p.displayedPotential ?? p.potential})`).join(' · ')}`, { week }));
+    const rumorPool = (state.players || []).filter(p => p.clubId && p.age >= 18).sort((a,b) => ((b.potential||0)-(a.potential||0)) || ((b.overall||0)-(a.overall||0)));
+    const rumor = rumorPool[Math.floor(Math.random() * Math.min(rumorPool.length, 40))];
+    if (rumor) {
+      const team = byTeamId(rumor.clubId);
+      posts.push(socialPost(Math.random() < 0.5 ? '@TransferWireMLS' : '@TomBogertDesk', 'Transfer Rumor', `${team?.shortName || team?.name} are fielding calls on ${rumor.name}.`, { week }));
+    }
+    const tableLeaders = ['East', 'West'].map(conf => (state.standings?.[conf] || []).slice().sort((a,b) => b.points - a.points || b.wins - a.wins || b.gd - a.gd)[0]).filter(Boolean);
+    if (tableLeaders.length === 2) posts.push(socialPost('@SupportersShield', 'Table Watch', `${byTeamId(tableLeaders[0].teamId)?.shortName || 'East leader'} lead the East on ${tableLeaders[0].points} pts. ${byTeamId(tableLeaders[1].teamId)?.shortName || 'West leader'} lead the West on ${tableLeaders[1].points} pts.`, { week }));
+    state.socialFeed.unshift(...posts);
+    state.socialFeed = state.socialFeed.slice(0, 220);
+    return posts;
+  };
+
+  renderSocialFeed = function() {
+    ensureSocialFeedState(state);
+    const posts = state.socialFeed || [];
+    return `${pageHead('MLS Social', '')}
+      <div class="cards social-summary-cards">
+        <div class="card"><div class="card-label">Posts</div><div class="card-value">${posts.length}</div></div>
+        <div class="card"><div class="card-label">Week</div><div class="card-value">${state.calendar.week}</div></div>
+        <div class="card"><div class="card-label">Accounts</div><div class="card-value">${Object.keys(SOCIAL_ACCOUNT_META).length}</div></div>
+      </div>
+      <div class="panel social-feed-panel">
+        <div class="panel-head"><h3>MLS Timeline</h3><button id="generateSocialBtn" class="small-btn" type="button">Generate This Week</button></div>
+        <div class="social-account-strip">${Object.entries(SOCIAL_ACCOUNT_META).map(([handle, meta]) => `<span class="social-account-chip ${meta.tone || ''}">${escapeHtml(handle)} · ${escapeHtml(meta.badge || '')}</span>`).join('')}</div>
+        <div class="social-feed-list">
+          ${posts.map(p => { const meta = SOCIAL_ACCOUNT_META[p.account] || { name: p.account, badge: p.kind, tone: '' }; return `<article class="social-post ${meta.tone || ''} ${p.cardType ? 'has-card' : ''}"><div class="social-avatar">${escapeHtml((meta.name || p.account).split(' ').map(v => v[0]).slice(0,2).join('').toUpperCase())}</div><div class="social-body"><div class="social-meta"><strong>${escapeHtml(meta.name || p.account)}</strong><span>${escapeHtml(p.kind)}</span><em>Week ${p.week}</em></div>${p.headline ? `<div class="social-headline">${escapeHtml(p.headline)}</div>` : ''}<p>${escapeHtml(p.text)}</p>${p.cardType === 'goldenBoot' ? renderGoldenBootSocialCard(p.goldenRows || []) : ''}</div></article>`; }).join('') || `<div class="note">No posts yet. Sim a week or generate this week.</div>`}
+        </div>
+      </div>`;
+  };
+
+  const __openPlayerProfile = openPlayerProfile;
+  openPlayerProfile = function(playerId) {
+    __openPlayerProfile(playerId);
+    setTimeout(() => {
+      const player = byPlayerId(playerId);
+      const ratingsPanel = document.querySelector('#playerProfileOverlay [data-pp-panel="ratings"]');
+      if (!player || !ratingsPanel || document.getElementById('ppGarberMount')) return;
+      const computed = computeEditedOverall(player);
+      const lockReason = designationLockReason(player);
+      const wrap = document.createElement('div');
+      wrap.id = 'ppGarberMount';
+      wrap.className = 'pp-garber-wrap';
+      wrap.innerHTML = `<div class="pp-garber-header"><button type="button" class="pp-garber-btn" id="ppToggleGarber">Commissioner Edit</button><span class="pp-garber-note">Overall is derived automatically from the ratings below. Current derived OVR: ${computed.overall}</span></div>
+        <div class="pp-garber-panel hidden" id="ppGarberPanel">
+          <div class="grid-4 pp-garber-grid">
+            <div><label>Age</label><input id="ppGarberAge" type="number" min="15" max="45" value="${Number(player.age || 18)}"></div>
+            <div><label>Potential</label><input id="ppGarberPotential" type="number" min="1" max="99" value="${Number(player.potential || player.overall || 1)}"></div>
+            <div><label>Value</label><input id="ppGarberValue" type="number" min="0" step="10000" value="${Number(player.value || player.marketValue || 0)}"></div>
+            <div><label>Morale</label><input id="ppGarberMorale" type="number" min="1" max="100" value="${Number(player.morale || 65)}"></div>
+            <div><label>Position</label><select id="ppGarberPos">${['GK','LB','CB','RB','CDM','CM','CAM','LM','RM','LW','RW','ST'].map(pos => `<option value="${pos}" ${String(player.position||'')===pos?'selected':''}>${pos}</option>`).join('')}</select></div>
+            <div><label>Club</label><select id="ppGarberClub"><option value="">Free Agent</option>${(state.teams||[]).map(t => `<option value="${t.id}" ${String(player.clubId||'')===String(t.id)?'selected':''}>${escapeHtml(t.name)}</option>`).join('')}</select></div>
+            <div><label>Salary</label><input id="ppGarberSalary" type="number" min="0" step="25000" value="${Number(player.contract?.salary || 0)}"></div>
+            <div><label>Years Left</label><input id="ppGarberYears" type="number" min="0" max="8" value="${Number(player.contract?.yearsLeft || 0)}"></div>
+            <div><label>Designation</label><select id="ppGarberDesignation" ${lockReason ? 'disabled' : ''}><option value="">None</option>${['DP','TAM','U22'].map(d => { const allowed = canManuallySetDesignation(player, d); return `<option value="${d}" ${String(player.designation||'')===d?'selected':''} ${allowed.ok?'':'disabled'}>${d}${allowed.ok?'':' — blocked'}</option>`; }).join('')}</select></div>
+            <div><label>Pace</label><input id="ppGarberPace" type="number" min="1" max="99" value="${Number(player.attributes?.pace || 1)}"></div>
+            <div><label>Shooting</label><input id="ppGarberShooting" type="number" min="1" max="99" value="${Number(player.attributes?.shooting || 1)}"></div>
+            <div><label>Passing</label><input id="ppGarberPassing" type="number" min="1" max="99" value="${Number(player.attributes?.passing || 1)}"></div>
+            <div><label>Dribbling</label><input id="ppGarberDribbling" type="number" min="1" max="99" value="${Number(player.attributes?.dribbling || 1)}"></div>
+            <div><label>Defense</label><input id="ppGarberDefense" type="number" min="1" max="99" value="${Number(player.attributes?.defense || 1)}"></div>
+            <div><label>Physical</label><input id="ppGarberPhysical" type="number" min="1" max="99" value="${Number(player.attributes?.physical || 1)}"></div>
+          </div>
+          ${lockReason ? `<div class="note pp-lock-note">${escapeHtml(lockReason)}</div>` : ''}
+          <div class="flex" style="margin-top:12px;gap:10px;flex-wrap:wrap;"><button id="ppGarberSave" class="primary-btn" type="button">Save Changes</button><button id="ppGarberResetMorale" class="ghost-btn" type="button">Reset Morale</button></div>
+        </div>`;
+      ratingsPanel.prepend(wrap);
+      document.getElementById('ppToggleGarber')?.addEventListener('click', () => document.getElementById('ppGarberPanel')?.classList.toggle('hidden'));
+      document.getElementById('ppGarberResetMorale')?.addEventListener('click', () => { const morale = document.getElementById('ppGarberMorale'); if (morale) morale.value = '75'; });
+      document.getElementById('ppGarberSave')?.addEventListener('click', async () => {
+        const p = byPlayerId(playerId);
+        if (!p) return;
+        p.age = clamp(Number(document.getElementById('ppGarberAge')?.value || p.age || 18), 15, 45);
+        p.potential = clamp(Number(document.getElementById('ppGarberPotential')?.value || p.potential || p.overall || 1), 1, 99);
+        p.value = Math.max(0, Number(document.getElementById('ppGarberValue')?.value || p.value || p.marketValue || 0));
+        p.marketValue = p.value;
+        p.morale = clamp(Number(document.getElementById('ppGarberMorale')?.value || p.morale || 65), 1, 100);
+        p.position = document.getElementById('ppGarberPos')?.value || p.position;
+        p.clubId = document.getElementById('ppGarberClub')?.value || null;
+        p.contract ||= {};
+        p.contract.salary = Math.max(0, Number(document.getElementById('ppGarberSalary')?.value || p.contract.salary || 0));
+        p.contract.yearsLeft = clamp(Number(document.getElementById('ppGarberYears')?.value || p.contract.yearsLeft || 0), 0, 8);
+        p.attributes ||= {};
+        p.attributes.pace = clamp(Number(document.getElementById('ppGarberPace')?.value || p.attributes.pace || 1), 1, 99);
+        p.attributes.shooting = clamp(Number(document.getElementById('ppGarberShooting')?.value || p.attributes.shooting || 1), 1, 99);
+        p.attributes.passing = clamp(Number(document.getElementById('ppGarberPassing')?.value || p.attributes.passing || 1), 1, 99);
+        p.attributes.dribbling = clamp(Number(document.getElementById('ppGarberDribbling')?.value || p.attributes.dribbling || 1), 1, 99);
+        p.attributes.defense = clamp(Number(document.getElementById('ppGarberDefense')?.value || p.attributes.defense || 1), 1, 99);
+        p.attributes.physical = clamp(Number(document.getElementById('ppGarberPhysical')?.value || p.attributes.physical || 1), 1, 99);
+        const nextDesignation = document.getElementById('ppGarberDesignation')?.value || '';
+        const allowed = canManuallySetDesignation(p, nextDesignation);
+        if (!allowed.ok) { toast(allowed.reason || 'Designation locked.', 'error'); return; }
+        p.designation = nextDesignation || null;
+        p.designationMode = nextDesignation ? 'manual' : 'auto';
+        hydratePlayer(p, state?.season?.year || 2026);
+        const next = computeEditedOverall(p);
+        p.overall = next.overall;
+        if (!Number.isFinite(Number(p.potential)) || Number(p.potential) < next.overall) p.potential = next.potential;
+        autoAssignAllDesignations(state);
+        await persist();
+        toast('Player updated.', 'success');
+        document.getElementById('playerProfileOverlay')?.remove();
+        await renderPage();
+        openPlayerProfile(playerId);
+      });
+    }, 0);
+  };
+
+  document.addEventListener('click', async e => {
+    const t = e.target;
+    if (!t || !t.id) return;
+    if (t.id === 'garberApplyLeagueBtn') {
+      state.leagueSettings ||= {};
+      state.leagueSettings.salaryCap = Number(document.getElementById('garberSalaryCap')?.value || state.leagueSettings.salaryCap || 6425000);
+      state.leagueSettings.gamBase = Number(document.getElementById('garberGam')?.value || state.leagueSettings.gamBase || 3280000);
+      state.leagueSettings.tamBase = Number(document.getElementById('garberTam')?.value || state.leagueSettings.tamBase || 2125000);
+      state.leagueSettings.intlSlots = Number(document.getElementById('garberIntlSlots')?.value || state.leagueSettings.intlSlots || 8);
+      (state.teams || []).forEach(team => { team.salaryBudget = state.leagueSettings.salaryCap; team.gam = state.leagueSettings.gamBase; team.tam = state.leagueSettings.tamBase; team.internationalSlots = state.leagueSettings.intlSlots; });
+      await persist();
+      toast('League settings updated.', 'success');
+      await renderPage();
+    } else if (t.id === 'garberSaveCfgBtn') {
+      state.garberConfig ||= {};
+      state.garberConfig.developmentRate = Number(document.getElementById('garberDevRate')?.value || 100);
+      state.garberConfig.transferAggression = Number(document.getElementById('garberTransferAgg')?.value || 100);
+      state.garberConfig.simVariance = Number(document.getElementById('garberSimVariance')?.value || 100);
+      state.garberConfig.mediaVolume = Number(document.getElementById('garberMediaVolume')?.value || 100);
+      await persist();
+      toast('Commissioner settings saved.', 'success');
+      await renderPage();
+    } else if (t.id === 'generateSocialBtn') {
+      generateSocialPostsForWeek(state.calendar.week || 1);
+      await persist();
+      await renderPage();
+    }
+  });
+
+  setTimeout(async () => {
+    if (state) {
+      state = normalizeState(state);
+      try { await persist(); } catch {}
+      try { await renderPage(); } catch {}
+    }
+  }, 600);
+})();
