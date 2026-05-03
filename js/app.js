@@ -5708,3 +5708,84 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
     const awayLogo = document.getElementById('fotmob-away-lineup-logo'); if (awayLogo) awayLogo.innerHTML = awayTeam ? teamLogoMark(awayTeam, 'fotmob-lineup-crest') : '';
   };
 })();
+
+/* --- v42 fixed formation spacing override --- */
+(() => {
+  const lineupNameV42 = player => {
+    const full = (player?.name || '').trim();
+    if (!full) return '—';
+    const bits = full.split(/\s+/).filter(Boolean);
+    const last = bits[bits.length - 1] || full;
+    return last.length <= 12 ? last : `${last.slice(0, 11)}…`;
+  };
+  const ratingClassV42 = rating => {
+    if (typeof ratingClassFor === 'function') return ratingClassFor(rating);
+    if (rating >= 7) return 'good';
+    if (rating >= 5) return 'mid';
+    return 'bad';
+  };
+  const coordFor = (slot, side) => {
+    const x = Math.max(0.03, Math.min(0.97, Number(slot?.x ?? 0.5)));
+    const y = Math.max(0.05, Math.min(0.95, Number(slot?.y ?? 0.5)));
+    const top = 10 + x * 76; // vertical lanes
+    const attackBand = 6 + (0.92 - y) * 52; // 4..44-ish for home
+    const left = side === 'home' ? attackBand : 100 - attackBand;
+    return { left: `${left.toFixed(2)}%`, top: `${top.toFixed(2)}%` };
+  };
+  renderFotmobPitch = function(match, minute = 1) {
+    const pitch = document.getElementById('fotmob-pitch');
+    if (!pitch || !livePitchScene) return;
+    const hp = livePitchScene.homePack;
+    const ap = livePitchScene.awayPack;
+    const homeLayout = FORMATION_LAYOUT[livePitchScene.homeFormation] || FORMATION_LAYOUT['4-3-3'];
+    const awayLayout = FORMATION_LAYOUT[livePitchScene.awayFormation] || FORMATION_LAYOUT['4-3-3'];
+    const homeXi = hp?.xi || [];
+    const awayXi = ap?.xi || [];
+    const allLiveXi = [...homeXi, ...awayXi].map(e => e?.player).filter(Boolean);
+    const bestRating = allLiveXi.length ? Math.max(...allLiveXi.map(p => getLivePlayerRating(p, minute))) : 0;
+
+    const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
+      const player = entry?.player;
+      if (!player) return '';
+      const pos = coordFor(layout[idx] || { x: 0.5, y: 0.5 }, side);
+      const ratingValue = getLivePlayerRating(player, minute);
+      const isBest = minute >= 90 && ratingValue >= bestRating - 0.001 && bestRating >= 7;
+      const icons = liveEventSummaryForPlayer(player.id);
+      const notes = [];
+      if (icons.latestMinute) notes.push(`<span class="fotmob-player-minute">${icons.latestMinute}'</span>`);
+      if (icons.goals) notes.push(liveEventChip('goal','Goal', icons.goals > 1 ? icons.goals : null));
+      if (icons.assists) notes.push(liveEventChip('assist','Assist', icons.assists > 1 ? icons.assists : null));
+      if (icons.yellows) notes.push(liveEventChip('yellow','Yellow card'));
+      if (icons.reds) notes.push(liveEventChip('red','Red card'));
+      if (icons.subOn) notes.push(liveEventChip('subOn','Subbed on'));
+      if (icons.subOff) notes.push(liveEventChip('subOff','Subbed off'));
+      return `<div class="fotmob-player fotmob-player-${side}" style="left:${pos.left};top:${pos.top};">
+        <div class="fotmob-player-head"><div class="fotmob-player-rating ${ratingClassV42(ratingValue)} ${isBest ? 'best' : ''}">${ratingValue.toFixed(1)}${isBest ? '<span class="rating-star">★</span>' : ''}</div></div>
+        <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar allow-initials')}</div>
+        ${notes.length ? `<div class="fotmob-player-notes ${side}">${notes.join('')}</div>` : ''}
+        <div class="fotmob-player-name" title="${escapeAttr(player?.name || '')}"><span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(lineupNameV42(player))}</div>
+        ${livePitchMetric ? `<div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>` : ``}
+      </div>`;
+    }).join('');
+
+    const btn = (key, label) => `<button type="button" class="fotmob-filter-btn ${livePitchMetric === key ? 'active' : ''}" data-pitch-metric="${key}">${label}</button>`;
+    pitch.innerHTML = `<div class="fotmob-pitch-filter-row">${btn('transfer','Transfer value')}${btn('age','Age')}${btn('country','Country')}</div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(homeXi, homeLayout, 'home')}${renderSide(awayXi, awayLayout, 'away')}`;
+    pitch.querySelectorAll('[data-pitch-metric]').forEach(btn => btn.addEventListener('click', () => {
+      const nextMetric = btn.dataset.pitchMetric || null;
+      livePitchMetric = livePitchMetric === nextMetric ? null : nextMetric;
+      renderFotmobPitch(match, minute);
+    }));
+
+    const homeAvg = hp ? avg(homeXi.map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+    const awayAvg = ap ? avg(awayXi.map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+    const hEl = document.getElementById('fotmob-home-team-rating'); if (hEl) hEl.textContent = homeAvg;
+    const aEl = document.getElementById('fotmob-away-team-rating'); if (aEl) aEl.textContent = awayAvg;
+    const hf = document.getElementById('fotmob-home-formation'); if (hf) hf.textContent = livePitchScene.homeFormation;
+    const af = document.getElementById('fotmob-away-formation'); if (af) af.textContent = livePitchScene.awayFormation;
+    const homeTeam = byTeamId(match.homeTeamId), awayTeam = byTeamId(match.awayTeamId);
+    const homeName = document.getElementById('fotmob-home-lineup-name'); if (homeName) homeName.textContent = homeTeam?.name || 'Home';
+    const awayName = document.getElementById('fotmob-away-lineup-name'); if (awayName) awayName.textContent = awayTeam?.name || 'Away';
+    const homeLogo = document.getElementById('fotmob-home-lineup-logo'); if (homeLogo) homeLogo.innerHTML = homeTeam ? teamLogoMark(homeTeam, 'fotmob-lineup-crest') : '';
+    const awayLogo = document.getElementById('fotmob-away-lineup-logo'); if (awayLogo) awayLogo.innerHTML = awayTeam ? teamLogoMark(awayTeam, 'fotmob-lineup-crest') : '';
+  };
+})();
