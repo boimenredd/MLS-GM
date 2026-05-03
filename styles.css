@@ -5664,3 +5664,96 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
     font-size:10px !important;
   }
 }
+
+/* --- v40 collision-safe lineup layout --- */
+#match-sim-box{
+  width:min(1220px, calc(100vw - 12px)) !important;
+  max-width:1220px !important;
+}
+.fotmob-lineup-card,
+.fotmob-pitch{
+  width:100% !important;
+  max-width:none !important;
+}
+.fotmob-pitch{
+  height:640px !important;
+}
+.fotmob-pitch::after{
+  inset:56px 1.2% 18px 1.2% !important;
+}
+.fotmob-pen-box{
+  top:31.5% !important;
+  height:30% !important;
+  width:10.2% !important;
+}
+.fotmob-player{
+  width:76px !important;
+  isolation:isolate !important;
+}
+.fotmob-player-avatar-wrap{
+  width:41px !important;
+  height:41px !important;
+}
+.fotmob-player-avatar,
+.player-photo-fallback.fotmob-player-avatar,
+.player-photo-fallback.fotmob-player-avatar.allow-initials,
+.player-photo-shell.fotmob-player-avatar{
+  width:41px !important;
+  height:41px !important;
+  min-width:41px !important;
+  min-height:41px !important;
+}
+.fotmob-player-head{
+  top:-19px !important;
+  height:18px !important;
+}
+.fotmob-player-rating{
+  min-width:29px !important;
+  height:19px !important;
+  padding:0 6px !important;
+  font-size:10px !important;
+  right:4px !important;
+}
+.fotmob-player-name{
+  max-width:76px !important;
+  font-size:10px !important;
+  line-height:1.05 !important;
+  margin-top:5px !important;
+  padding:0 1px !important;
+  background:rgba(47,47,47,.72) !important;
+  border-radius:4px !important;
+}
+.fotmob-player-number{
+  font-size:10px !important;
+}
+.fotmob-player-notes{
+  top:20px !important;
+  left:50% !important;
+  transform:translateX(13px) !important;
+  max-width:46px !important;
+  justify-content:flex-start !important;
+  gap:1px !important;
+  z-index:8 !important;
+  pointer-events:none !important;
+}
+.fotmob-player-notes.away{
+  transform:translateX(12px) !important;
+}
+.event-chip{
+  width:12px !important;
+  height:12px !important;
+  min-width:12px !important;
+}
+.event-chip-icon,.event-chip-icon svg{
+  width:7px !important;
+  height:7px !important;
+}
+.fotmob-player-minute{
+  font-size:8px !important;
+  line-height:1 !important;
+}
+@media (max-width: 980px){
+  .fotmob-pitch{height:580px !important;}
+  .fotmob-player{width:70px !important;}
+  .fotmob-player-name{max-width:70px !important;font-size:9px !important;}
+}

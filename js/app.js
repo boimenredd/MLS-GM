@@ -5628,3 +5628,83 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
     }
   }, true);
 })();
+
+/* --- v40 collision-safe lineup spacing override --- */
+(() => {
+  const v40Name = player => {
+    const raw = (typeof shortLineupNameV36 === 'function' ? shortLineupNameV36(player) : getShortPlayerName(player)) || player?.name || '—';
+    return raw.length > 12 ? `${raw.slice(0, 11)}…` : raw;
+  };
+  renderFotmobPitch = function(match, minute = 1) {
+    const pitch = document.getElementById('fotmob-pitch');
+    if (!pitch || !livePitchScene) return;
+    const hp = livePitchScene.homePack;
+    const ap = livePitchScene.awayPack;
+    const homeLayout = FORMATION_LAYOUT[livePitchScene.homeFormation] || FORMATION_LAYOUT['4-3-3'];
+    const awayLayout = FORMATION_LAYOUT[livePitchScene.awayFormation] || FORMATION_LAYOUT['4-3-3'];
+    const rows = layout => [...new Set(layout.map(slot => Number((slot?.y ?? .5).toFixed(3))))].sort((a,b)=>b-a);
+    const bandsFor = count => count <= 3 ? [4.8, 24.8, 44.8] : count === 4 ? [4.8, 17.7, 31.0, 44.8] : [4.8, 15.1, 25.7, 35.7, 44.8];
+    const rowMap = layout => { const ys = rows(layout); const bands = bandsFor(ys.length); const map = new Map(); ys.forEach((y,i)=>map.set(y,bands[i] ?? 44)); return map; };
+    const hRows = rowMap(homeLayout), aRows = rowMap(awayLayout);
+    const yLanes = [10.5, 23.5, 36.5, 50, 63.5, 76.5, 89.5];
+    const rawCoords = (slot, side, map) => {
+      const rowKey = Number((slot?.y ?? .5).toFixed(3));
+      const band = map.get(rowKey) ?? 26;
+      const x = Math.max(.03, Math.min(.97, slot?.x ?? .5));
+      const lane = yLanes[Math.max(0, Math.min(yLanes.length - 1, Math.round(x * (yLanes.length - 1))))];
+      return { leftNum: side === 'home' ? band : 100 - band, topNum: lane };
+    };
+    const solvePositions = (entries, layout, map, side) => {
+      const positions = entries.map((entry, idx) => ({ idx, entry, ...rawCoords(layout[idx] || {x:.5,y:.5}, side, map) }));
+      for (let pass = 0; pass < 8; pass++) {
+        for (let i = 0; i < positions.length; i++) {
+          for (let j = i + 1; j < positions.length; j++) {
+            const a = positions[i], b = positions[j];
+            if (Math.abs(a.leftNum - b.leftNum) < 14.2 && Math.abs(a.topNum - b.topNum) < 10.8) {
+              const dir = b.topNum >= a.topNum ? 1 : -1;
+              b.topNum = Math.max(8.5, Math.min(91.5, b.topNum + dir * 5.8));
+            }
+          }
+        }
+      }
+      const out = new Map();
+      positions.forEach(p => out.set(p.idx, { left: `${p.leftNum}%`, top: `${p.topNum}%` }));
+      return out;
+    };
+    const hPos = solvePositions(hp?.xi || [], homeLayout, hRows, 'home');
+    const aPos = solvePositions(ap?.xi || [], awayLayout, aRows, 'away');
+    const allLiveXi = [...(hp?.xi || []), ...(ap?.xi || [])].map(({ player }) => player).filter(Boolean);
+    const bestRating = allLiveXi.length ? Math.max(...allLiveXi.map(p => getLivePlayerRating(p, minute))) : 0;
+    const renderSide = (entries, layout, positions, side) => entries.map((entry, idx) => {
+      const player = entry.player;
+      if (!player) return '';
+      const pos = positions.get(idx) || { left:'50%', top:'50%' };
+      const ratingValue = getLivePlayerRating(player, minute);
+      const isBest = minute >= 90 && ratingValue >= bestRating - .001 && bestRating >= 7;
+      const icons = liveEventSummaryForPlayer(player.id);
+      const notes = [];
+      if (icons.latestMinute) notes.push(`<span class="fotmob-player-minute">${icons.latestMinute}'</span>`);
+      if (icons.goals) notes.push(liveEventChip('goal','Goal', icons.goals > 1 ? icons.goals : null));
+      if (icons.assists) notes.push(liveEventChip('assist','Assist', icons.assists > 1 ? icons.assists : null));
+      if (icons.yellows) notes.push(liveEventChip('yellow','Yellow card'));
+      if (icons.reds) notes.push(liveEventChip('red','Red card'));
+      if (icons.subOn) notes.push(liveEventChip('subOn','Subbed on'));
+      if (icons.subOff) notes.push(liveEventChip('subOff','Subbed off'));
+      return `<div class="fotmob-player fotmob-player-${side}" style="left:${pos.left};top:${pos.top};"><div class="fotmob-player-head"><div class="fotmob-player-rating ${ratingColorClassV33(ratingValue)} ${isBest ? 'best' : ''}">${ratingValue.toFixed(1)}${isBest ? '<span class="rating-star">★</span>' : ''}</div></div><div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar allow-initials')}</div>${notes.length ? `<div class="fotmob-player-notes ${side}">${notes.join('')}</div>` : ''}<div class="fotmob-player-name" title="${escapeAttr(player?.name || '')}"><span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(v40Name(player))}</div>${livePitchMetric ? `<div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>` : ``}</div>`;
+    }).join('');
+    const btn = (key,label) => `<button type="button" class="fotmob-filter-btn ${livePitchMetric === key ? 'active' : ''}" data-pitch-metric="${key}">${label}</button>`;
+    pitch.innerHTML = `<div class="fotmob-pitch-filter-row">${btn('transfer','Transfer value')}${btn('age','Age')}${btn('country','Country')}</div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(hp?.xi || [], homeLayout, hPos, 'home')}${renderSide(ap?.xi || [], awayLayout, aPos, 'away')}`;
+    pitch.querySelectorAll('[data-pitch-metric]').forEach(btn => btn.addEventListener('click', () => { const nextMetric = btn.dataset.pitchMetric || null; livePitchMetric = livePitchMetric === nextMetric ? null : nextMetric; renderFotmobPitch(match, minute); }));
+    const homeAvg = hp ? avg((hp.xi || []).map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+    const awayAvg = ap ? avg((ap.xi || []).map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+    const hEl = document.getElementById('fotmob-home-team-rating'); if (hEl) hEl.textContent = homeAvg;
+    const aEl = document.getElementById('fotmob-away-team-rating'); if (aEl) aEl.textContent = awayAvg;
+    const hf = document.getElementById('fotmob-home-formation'); if (hf) hf.textContent = livePitchScene.homeFormation;
+    const af = document.getElementById('fotmob-away-formation'); if (af) af.textContent = livePitchScene.awayFormation;
+    const homeTeam = byTeamId(match.homeTeamId), awayTeam = byTeamId(match.awayTeamId);
+    const homeName = document.getElementById('fotmob-home-lineup-name'); if (homeName) homeName.textContent = homeTeam?.name || 'Home';
+    const awayName = document.getElementById('fotmob-away-lineup-name'); if (awayName) awayName.textContent = awayTeam?.name || 'Away';
+    const homeLogo = document.getElementById('fotmob-home-lineup-logo'); if (homeLogo) homeLogo.innerHTML = homeTeam ? teamLogoMark(homeTeam, 'fotmob-lineup-crest') : '';
+    const awayLogo = document.getElementById('fotmob-away-lineup-logo'); if (awayLogo) awayLogo.innerHTML = awayTeam ? teamLogoMark(awayTeam, 'fotmob-lineup-crest') : '';
+  };
+})();
