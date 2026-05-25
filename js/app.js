@@ -2959,7 +2959,35 @@ function renderDashboard() {
   const userPlayed = recentPlayed.filter(m => m.homeTeamId === team.id || m.awayTeamId === team.id).slice(-4).reverse();
   const otherPlayed = recentPlayed.filter(m => m.homeTeamId !== team.id && m.awayTeamId !== team.id).slice(-8).reverse();
   const tickerMatches = [...userPlayed, ...otherPlayed].slice(0, 10);
+  // Offseason phase banners
+  const offseasonPhases = { "Draft": null, "Contract Extensions": null, "Free Agency": null, "Offseason": null };
+  const isOffseason = state.season.phase in offseasonPhases;
+  const offseasonBanner = isOffseason ? (() => {
+    const phaseInfo = {
+      "Draft": { icon: "🎓", label: "MLS SuperDraft", desc: "Select prospects in the annual SuperDraft. AI teams also make picks.", action: "draft", actionLabel: "Go to Draft Room", color: "#3b82f6" },
+      "Contract Extensions": { icon: "📋", label: "Contract Extensions", desc: "Offer extensions to keep your key players before free agency opens.", action: "roster", actionLabel: "View Expiring Contracts", color: "#f59e0b" },
+      "Free Agency": { icon: "🤝", label: "Free Agency Window", desc: "Sign free agents and strengthen the squad before the new season.", action: "freeAgents", actionLabel: "Browse Free Agents", color: "#22c55e" },
+      "Offseason": { icon: "🔄", label: "Offseason", desc: "The offseason wraps up. Advance to start the new season.", action: null, actionLabel: null, color: "#a855f7" },
+    };
+    const info = phaseInfo[state.season.phase] || phaseInfo["Offseason"];
+    const nextBtn = info.action ? `<button class="primary-btn nav-jump-btn" data-target-page="${info.action}" style="margin-top:12px;">${escapeHtml(info.actionLabel)}</button>` : "";
+    const advBtn = `<button class="ghost-btn" id="dashOffseasonAdvBtn" style="margin-top:12px;margin-left:8px;">Advance Phase →</button>`;
+    return `<div class="offseason-phase-banner" style="border:2px solid ${info.color}33;background:${info.color}0d;border-radius:16px;padding:18px 22px;margin-bottom:16px;display:flex;align-items:center;gap:16px;">
+      <div style="font-size:36px;">${info.icon}</div>
+      <div style="flex:1;">
+        <div style="font-size:18px;font-weight:800;color:var(--text);">${state.season.year} ${escapeHtml(info.label)}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px;">${escapeHtml(info.desc)}</div>
+        <div>${nextBtn}${advBtn}</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;">Phase</div>
+        <div style="font-size:22px;font-weight:900;color:${info.color};">${escapeHtml(state.season.phase)}</div>
+      </div>
+    </div>`;
+  })() : "";
+
   return `${pageHead(`${team.name} Dashboard`, `${state.season.year} ${state.season.phase.toLowerCase()}`)}
+  ${offseasonBanner}
   <div class="score-ticker">${tickerMatches.map(m => {
     const h = byTeamId(m.homeTeamId), a = byTeamId(m.awayTeamId);
     const isUser = m.homeTeamId === team.id || m.awayTeamId === team.id;
@@ -3919,27 +3947,44 @@ function renderPlayoffs() {
     </tbody></table>`;
   };
 
-  const confCol = (title, data) => `<div class="playoff-conference">
-    <div class="panel-head"><h3>${title}</h3><span>${graphic.locked ? "Locked field" : "Projected field"}</span></div>
-    <div class="playoff-bracket-grid">
-      <div class="playoff-round-col"><div class="playoff-round-title">Wild Card</div>${data.wildCard.map(m => renderBracketMatchup(m.a, m.b, m.meta)).join("")}</div>
-      <div class="playoff-round-col"><div class="playoff-round-title">Round One</div>${data.roundOne.map(m => renderBracketMatchup(m.a, m.b, m.meta)).join("")}</div>
-      <div class="playoff-round-col"><div class="playoff-round-title">Semifinals</div>${data.semis.map(m => renderBracketMatchup(m.a, m.b, m.meta)).join("")}</div>
-      <div class="playoff-round-col"><div class="playoff-round-title">Conference Final</div>${data.final.map(m => renderBracketMatchup(m.a, m.b, m.meta)).join("")}</div>
-    </div>
-  </div>`;
+  // Clean matchup card — no extra meta, seed badge inline
+  const bracketCard = (teamA, teamB, roundLabel) => {
+    const teamRow = (team, fallback = "TBD") => {
+      if (!team) return `<div class="bk-team bk-team-tbd"><span class="bk-seed"></span><span class="bk-name">${fallback}</span><strong class="bk-score">—</strong></div>`;
+      const id = team.teamId || team.id || "";
+      const name = id ? (byTeamId(id)?.shortName || byTeamId(id)?.name || team.name || fallback) : (team.name || fallback);
+      const seed = team.seed ? `<span class="bk-seed">${team.seed}</span>` : `<span class="bk-seed"></span>`;
+      const score = team.resultText !== undefined && team.resultText !== "" ? `<strong class="bk-score bk-score-val">${team.resultText}</strong>` : `<strong class="bk-score">—</strong>`;
+      const nameHtml = id ? teamLink(id, name) : `<span>${escapeHtml(name)}</span>`;
+      return `<div class="bk-team">${seed}${nameHtml}${score}</div>`;
+    };
+    return `<div class="bk-match"><div class="bk-round-label">${escapeHtml(roundLabel || "")}</div>${teamRow(teamA)}${teamRow(teamB)}</div>`;
+  };
 
-  return `${pageHead("MLS Cup Playoffs", graphic.locked ? `Locked bracket · ${escapeHtml(graphic.currentRound)}` : "Projected bracket updates with the standings every week")}
-  <div class="grid-2">
-    <div class="panel">${confCol("Eastern Conference", graphic.East)}</div>
-    <div class="panel">${confCol("Western Conference", graphic.West)}</div>
+  const confBracket = (title, data) => `
+    <div class="panel bk-conf-panel">
+      <div class="panel-head"><h3>${title}</h3><span>${graphic.locked ? "Locked bracket" : "Projected"}</span></div>
+      <div class="bk-grid">
+        <div class="bk-col"><div class="bk-col-title">Wild Card</div>${data.wildCard.map(m => bracketCard(m.a, m.b, "Play-in")).join("")}</div>
+        <div class="bk-col"><div class="bk-col-title">Round One</div>${data.roundOne.map(m => bracketCard(m.a, m.b, "Best of 3")).join("")}</div>
+        <div class="bk-col"><div class="bk-col-title">Semifinals</div>${data.semis.map(m => bracketCard(m.a, m.b, "Semifinal")).join("")}</div>
+        <div class="bk-col"><div class="bk-col-title">Conf Final</div>${data.final.map(m => bracketCard(m.a, m.b, "Final")).join("")}</div>
+      </div>
+    </div>`;
+
+  const cupMatch = graphic.cup[0];
+  const cupHtml = cupMatch ? bracketCard(cupMatch.a, cupMatch.b, "MLS Cup") : "";
+  const champion = state.playoffs?.championTeamId ? byTeamId(state.playoffs.championTeamId) : null;
+
+  return `${pageHead("MLS Cup Playoffs", graphic.locked ? `${escapeHtml(graphic.currentRound)} · ${state.season.year}` : "Projected — updates each week")}
+  ${confBracket("Eastern Conference", graphic.East)}
+  <div class="panel bk-cup-panel" style="margin-top:14px;">
+    <div class="panel-head"><h3>MLS Cup</h3><span>${champion ? "Champion crowned" : "Awaiting finalists"}</span></div>
+    <div class="bk-cup-center">${cupHtml}</div>
+    ${champion ? `<div class="playoff-champion-banner">🏆 ${escapeHtml(champion.name || "Champion")} — MLS Cup ${state.season.year}</div>` : ""}
   </div>
-  <div class="panel" style="margin-top:16px;">
-    <div class="panel-head"><h3>MLS Cup</h3><span>${graphic.locked && state.playoffs?.championTeamId ? "Champion crowned" : "Awaiting finalists"}</span></div>
-    <div class="playoff-cup-center">${graphic.cup.map(m => renderBracketMatchup(m.a, m.b, m.meta)).join("")}</div>
-    ${state.playoffs?.championTeamId ? `<div class="playoff-champion-banner">🏆 ${escapeHtml(byTeamId(state.playoffs.championTeamId)?.name || "Champion")}</div>` : ""}
-  </div>
-  <div class="grid-2" style="margin-top:16px;">
+  ${confBracket("Western Conference", graphic.West)}
+  <div class="grid-2" style="margin-top:14px;">
     <div class="panel"><div class="panel-head"><h3>East Seeds</h3><span>Top 9</span></div>${seedTable("East")}</div>
     <div class="panel"><div class="panel-head"><h3>West Seeds</h3><span>Top 9</span></div>${seedTable("West")}</div>
   </div>`;
@@ -4203,6 +4248,18 @@ function bindPageEvents() {
     if (!r.ok) return toast(r.reason,"warn");
     await persist(); toast("Signed.","success"); renderPage();
   }));
+
+  // Offseason advance button on dashboard
+  $("#dashOffseasonAdvBtn")?.addEventListener("click", async () => {
+    if (!state) return;
+    const oldPhase = state.season.phase;
+    advanceOneWeek(state);
+    if (state.season.phase === "Offseason") runGreenCardOffseason(state);
+    await persist();
+    const newPhase = state.season.phase;
+    toast(`Advanced: ${oldPhase} → ${newPhase}`, "success");
+    await renderPage();
+  });
 
   $$(".academy-callup-btn").forEach(btn => btn.addEventListener("click", async () => {
     const r = callUpAcademyPlayer(state, btn.dataset.id, state.userTeamId);
@@ -5725,11 +5782,18 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
     return 'bad';
   };
   const coordFor = (slot, side) => {
-    const x = Math.max(0.03, Math.min(0.97, Number(slot?.x ?? 0.5)));
+    // x = horizontal spread (0=left edge, 1=right edge of pitch)
+    // y = depth (0.87=GK deep in own half, 0.12=striker at opponent goal)
+    const x = Math.max(0.04, Math.min(0.96, Number(slot?.x ?? 0.5)));
     const y = Math.max(0.05, Math.min(0.95, Number(slot?.y ?? 0.5)));
-    const top = 10 + x * 76; // vertical lanes
-    const attackBand = 6 + (0.92 - y) * 52; // 4..44-ish for home
-    const left = side === 'home' ? attackBand : 100 - attackBand;
+    // top: maps x (lateral spread) -> vertical position on horizontal pitch display
+    // Center (x=0.5) -> 50%, wings spread to ~10% and ~90%
+    const top = 8 + x * 80;
+    // left: depth along horizontal axis — GK near own goal (y~0.87), ST near opp goal (y~0.12)
+    // For home (left side): GK at ~5%, midfield at ~35%, ST at ~44%
+    // depth = (1 - y) maps 0.87->0.13, 0.12->0.88 then scale to 4..47 range
+    const depth = 4 + (1 - y) * 44;
+    const left = side === 'home' ? depth : 100 - depth;
     return { left: `${left.toFixed(2)}%`, top: `${top.toFixed(2)}%` };
   };
   renderFotmobPitch = function(match, minute = 1) {
