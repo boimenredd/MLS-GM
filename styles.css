@@ -5893,49 +5893,47 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
 
 /* ===== v43 — targeted fixes only ===== */
 
-/* Bigger, clearer event chips */
+/* Event chips — slightly larger than v41 defaults but same style */
 .event-chip {
-  width: 18px !important;
-  height: 18px !important;
-  min-width: 18px !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-width: 16px !important;
   border-radius: 50% !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  box-shadow: 0 1px 4px rgba(0,0,0,.5) !important;
+  padding: 0 !important;
+  box-shadow: 0 0 0 1.5px rgba(255,255,255,.2) !important;
 }
 .event-chip-icon, .event-chip-icon svg {
-  width: 11px !important;
-  height: 11px !important;
+  width: 10px !important;
+  height: 10px !important;
   display: block !important;
 }
-.event-chip.goal   { background: #1d6ef5 !important; color: #fff !important; }
+.event-chip.goal   { background: #1d6ef5 !important; color: #fff !important; box-shadow: 0 0 0 1.5px rgba(255,255,255,.2) !important; }
 .event-chip.assist { background: #6d28d9 !important; color: #fff !important; }
-.event-chip.yellow { background: #f5c800 !important; color: #1a1200 !important; }
+.event-chip.yellow { background: #f5c800 !important; color: #1a1200 !important; box-shadow: 0 0 0 1px rgba(0,0,0,.2) !important; }
 .event-chip.red    { background: #e53e3e !important; color: #fff !important; }
-.event-chip.subOn  { background: #16a34a !important; color: #fff !important; }
+.event-chip.subOn  { background: #10b258 !important; color: #fff !important; }
 .event-chip.subOff { background: #e53e3e !important; color: #fff !important; }
 
-/* Notes: sit to the right of the avatar, not overlapping it */
+/* Notes: left side of the head row (same row as rating, which is on the right) */
 .fotmob-player-notes {
   position: absolute !important;
-  left: 50% !important;
-  top: 46px !important;
-  transform: translateX(-50%) !important;
+  left: 2px !important;
+  top: 0 !important;
+  bottom: auto !important;
+  transform: none !important;
   display: flex !important;
-  gap: 2px !important;
   align-items: center !important;
-  justify-content: center !important;
+  gap: 2px !important;
   flex-wrap: nowrap !important;
-  max-width: 60px !important;
-  z-index: 6 !important;
+  max-width: 52px !important;
+  z-index: 4 !important;
   pointer-events: none !important;
 }
-.fotmob-player-notes.home,
-.fotmob-player-notes.away {
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-}
+.fotmob-player-notes.home { left: 2px !important; transform: none !important; }
+.fotmob-player-notes.away { left: 2px !important; transform: none !important; }
 
 /* Remove double-ring on avatar shell */
 .fotmob-player-avatar-wrap > .player-photo-shell {
@@ -5944,13 +5942,6 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
   background: transparent !important;
   box-shadow: none !important;
   border-radius: 50% !important;
-}
-
-/* Bench grid: two equal columns */
-.fotmob-bench-grid {
-  display: grid !important;
-  grid-template-columns: 1fr 1fr !important;
-  gap: 0 !important;
 }
 
 /* Subbed-off players on pitch: dimmed */

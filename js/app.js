@@ -1,4 +1,4 @@
-// MLS-GM app.js — build v52
+// MLS-GM app.js — build v53
 import { $, $$, formatMoney, formatNumber, downloadJSON, readJSONFile, toast, pick, randInt } from "./utils.js";
 import { saveSlot, loadSlot, listSlots, deleteSlot } from "./db.js";
 import { loadExternalData } from "./assets.js";
@@ -5963,8 +5963,7 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
     const awayLogo = document.getElementById('fotmob-away-lineup-logo'); if (awayLogo) awayLogo.innerHTML = awayTeam ? teamLogoMark(awayTeam, 'fotmob-lineup-crest') : '';
   };
 
-  // Override renderFotmobCoachAndBench for cleaner 2-col layout
-  const _origCoachBench = renderFotmobCoachAndBench;
+  // Override renderFotmobCoachAndBench for cleaner layout matching reference image
   renderFotmobCoachAndBench = function(match, minute = 1) {
     const homeCoach = getTeamCoach(match.homeTeamId);
     const awayCoach = getTeamCoach(match.awayTeamId);
@@ -5974,60 +5973,74 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
       ? `${playerPhoto({ name: coach.name, photoUrl: coach.headshot }, 'player-photo-inline')}<strong>${escapeHtml(coach.name)}</strong>`
       : `<strong>Coach</strong>`;
 
+    // Sub rows: each substitution as a row — outgoing ← minute → incoming
     const subRows = side => {
       const subs = (livePitchScene?.eventLog || []).filter(ev => ev.type === 'sub' && ev.side === side);
-      if (!subs.length) return `<div class="note" style="padding:10px 0;">No substitutions yet.</div>`;
+      if (!subs.length) return `<div class="note" style="padding:12px 0 4px;">No substitutions yet.</div>`;
       return subs.map(ev => {
         const incoming = ev.playerId ? byPlayerId(ev.playerId) : null;
         const outgoing = ev.outPlayerId ? byPlayerId(ev.outPlayerId) : null;
+        const ratingBadge = incoming ? `<span class="match-rating-pill ${ratingColorClassV33(getLivePlayerRating(incoming, minute))}" style="font-size:11px;padding:2px 6px;">${getLivePlayerRating(incoming, minute).toFixed(1)}</span>` : '';
         return `<div class="fotmob-table-row">
           <div class="fotmob-table-player">
-            ${playerPhoto(outgoing || { name: '—' }, 'player-photo-inline')}
-            <div><strong>${escapeHtml(outgoing?.name || 'Out')}</strong><small>${escapeHtml(outgoing?.position || '')}</small></div>
+            ${playerPhoto(outgoing || {}, 'player-photo-inline')}
+            <div>
+              <strong>${escapeHtml(outgoing?.name || '—')}</strong>
+              <small>${escapeHtml(outgoing?.position || '')}</small>
+            </div>
           </div>
-          <div class="fotmob-table-mid" style="font-size:11px;">${ev.minute || 0}'</div>
-          <div class="fotmob-table-player" style="justify-content:flex-end;text-align:right;">
-            <div style="text-align:right;"><strong>${escapeHtml(incoming?.name || 'In')}</strong><small>${escapeHtml(incoming?.position || '')}</small></div>
-            ${playerPhoto(incoming || { name: '—' }, 'player-photo-inline')}
+          <div class="fotmob-table-mid">${ev.minute || 0}'</div>
+          <div class="fotmob-table-player right">
+            <div style="text-align:right;">
+              <strong>${escapeHtml(incoming?.name || '—')}</strong>
+              <small>${escapeHtml(incoming?.position || '')}</small>
+            </div>
+            ${playerPhoto(incoming || {}, 'player-photo-inline')}
           </div>
         </div>`;
       }).join('');
     };
 
+    // Bench row: photo + number + name/position | chips | rating
     const benchRow = p => {
       const summary = liveEventSummaryForPlayer(p?.id);
       const hasPlayed = !!summary.subOn;
       const chips = [];
-      if (summary.goals) chips.push(liveEventChip('goal','Goal'));
-      if (summary.assists) chips.push(liveEventChip('assist','Assist'));
-      if (summary.yellows) chips.push(liveEventChip('yellow','Yellow'));
-      if (summary.reds) chips.push(liveEventChip('red','Red'));
-      if (summary.subOn) chips.push(liveEventChip('subOn','On'));
+      if (summary.goals)   chips.push(liveEventChip('goal',   'Goal', summary.goals > 1 ? summary.goals : null));
+      if (summary.assists) chips.push(liveEventChip('assist', 'Assist', summary.assists > 1 ? summary.assists : null));
+      if (summary.yellows) chips.push(liveEventChip('yellow', 'Yellow card'));
+      if (summary.reds)    chips.push(liveEventChip('red',    'Red card'));
+      if (summary.subOn)   chips.push(liveEventChip('subOn',  'Subbed on'));
+      const rating = hasPlayed ? `<span class="match-rating-pill ${ratingColorClassV33(getLivePlayerRating(p, minute))}" style="font-size:11px;padding:2px 6px;">${getLivePlayerRating(p, minute).toFixed(1)}</span>` : `<span style="color:rgba(255,255,255,.3);">—</span>`;
       return `<div class="fotmob-table-row">
         <div class="fotmob-table-player">
           ${playerPhoto(p, 'player-photo-inline')}
-          <span class="num" style="color:rgba(255,255,255,.6);min-width:18px;">${escapeHtml(getPlayerDisplayNumber(p))}</span>
-          <div><strong>${escapeHtml(p.name || 'Unknown')}</strong><small>${escapeHtml(p.position || '')}</small></div>
+          <span class="num">${escapeHtml(getPlayerDisplayNumber(p))}</span>
+          <div>
+            <strong>${escapeHtml(p.name || '—')}</strong>
+            <small>${escapeHtml(p.position || '')}</small>
+          </div>
         </div>
-        <div class="fotmob-table-mid" style="display:flex;gap:3px;align-items:center;justify-content:center;">${chips.join('') || '—'}</div>
-        <div class="fotmob-table-rating">${hasPlayed ? getLivePlayerRating(p, minute).toFixed(1) : '—'}</div>
+        <div class="fotmob-table-mid" style="display:flex;gap:3px;align-items:center;justify-content:center;">${chips.join('') || ''}</div>
+        <div class="fotmob-table-rating">${rating}</div>
       </div>`;
     };
 
     const homeBench = hp?.bench || [];
     const awayBench = ap?.bench || [];
-    // Interleave home/away bench into 2 columns
-    const maxRows = Math.max(homeBench.length, awayBench.length);
-    let benchGridHtml = '<div class="fotmob-bench-grid">';
-    benchGridHtml += '<div>' + (homeBench.length ? homeBench.map(benchRow).join('') : '<div class="note">No bench.</div>') + '</div>';
-    benchGridHtml += '<div>' + (awayBench.length ? awayBench.map(benchRow).join('') : '<div class="note">No bench.</div>') + '</div>';
-    benchGridHtml += '</div>';
 
     const hc = document.getElementById('fotmob-home-coach'); if (hc) hc.innerHTML = coachHtml(homeCoach);
     const ac = document.getElementById('fotmob-away-coach'); if (ac) ac.innerHTML = coachHtml(awayCoach);
-    const subs = document.getElementById('fotmob-subs');
-    if (subs) subs.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">${subRows('home')}${subRows('away')}</div>`;
-    const bench = document.getElementById('fotmob-bench');
-    if (bench) bench.innerHTML = benchGridHtml;
+
+    // #fotmob-subs already has display:grid; grid-template-columns:1fr 1fr from base CSS
+    // Write home column and away column as direct children
+    const subsEl = document.getElementById('fotmob-subs');
+    if (subsEl) subsEl.innerHTML = `<div>${subRows('home')}</div><div>${subRows('away')}</div>`;
+
+    // #fotmob-bench also already has display:grid; grid-template-columns:1fr 1fr
+    const benchEl = document.getElementById('fotmob-bench');
+    if (benchEl) benchEl.innerHTML =
+      `<div>${homeBench.length ? homeBench.map(benchRow).join('') : '<div class="note" style="padding:12px 0;">No bench.</div>'}</div>` +
+      `<div>${awayBench.length ? awayBench.map(benchRow).join('') : '<div class="note" style="padding:12px 0;">No bench.</div>'}</div>`;
   };
 })();
