@@ -1,3 +1,4 @@
+// MLS-GM app.js — build v51
 import { $, $$, formatMoney, formatNumber, downloadJSON, readJSONFile, toast, pick, randInt } from "./utils.js";
 import { saveSlot, loadSlot, listSlots, deleteSlot } from "./db.js";
 import { loadExternalData } from "./assets.js";
