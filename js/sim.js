@@ -2863,6 +2863,36 @@ export function rejectPendingOffer(state) {
   state.pendingOffer = null;
 }
 
+function maybeAiTransfers(state) {
+  const week = state.calendar?.week || 1;
+  const inWindow = week <= 5 || (week >= 17 && week <= 22);
+  const numTrades = inWindow ? randInt(1, 3) : (Math.random() < 0.25 ? 1 : 0);
+  for (let t = 0; t < numTrades; t++) {
+    doAiTransfer(state);
+  }
+}
+
+function doAiTransfer(state) {
+  const sellingTeam = pick(state.teams);
+  const roster = state.players.filter(p => p.clubId === sellingTeam.id).sort((a,b)=>(b.overall||0)-(a.overall||0));
+  if (roster.length < 16) return;
+  const expendable = roster.slice(12).filter(p => p.designation !== 'DP' && p.age < 34);
+  if (!expendable.length) return;
+  const target = pick(expendable.slice(0, Math.min(expendable.length, 5)));
+  const buyingCandidates = state.teams.filter(t => {
+    if (t.id === sellingTeam.id) return false;
+    return state.players.filter(p => p.clubId === t.id).length < 24;
+  });
+  if (!buyingCandidates.length) return;
+  const buyer = pick(buyingCandidates);
+  target.clubId = buyer.id;
+  target.contract.yearsLeft = randInt(1, 3);
+  target.contract.expiresYear = state.season.year + target.contract.yearsLeft;
+  target.contract.status = 'Active';
+  target.morale = Math.min(90, (target.morale || 70) + randInt(3, 10));
+  addTransaction(state, 'Transfer', `${buyer.name} signed ${target.name} from ${sellingTeam.name}.`);
+}
+
 export function advanceOneWeek(state) {
   if (state.season.phase === "Regular Season") {
     ensureOpenCupState(state);
@@ -2874,8 +2904,7 @@ export function advanceOneWeek(state) {
 
     maybeInjurePlayers(state);
     maybeExternalOffer(state);
-
-    state.calendar.week += 1;
+    maybeAiTransfers(state);
     state.calendar.absoluteDay += 7;
 
     if (state.calendar.week > 34) {
@@ -3607,55 +3636,6 @@ export function runOffseason(state) {
     if (match.type === 'Regular Season') applyStandings(state, match);
     return match.result;
   };
-
-  // Better AI-to-AI transfers during regular season
-  const _origAdvanceOneWeek = advanceOneWeek;
-  advanceOneWeek = function(state) {
-    _origAdvanceOneWeek(state);
-    // After advancing, maybe do AI-to-AI transfers
-    if (state.season.phase === 'Regular Season') {
-      maybeAiTransfers(state);
-    }
-  };
-
-  function maybeAiTransfers(state) {
-    const week = state.calendar?.week || 1;
-    // Transfer windows: early season (1-5) and mid-season (17-22)
-    const inWindow = week <= 5 || (week >= 17 && week <= 22);
-    const numTrades = inWindow ? randInt(1, 3) : (Math.random() < 0.25 ? 1 : 0);
-    for (let t = 0; t < numTrades; t++) {
-      doAiTransfer(state);
-    }
-  }
-
-  function doAiTransfer(state) {
-    // Pick a random selling team that has depth at a position
-    const sellingTeam = pick(state.teams);
-    const roster = state.players.filter(p => p.clubId === sellingTeam.id).sort((a,b)=>(b.overall||0)-(a.overall||0));
-    if (roster.length < 16) return; // don't strip squads
-
-    // Find an expendable player (not top 11, and not a key DP)
-    const expendable = roster.slice(12).filter(p => p.designation !== 'DP' && p.age < 34);
-    if (!expendable.length) return;
-    const target = pick(expendable.slice(0, Math.min(expendable.length, 5)));
-
-    // Find a buying team that needs that position
-    const buyingCandidates = state.teams.filter(t => {
-      if (t.id === sellingTeam.id) return false;
-      const theirRoster = state.players.filter(p => p.clubId === t.id);
-      return theirRoster.length < 24; // has roster room
-    });
-    if (!buyingCandidates.length) return;
-    const buyer = pick(buyingCandidates);
-
-    // Execute transfer
-    target.clubId = buyer.id;
-    target.contract.yearsLeft = randInt(1, 3);
-    target.contract.expiresYear = state.season.year + target.contract.yearsLeft;
-    target.contract.status = 'Active';
-    target.morale = Math.min(90, (target.morale || 70) + randInt(3, 10));
-    addTransaction(state, 'Transfer', `${buyer.name} signed ${target.name} from ${sellingTeam.name}.`);
-  }
 
   // More frequent external offers to user (increase from ~10-20% to 25-35% per week)
   maybeExternalOffer = function(state) {

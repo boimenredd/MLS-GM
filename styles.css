@@ -5891,45 +5891,44 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
 @media (max-width: 900px) { .bk-grid { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 560px) { .bk-grid { grid-template-columns: 1fr; } }
 
-/* ===== v43 — clean live sim, bigger chips, better bench, no cup nav ===== */
+/* ===== v43 — targeted fixes only ===== */
 
-/* Bigger goal/assist event chips — like FotMob */
+/* Bigger, clearer event chips */
 .event-chip {
-  width: 20px !important;
-  height: 20px !important;
-  min-width: 20px !important;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
   border-radius: 50% !important;
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,.45) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,.5) !important;
 }
 .event-chip-icon, .event-chip-icon svg {
-  width: 12px !important;
-  height: 12px !important;
+  width: 11px !important;
+  height: 11px !important;
   display: block !important;
 }
-.event-chip.goal { background: #2563eb !important; color: #fff !important; }
-.event-chip.assist { background: #7c3aed !important; color: #fff !important; }
-.event-chip.yellow { background: #eab308 !important; color: #111 !important; }
-.event-chip.red { background: #dc2626 !important; color: #fff !important; }
-.event-chip.subOn { background: #16a34a !important; color: #fff !important; }
-.event-chip.subOff { background: #dc2626 !important; color: #fff !important; }
+.event-chip.goal   { background: #1d6ef5 !important; color: #fff !important; }
+.event-chip.assist { background: #6d28d9 !important; color: #fff !important; }
+.event-chip.yellow { background: #f5c800 !important; color: #1a1200 !important; }
+.event-chip.red    { background: #e53e3e !important; color: #fff !important; }
+.event-chip.subOn  { background: #16a34a !important; color: #fff !important; }
+.event-chip.subOff { background: #e53e3e !important; color: #fff !important; }
 
-/* Notes row: sit BELOW avatar, centered, no overlap */
+/* Notes: sit to the right of the avatar, not overlapping it */
 .fotmob-player-notes {
   position: absolute !important;
   left: 50% !important;
-  top: auto !important;
-  bottom: -22px !important;
+  top: 46px !important;
   transform: translateX(-50%) !important;
   display: flex !important;
-  gap: 3px !important;
+  gap: 2px !important;
   align-items: center !important;
   justify-content: center !important;
   flex-wrap: nowrap !important;
-  max-width: 72px !important;
-  z-index: 5 !important;
+  max-width: 60px !important;
+  z-index: 6 !important;
   pointer-events: none !important;
 }
 .fotmob-player-notes.home,
@@ -5938,55 +5937,25 @@ html[data-theme="light"] .player-photo-shell.show-fallback.fotmob-player-avatar:
   transform: translateX(-50%) !important;
 }
 
-/* Give the player node enough height for the chip row below */
-.fotmob-player {
-  padding-bottom: 24px !important;
-}
-
-/* Remove the odd extra ring from player-photo-shell when used as avatar */
-.fotmob-player-avatar-wrap .player-photo-shell {
+/* Remove double-ring on avatar shell */
+.fotmob-player-avatar-wrap > .player-photo-shell {
+  display: inline-flex !important;
   border: none !important;
-  background: none !important;
+  background: transparent !important;
   box-shadow: none !important;
   border-radius: 50% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-.fotmob-player-avatar-wrap .player-photo-shell .player-photo-fallback.fotmob-player-avatar,
-.fotmob-player-avatar-wrap .player-photo-shell .player-photo-img.fotmob-player-avatar {
-  border: 2px solid rgba(255,255,255,.18) !important;
-  border-radius: 50% !important;
 }
 
-/* Bench table: 2-column grid properly aligned */
-.fotmob-bench-table {
-  display: block !important;
-}
-.fotmob-bench-table > div {
-  display: block !important;
-}
+/* Bench grid: two equal columns */
 .fotmob-bench-grid {
   display: grid !important;
   grid-template-columns: 1fr 1fr !important;
-  gap: 0 24px !important;
-}
-.fotmob-table-row {
-  display: grid !important;
-  grid-template-columns: 1fr 48px 44px !important;
-  align-items: center !important;
-  gap: 8px !important;
-  padding: 10px 12px !important;
-  border-bottom: 1px solid rgba(255,255,255,.07) !important;
-}
-.fotmob-subs-table .fotmob-table-row {
-  grid-template-columns: 1fr 48px 1fr !important;
+  gap: 0 !important;
 }
 
-/* Substituted player: dim them on pitch */
+/* Subbed-off players on pitch: dimmed */
 .fotmob-player.subbed-off .fotmob-player-avatar,
-.fotmob-player.subbed-off .player-photo-fallback.fotmob-player-avatar,
-.fotmob-player.subbed-off .player-photo-img {
-  opacity: 0.4 !important;
-  filter: grayscale(0.7) !important;
+.fotmob-player.subbed-off .player-photo-fallback.fotmob-player-avatar {
+  opacity: 0.38 !important;
+  filter: grayscale(0.65) !important;
 }

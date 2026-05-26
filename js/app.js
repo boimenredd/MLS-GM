@@ -1,4 +1,4 @@
-// MLS-GM app.js — build v51
+// MLS-GM app.js — build v52
 import { $, $$, formatMoney, formatNumber, downloadJSON, readJSONFile, toast, pick, randInt } from "./utils.js";
 import { saveSlot, loadSlot, listSlots, deleteSlot } from "./db.js";
 import { loadExternalData } from "./assets.js";
@@ -5802,19 +5802,12 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
     return 'bad';
   };
   const coordFor = (slot, side) => {
-    // x = horizontal spread (0=left edge, 1=right edge of pitch)
-    // y = depth (0.87=GK deep in own half, 0.12=striker at opponent goal)
     const x = Math.max(0.04, Math.min(0.96, Number(slot?.x ?? 0.5)));
     const y = Math.max(0.05, Math.min(0.95, Number(slot?.y ?? 0.5)));
-    // top: maps x (lateral spread) -> vertical position on horizontal pitch display
-    // Center (x=0.5) -> 50%, wings spread to ~10% and ~90%
-    const top = 8 + x * 80;
-    // left: depth along horizontal axis — GK near own goal (y~0.87), ST near opp goal (y~0.12)
-    // For home (left side): GK at ~5%, midfield at ~35%, ST at ~44%
-    // depth = (1 - y) maps 0.87->0.13, 0.12->0.88 then scale to 4..47 range
-    const depth = 4 + (1 - y) * 44;
+    const top = 10 + x * 78;
+    const depth = 4 + (1 - y) * 43;
     const left = side === 'home' ? depth : 100 - depth;
-    return { left: `${left.toFixed(2)}%`, top: `${top.toFixed(2)}%` };
+    return { left: `${left.toFixed(1)}%`, top: `${top.toFixed(1)}%` };
   };
   renderFotmobPitch = function(match, minute = 1) {
     const pitch = document.getElementById('fotmob-pitch');
@@ -5900,12 +5893,20 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
     const ratingCls = r => r >= 7 ? 'good' : r >= 5 ? 'warn' : 'bad';
 
     const coordFor43 = (slot, side) => {
+      // x = lateral spread (0=top of screen, 1=bottom). GK has x=0.50 → centered vertically.
+      // y = depth from own goal (0.87=GK deep, 0.12=ST near opp goal).
+      // Pitch is HORIZONTAL: home attacks right, away attacks left.
+      // top maps x (lateral) → vertical screen position: 10% to 88%
+      // left maps y (depth) → horizontal screen position
       const x = Math.max(0.04, Math.min(0.96, Number(slot?.x ?? 0.5)));
       const y = Math.max(0.05, Math.min(0.95, Number(slot?.y ?? 0.5)));
-      const top = 8 + x * 80;
-      const depth = 4 + (1 - y) * 44;
+      const top = 10 + x * 78;
+      // depth: y=0.87(GK) → low depth value (near own goal edge), y=0.12(ST) → high depth (near center)
+      // home: left = 4 + (1-y)*43  → GK at ~8%, ST at ~42%
+      // away: mirror → left = 100 - (4 + (1-y)*43) → GK at ~92%, ST at ~58%
+      const depth = 4 + (1 - y) * 43;
       const left = side === 'home' ? depth : 100 - depth;
-      return { left: `${left.toFixed(2)}%`, top: `${top.toFixed(2)}%` };
+      return { left: `${left.toFixed(1)}%`, top: `${top.toFixed(1)}%` };
     };
 
     const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
