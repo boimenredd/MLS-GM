@@ -4267,6 +4267,9 @@ function bindPageEvents() {
     if (state.season.phase === "Offseason") runGreenCardOffseason(state);
     await persist(); await renderPage(); toast(`Playoff round simulated.`, "success");
   });
+
+  // Offseason advance button on dashboard
+  $("#dashOffseasonAdvBtn")?.addEventListener("click", async () => {
     if (!state) return;
     const oldPhase = state.season.phase;
     advanceOneWeek(state);
