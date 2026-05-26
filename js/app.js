@@ -3976,7 +3976,18 @@ function renderPlayoffs() {
   const cupHtml = cupMatch ? bracketCard(cupMatch.a, cupMatch.b, "MLS Cup") : "";
   const champion = state.playoffs?.championTeamId ? byTeamId(state.playoffs.championTeamId) : null;
 
+  const isPlayoffs = state.season.phase === "Playoffs";
+  const playoffRound = state.playoffs?.currentRound || "";
+  const playoffDone = !!state.playoffs?.championTeamId;
+  const advPlayoffBtn = isPlayoffs && !playoffDone
+    ? `<div style="margin-bottom:14px;display:flex;gap:10px;align-items:center;">
+        <button id="advPlayoffRoundBtn" class="primary-btn" type="button">▶ Simulate: ${escapeHtml(playoffRound)}</button>
+        <span class="note">Advance one round of the playoffs</span>
+       </div>`
+    : "";
+
   return `${pageHead("MLS Cup Playoffs", graphic.locked ? `${escapeHtml(graphic.currentRound)} · ${state.season.year}` : "Projected — updates each week")}
+  ${advPlayoffBtn}
   ${confBracket("Eastern Conference", graphic.East)}
   <div class="panel bk-cup-panel" style="margin-top:14px;">
     <div class="panel-head"><h3>MLS Cup</h3><span>${champion ? "Champion crowned" : "Awaiting finalists"}</span></div>
@@ -4222,7 +4233,7 @@ async function renderPage() {
   else if (currentPage==="garber")         html = renderGarberMode();
   else if (currentPage==="team")           html = renderTeamPage();
   else if (currentPage==="playoffs")       html = renderPlayoffs();
-  else if (currentPage==="openCup")        html = renderOpenCup();
+  else if (currentPage==="openCup")        { currentPage = "standings"; html = renderStandings(); }
   else if (currentPage==="tactics")        html = renderTactics();
   else if (currentPage==="leagueFinances") html = renderLeagueFinances();
   else if (currentPage==="leagueHistory")  html = renderLeagueHistory();
@@ -4249,8 +4260,13 @@ function bindPageEvents() {
     await persist(); toast("Signed.","success"); renderPage();
   }));
 
-  // Offseason advance button on dashboard
-  $("#dashOffseasonAdvBtn")?.addEventListener("click", async () => {
+  // Advance playoff round
+  $("#advPlayoffRoundBtn")?.addEventListener("click", async () => {
+    if (!state || state.season.phase !== "Playoffs") return;
+    advanceOneWeek(state);
+    if (state.season.phase === "Offseason") runGreenCardOffseason(state);
+    await persist(); await renderPage(); toast(`Playoff round simulated.`, "success");
+  });
     if (!state) return;
     const oldPhase = state.season.phase;
     advanceOneWeek(state);
@@ -5851,5 +5867,162 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
     const awayName = document.getElementById('fotmob-away-lineup-name'); if (awayName) awayName.textContent = awayTeam?.name || 'Away';
     const homeLogo = document.getElementById('fotmob-home-lineup-logo'); if (homeLogo) homeLogo.innerHTML = homeTeam ? teamLogoMark(homeTeam, 'fotmob-lineup-crest') : '';
     const awayLogo = document.getElementById('fotmob-away-lineup-logo'); if (awayLogo) awayLogo.innerHTML = awayTeam ? teamLogoMark(awayTeam, 'fotmob-lineup-crest') : '';
+  };
+})();
+
+/* ===== v43 patch: clean live sim, playoffs live sim, better bench ===== */
+(() => {
+  // Track players who have been subbed off (by id)
+  const subbedOffIds = () => new Set(
+    (livePitchScene?.eventLog || [])
+      .filter(ev => ev.type === 'sub' && ev.outPlayerId)
+      .map(ev => ev.outPlayerId)
+  );
+
+  // Override renderFotmobPitch with cleaner chip placement
+  renderFotmobPitch = function(match, minute = 1) {
+    const pitch = document.getElementById('fotmob-pitch');
+    if (!pitch || !livePitchScene) return;
+    const hp = livePitchScene.homePack;
+    const ap = livePitchScene.awayPack;
+    const homeLayout = FORMATION_LAYOUT[livePitchScene.homeFormation] || FORMATION_LAYOUT['4-3-3'];
+    const awayLayout = FORMATION_LAYOUT[livePitchScene.awayFormation] || FORMATION_LAYOUT['4-3-3'];
+    const homeXi = hp?.xi || [];
+    const awayXi = ap?.xi || [];
+    const allLiveXi = [...homeXi, ...awayXi].map(e => e?.player).filter(Boolean);
+    const bestRating = allLiveXi.length ? Math.max(...allLiveXi.map(p => getLivePlayerRating(p, minute))) : 0;
+    const offIds = subbedOffIds();
+
+    const ratingCls = r => r >= 7 ? 'good' : r >= 5 ? 'warn' : 'bad';
+
+    const coordFor43 = (slot, side) => {
+      const x = Math.max(0.04, Math.min(0.96, Number(slot?.x ?? 0.5)));
+      const y = Math.max(0.05, Math.min(0.95, Number(slot?.y ?? 0.5)));
+      const top = 8 + x * 80;
+      const depth = 4 + (1 - y) * 44;
+      const left = side === 'home' ? depth : 100 - depth;
+      return { left: `${left.toFixed(2)}%`, top: `${top.toFixed(2)}%` };
+    };
+
+    const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
+      const player = entry?.player;
+      if (!player) return '';
+      const pos = coordFor43(layout[idx] || { x: 0.5, y: 0.5 }, side);
+      const ratingValue = getLivePlayerRating(player, minute);
+      const isBest = minute >= 90 && ratingValue >= bestRating - 0.001 && bestRating >= 7;
+      const isSubbedOff = offIds.has(player.id);
+      const icons = liveEventSummaryForPlayer(player.id);
+      // Only show chips that are meaningful — skip subOff on pitch (they shouldn't be there post-sub)
+      const notes = [];
+      if (icons.goals) notes.push(liveEventChip('goal', 'Goal', icons.goals > 1 ? icons.goals : null));
+      if (icons.assists) notes.push(liveEventChip('assist', 'Assist', icons.assists > 1 ? icons.assists : null));
+      if (icons.yellows) notes.push(liveEventChip('yellow', 'Yellow card'));
+      if (icons.reds) notes.push(liveEventChip('red', 'Red card'));
+      if (icons.subOn) notes.push(liveEventChip('subOn', 'Subbed on'));
+      const name = (() => {
+        const full = (player?.name || '').trim();
+        const bits = full.split(/\s+/).filter(Boolean);
+        const last = bits[bits.length - 1] || full;
+        return last.length <= 11 ? last : `${last.slice(0, 10)}…`;
+      })();
+      return `<div class="fotmob-player fotmob-player-${side}${isSubbedOff ? ' subbed-off' : ''}" style="left:${pos.left};top:${pos.top};">
+        <div class="fotmob-player-head">
+          <div class="fotmob-player-rating ${ratingCls(ratingValue)} ${isBest ? 'best' : ''}">${ratingValue.toFixed(1)}${isBest ? '<span class="rating-star">★</span>' : ''}</div>
+        </div>
+        <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar allow-initials')}</div>
+        ${notes.length ? `<div class="fotmob-player-notes">${notes.join('')}</div>` : ''}
+        <div class="fotmob-player-name" title="${escapeAttr(player?.name || '')}">
+          <span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(name)}
+        </div>
+        ${livePitchMetric ? `<div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    const btn = (key, label) => `<button type="button" class="fotmob-filter-btn ${livePitchMetric === key ? 'active' : ''}" data-pitch-metric="${key}">${label}</button>`;
+    pitch.innerHTML = `<div class="fotmob-pitch-filter-row">${btn('transfer','Transfer value')}${btn('age','Age')}${btn('country','Country')}</div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(homeXi, homeLayout, 'home')}${renderSide(awayXi, awayLayout, 'away')}`;
+    pitch.querySelectorAll('[data-pitch-metric]').forEach(b => b.addEventListener('click', () => {
+      livePitchMetric = livePitchMetric === b.dataset.pitchMetric ? null : b.dataset.pitchMetric;
+      renderFotmobPitch(match, minute);
+    }));
+
+    const homeAvg = hp ? avg(homeXi.map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+    const awayAvg = ap ? avg(awayXi.map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+    const hEl = document.getElementById('fotmob-home-team-rating'); if (hEl) hEl.textContent = homeAvg;
+    const aEl = document.getElementById('fotmob-away-team-rating'); if (aEl) aEl.textContent = awayAvg;
+    const hf = document.getElementById('fotmob-home-formation'); if (hf) hf.textContent = livePitchScene.homeFormation;
+    const af = document.getElementById('fotmob-away-formation'); if (af) af.textContent = livePitchScene.awayFormation;
+    const homeTeam = byTeamId(match.homeTeamId), awayTeam = byTeamId(match.awayTeamId);
+    const homeName = document.getElementById('fotmob-home-lineup-name'); if (homeName) homeName.textContent = homeTeam?.name || 'Home';
+    const awayName = document.getElementById('fotmob-away-lineup-name'); if (awayName) awayName.textContent = awayTeam?.name || 'Away';
+    const homeLogo = document.getElementById('fotmob-home-lineup-logo'); if (homeLogo) homeLogo.innerHTML = homeTeam ? teamLogoMark(homeTeam, 'fotmob-lineup-crest') : '';
+    const awayLogo = document.getElementById('fotmob-away-lineup-logo'); if (awayLogo) awayLogo.innerHTML = awayTeam ? teamLogoMark(awayTeam, 'fotmob-lineup-crest') : '';
+  };
+
+  // Override renderFotmobCoachAndBench for cleaner 2-col layout
+  const _origCoachBench = renderFotmobCoachAndBench;
+  renderFotmobCoachAndBench = function(match, minute = 1) {
+    const homeCoach = getTeamCoach(match.homeTeamId);
+    const awayCoach = getTeamCoach(match.awayTeamId);
+    const hp = livePitchScene?.homePack;
+    const ap = livePitchScene?.awayPack;
+    const coachHtml = coach => coach
+      ? `${playerPhoto({ name: coach.name, photoUrl: coach.headshot }, 'player-photo-inline')}<strong>${escapeHtml(coach.name)}</strong>`
+      : `<strong>Coach</strong>`;
+
+    const subRows = side => {
+      const subs = (livePitchScene?.eventLog || []).filter(ev => ev.type === 'sub' && ev.side === side);
+      if (!subs.length) return `<div class="note" style="padding:10px 0;">No substitutions yet.</div>`;
+      return subs.map(ev => {
+        const incoming = ev.playerId ? byPlayerId(ev.playerId) : null;
+        const outgoing = ev.outPlayerId ? byPlayerId(ev.outPlayerId) : null;
+        return `<div class="fotmob-table-row">
+          <div class="fotmob-table-player">
+            ${playerPhoto(outgoing || { name: '—' }, 'player-photo-inline')}
+            <div><strong>${escapeHtml(outgoing?.name || 'Out')}</strong><small>${escapeHtml(outgoing?.position || '')}</small></div>
+          </div>
+          <div class="fotmob-table-mid" style="font-size:11px;">${ev.minute || 0}'</div>
+          <div class="fotmob-table-player" style="justify-content:flex-end;text-align:right;">
+            <div style="text-align:right;"><strong>${escapeHtml(incoming?.name || 'In')}</strong><small>${escapeHtml(incoming?.position || '')}</small></div>
+            ${playerPhoto(incoming || { name: '—' }, 'player-photo-inline')}
+          </div>
+        </div>`;
+      }).join('');
+    };
+
+    const benchRow = p => {
+      const summary = liveEventSummaryForPlayer(p?.id);
+      const hasPlayed = !!summary.subOn;
+      const chips = [];
+      if (summary.goals) chips.push(liveEventChip('goal','Goal'));
+      if (summary.assists) chips.push(liveEventChip('assist','Assist'));
+      if (summary.yellows) chips.push(liveEventChip('yellow','Yellow'));
+      if (summary.reds) chips.push(liveEventChip('red','Red'));
+      if (summary.subOn) chips.push(liveEventChip('subOn','On'));
+      return `<div class="fotmob-table-row">
+        <div class="fotmob-table-player">
+          ${playerPhoto(p, 'player-photo-inline')}
+          <span class="num" style="color:rgba(255,255,255,.6);min-width:18px;">${escapeHtml(getPlayerDisplayNumber(p))}</span>
+          <div><strong>${escapeHtml(p.name || 'Unknown')}</strong><small>${escapeHtml(p.position || '')}</small></div>
+        </div>
+        <div class="fotmob-table-mid" style="display:flex;gap:3px;align-items:center;justify-content:center;">${chips.join('') || '—'}</div>
+        <div class="fotmob-table-rating">${hasPlayed ? getLivePlayerRating(p, minute).toFixed(1) : '—'}</div>
+      </div>`;
+    };
+
+    const homeBench = hp?.bench || [];
+    const awayBench = ap?.bench || [];
+    // Interleave home/away bench into 2 columns
+    const maxRows = Math.max(homeBench.length, awayBench.length);
+    let benchGridHtml = '<div class="fotmob-bench-grid">';
+    benchGridHtml += '<div>' + (homeBench.length ? homeBench.map(benchRow).join('') : '<div class="note">No bench.</div>') + '</div>';
+    benchGridHtml += '<div>' + (awayBench.length ? awayBench.map(benchRow).join('') : '<div class="note">No bench.</div>') + '</div>';
+    benchGridHtml += '</div>';
+
+    const hc = document.getElementById('fotmob-home-coach'); if (hc) hc.innerHTML = coachHtml(homeCoach);
+    const ac = document.getElementById('fotmob-away-coach'); if (ac) ac.innerHTML = coachHtml(awayCoach);
+    const subs = document.getElementById('fotmob-subs');
+    if (subs) subs.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px;">${subRows('home')}${subRows('away')}</div>`;
+    const bench = document.getElementById('fotmob-bench');
+    if (bench) bench.innerHTML = benchGridHtml;
   };
 })();

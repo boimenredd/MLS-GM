@@ -3427,3 +3427,286 @@ export function runOffseason(state) {
   };
 
 })();
+
+// ===== v43 patch: better sim, tactic fit, coach influence, more transfers =====
+(function() {
+
+  // Tactic position fitness map: which formations favor which positions
+  const TACTIC_FIT_SCORE = (formation, player) => {
+    const pos = (player?.position || 'CM').toUpperCase();
+    const fits = {
+      '4-3-3':  { LW:1, RW:1, ST:1, CM:0.9, CDM:0.8, LB:0.9, RB:0.9, CB:1, GK:1, CAM:0.6, LM:0.6, RM:0.6 },
+      '4-2-3-1':{ CAM:1, LW:0.9, RW:0.9, ST:1, CDM:1, CM:0.7, LB:0.9, RB:0.9, CB:1, GK:1 },
+      '4-4-2':  { LM:1, RM:1, CM:0.9, ST:1, LB:0.9, RB:0.9, CB:1, GK:1, LW:0.7, RW:0.7, CDM:0.7 },
+      '3-5-2':  { CM:1, CDM:0.9, LWB:1, RWB:1, LM:0.9, RM:0.9, CB:1, ST:1, GK:1, LB:0.6, RB:0.6 },
+      '5-3-2':  { CB:1, LWB:1, RWB:1, CDM:1, CM:0.9, ST:1, GK:1, LB:0.6, RB:0.6, LM:0.7, RM:0.7 },
+      '4-1-4-1':{ CDM:1, LM:1, RM:1, CM:0.9, CAM:0.8, ST:1, LB:0.9, RB:0.9, CB:1, GK:1 },
+      '4-3-1-2':{ CAM:1, CM:0.9, CDM:0.8, ST:1, LB:0.9, RB:0.9, CB:1, GK:1, LW:0.6, RW:0.6 },
+    };
+    const formFits = fits[formation] || fits['4-3-3'];
+    return formFits[pos] ?? 0.75;
+  };
+
+  // Coaching stars influence on team cohesion and discipline
+  const getCoachModifier = (state, teamId) => {
+    const coach = (state.coaches || []).find(c => c.teamId === teamId);
+    if (!coach) return { xgBonus: 0, defBonus: 0, tacticalBonus: 0 };
+    const stars = Number(coach.managerStars || 3);
+    // 1-star: -0.12, 3-star: 0, 5-star: +0.18
+    const bonus = (stars - 3) * 0.06;
+    return { xgBonus: bonus * 0.6, defBonus: bonus * 0.5, tacticalBonus: bonus * 2 };
+  };
+
+  // Tactic fit for entire XI
+  const teamTacticFitBonus = (state, teamId, xi) => {
+    const team = state.teams.find(t => t.id === teamId);
+    const tacticName = team?.currentTactic || team?.tactic || '4-3-3';
+    const avgFit = xi.length ? xi.reduce((s, p) => s + TACTIC_FIT_SCORE(tacticName, p), 0) / xi.length : 0.8;
+    // avgFit of 1.0 = perfectly suited = +0.15 xG; 0.6 = -0.12 xG
+    return (avgFit - 0.82) * 0.75;
+  };
+
+  // Override simulateMatch with overall-weighted, tactic-fit, coach-stars sim
+  const _origSim43 = simulateMatch;
+  simulateMatch = function(state, match, opts = {}) {
+    const homeTeam = state.teams.find(t => t.id === match.homeTeamId);
+    const awayTeam = state.teams.find(t => t.id === match.awayTeamId);
+    if (!homeTeam || !awayTeam) return _origSim43(state, match, opts);
+
+    // Build XIs
+    const buildXi = (team, opp) => {
+      const roster = state.players.filter(p =>
+        p.clubId === team.id &&
+        (!p.injuredUntil || p.injuredUntil < (state.calendar?.absoluteDay || 0))
+      ).sort((a, b) => (b.overall || 0) - (a.overall || 0));
+      // Slot selection: GK, 4 DEF, 3 MID, 3 ATT with overall priority
+      const byBucket = { GK: [], DEF: [], MID: [], ATT: [] };
+      for (const p of roster) {
+        const n = (pos => {
+          const m = { GK:'GK', LB:'DEF', RB:'DEF', CB:'DEF', LWB:'DEF', RWB:'DEF', CDM:'MID', CM:'MID', CAM:'MID', LM:'MID', RM:'MID', LW:'ATT', RW:'ATT', ST:'ATT' };
+          return m[pos] || 'MID';
+        })(p.position?.toUpperCase() || 'CM');
+        byBucket[n].push(p);
+      }
+      const xi = [
+        ...byBucket.GK.slice(0, 1),
+        ...byBucket.DEF.slice(0, 4),
+        ...byBucket.MID.slice(0, 3),
+        ...byBucket.ATT.slice(0, 3),
+      ];
+      // Fill to 11 from remaining
+      const picked = new Set(xi.map(p => p.id));
+      for (const p of roster) {
+        if (xi.length >= 11) break;
+        if (!picked.has(p.id)) { xi.push(p); picked.add(p.id); }
+      }
+      return xi.slice(0, 11);
+    };
+
+    const homeXi = buildXi(homeTeam, awayTeam);
+    const awayXi = buildXi(awayTeam, homeTeam);
+
+    const avgOvr = xi => xi.length ? xi.reduce((s, p) => s + (p.overall || 60), 0) / xi.length : 60;
+    const homePower = avgOvr(homeXi);
+    const awayPower = avgOvr(awayXi);
+
+    // Positional breakdown
+    const posGrp = pos => { const m={GK:'GK',LB:'DEF',RB:'DEF',CB:'DEF',LWB:'DEF',RWB:'DEF',CDM:'MID',CM:'MID',CAM:'MID',LM:'MID',RM:'MID',LW:'ATT',RW:'ATT',ST:'ATT'}; return m[pos?.toUpperCase()||'CM']||'MID'; };
+    const sectorAvg = (xi, sector) => { const g=xi.filter(p=>posGrp(p.position)===sector); return g.length ? g.reduce((s,p)=>s+(p.overall||60),0)/g.length : 60; };
+    const homeAtk = sectorAvg(homeXi,'ATT'), homeMid = sectorAvg(homeXi,'MID'), homeDef = sectorAvg(homeXi,'DEF');
+    const awayAtk = sectorAvg(awayXi,'ATT'), awayMid = sectorAvg(awayXi,'MID'), awayDef = sectorAvg(awayXi,'DEF');
+
+    // Coach and tactic
+    const homeTactic = getCoachModifier(state, homeTeam.id);
+    const awayTactic = getCoachModifier(state, awayTeam.id);
+    const homeFit = teamTacticFitBonus(state, homeTeam.id, homeXi);
+    const awayFit = teamTacticFitBonus(state, awayTeam.id, awayXi);
+
+    // Overall differential has a strong effect on xG
+    const ovDiff = homePower - awayPower;
+    // Scale: +5 overall = ~+0.18 xG, home advantage ~0.25
+    let homeXg = clamp(
+      1.10
+      + ovDiff * 0.030          // strong overall reliance
+      + (homeAtk - awayDef) * 0.014
+      + (homeMid - awayMid) * 0.006
+      + 0.25                     // home advantage
+      + homeFit                  // tactic fit
+      + homeTactic.xgBonus
+      + rivalryBoost(homeTeam.name, awayTeam.name) * 0.5
+      + randFloat(-0.22, 0.30),
+      0.15, 4.0
+    );
+    let awayXg = clamp(
+      0.95
+      - ovDiff * 0.026
+      + (awayAtk - homeDef) * 0.014
+      + (awayMid - homeMid) * 0.005
+      + awayFit
+      + awayTactic.xgBonus
+      + rivalryBoost(homeTeam.name, awayTeam.name) * 0.22
+      + randFloat(-0.20, 0.28),
+      0.10, 3.6
+    );
+
+    let homeGoals = poisson(homeXg), awayGoals = poisson(awayXg), penalties = null, extraTime = false;
+
+    if (opts.singleElimination && homeGoals === awayGoals) {
+      extraTime = true;
+      homeGoals += poisson(homeXg * 0.16);
+      awayGoals += poisson(awayXg * 0.16);
+      if (homeGoals === awayGoals) {
+        penalties = { home: randInt(3,6), away: randInt(3,6) };
+        while (penalties.home === penalties.away) { penalties.home = randInt(3,7); penalties.away = randInt(3,7); }
+      }
+    } else if (opts.penaltyOnDraw && homeGoals === awayGoals) {
+      penalties = { home: randInt(2,6), away: randInt(2,6) };
+      while (penalties.home === penalties.away) { penalties.home = randInt(2,7); penalties.away = randInt(2,7); }
+    }
+
+    const homeShots = Math.max(homeGoals + randInt(6,13), Math.round(homeXg * 7));
+    const awayShots = Math.max(awayGoals + randInt(5,12), Math.round(awayXg * 6.8));
+    const homeSot = clamp(homeGoals + randInt(1,5), homeGoals, homeShots);
+    const awaySot = clamp(awayGoals + randInt(1,5), awayGoals, awayShots);
+    const homePoss = clamp(Math.round(50 + (homePower-awayPower)*0.38 + (homeMid-awayMid)*0.28 + randInt(-5,5)), 33, 67);
+    const awayPoss = 100 - homePoss;
+    const homeYellows = randInt(0,4), awayYellows = randInt(0,4);
+    const homeReds = Math.random() < 0.04 ? 1 : 0, awayReds = Math.random() < 0.04 ? 1 : 0;
+
+    const events = [];
+    const chooseGoalScorer = xi => {
+      const weights = xi.map(p => {
+        const b = posGrp(p.position);
+        return b === 'ATT' ? 6 : b === 'MID' ? 2 : 0.5;
+      });
+      const total = weights.reduce((s,w) => s+w, 0);
+      let r = Math.random() * total;
+      for (let i = 0; i < xi.length; i++) { r -= weights[i]; if (r <= 0) return xi[i]; }
+      return xi[xi.length - 1];
+    };
+    for (let i = 0; i < homeGoals; i++) {
+      const scorer = chooseGoalScorer(homeXi);
+      const assist = Math.random() < 0.74 ? homeXi.filter(p=>p.id!==scorer.id)[Math.floor(Math.random()*(homeXi.length-1))] : null;
+      events.push({ minute: randInt(3,90), side:'home', scorerId:scorer.id, assistId:assist?.id||null });
+    }
+    for (let i = 0; i < awayGoals; i++) {
+      const scorer = chooseGoalScorer(awayXi);
+      const assist = Math.random() < 0.74 ? awayXi.filter(p=>p.id!==scorer.id)[Math.floor(Math.random()*(awayXi.length-1))] : null;
+      events.push({ minute: randInt(3,90), side:'away', scorerId:scorer.id, assistId:assist?.id||null });
+    }
+    events.sort((a,b) => a.minute - b.minute);
+
+    match.played = true;
+    match.result = { homeGoals, awayGoals, homeXg:Number(homeXg.toFixed(2)), awayXg:Number(awayXg.toFixed(2)), homeShots, awayShots, homeSot, awaySot, homePoss, awayPoss, homeYellows, awayYellows, homeReds, awayReds, events, penalties, extraTime };
+
+    const homeResult = penalties ? (penalties.home > penalties.away ? 'win' : 'loss') : homeGoals > awayGoals ? 'win' : homeGoals < awayGoals ? 'loss' : 'draw';
+    const awayResult = penalties ? (penalties.away > penalties.home ? 'win' : 'loss') : awayGoals > homeGoals ? 'win' : awayGoals < homeGoals ? 'loss' : 'draw';
+
+    giveStats(state, match, homeTeam.id, homeGoals, awayGoals, homeXg, homeShots, homeSot, homeYellows, homeReds, homeResult, homeXi);
+    giveStats(state, match, awayTeam.id, awayGoals, homeGoals, awayXg, awayShots, awaySot, awayYellows, awayReds, awayResult, awayXi);
+    if (match.type === 'Regular Season') applyStandings(state, match);
+    return match.result;
+  };
+
+  // Better AI-to-AI transfers during regular season
+  const _origAdvanceOneWeek = advanceOneWeek;
+  advanceOneWeek = function(state) {
+    _origAdvanceOneWeek(state);
+    // After advancing, maybe do AI-to-AI transfers
+    if (state.season.phase === 'Regular Season') {
+      maybeAiTransfers(state);
+    }
+  };
+
+  function maybeAiTransfers(state) {
+    const week = state.calendar?.week || 1;
+    // Transfer windows: early season (1-5) and mid-season (17-22)
+    const inWindow = week <= 5 || (week >= 17 && week <= 22);
+    const numTrades = inWindow ? randInt(1, 3) : (Math.random() < 0.25 ? 1 : 0);
+    for (let t = 0; t < numTrades; t++) {
+      doAiTransfer(state);
+    }
+  }
+
+  function doAiTransfer(state) {
+    // Pick a random selling team that has depth at a position
+    const sellingTeam = pick(state.teams);
+    const roster = state.players.filter(p => p.clubId === sellingTeam.id).sort((a,b)=>(b.overall||0)-(a.overall||0));
+    if (roster.length < 16) return; // don't strip squads
+
+    // Find an expendable player (not top 11, and not a key DP)
+    const expendable = roster.slice(12).filter(p => p.designation !== 'DP' && p.age < 34);
+    if (!expendable.length) return;
+    const target = pick(expendable.slice(0, Math.min(expendable.length, 5)));
+
+    // Find a buying team that needs that position
+    const buyingCandidates = state.teams.filter(t => {
+      if (t.id === sellingTeam.id) return false;
+      const theirRoster = state.players.filter(p => p.clubId === t.id);
+      return theirRoster.length < 24; // has roster room
+    });
+    if (!buyingCandidates.length) return;
+    const buyer = pick(buyingCandidates);
+
+    // Execute transfer
+    target.clubId = buyer.id;
+    target.contract.yearsLeft = randInt(1, 3);
+    target.contract.expiresYear = state.season.year + target.contract.yearsLeft;
+    target.contract.status = 'Active';
+    target.morale = Math.min(90, (target.morale || 70) + randInt(3, 10));
+    addTransaction(state, 'Transfer', `${buyer.name} signed ${target.name} from ${sellingTeam.name}.`);
+  }
+
+  // More frequent external offers to user (increase from ~10-20% to 25-35% per week)
+  maybeExternalOffer = function(state) {
+    const userTeam = getUserTeam(state);
+    if (!userTeam) return;
+    const players = getTeamPlayers(state, userTeam.id)
+      .filter(p => p.age >= 18 && p.contract?.status !== 'Draft Eligible' && p.overall >= 62);
+    if (!players.length) return;
+    const week = state.calendar?.week || 1;
+    const inWindow = week <= 5 || (week >= 17 && week <= 22);
+    const chance = inWindow ? 0.38 : 0.20;
+    if (Math.random() > chance) return;
+    const target = pick(players.slice(0, Math.min(players.length, 14)));
+    const yearsLeft = Math.max(0, Number(target.contract?.yearsLeft || 1));
+    const ageUpside = Math.max(0, 26 - (target.age || 25)) * 200000;
+    const production = (target.stats?.goals || 0) * 200000 + (target.stats?.assists || 0) * 130000;
+    const statusBonus = target.designation === 'DP' ? 1500000 : target.designation === 'U22' ? 900000 : target.designation === 'TAM' ? 500000 : 0;
+    const base = (target.overall || 60) ** 2 * 1700 + ageUpside + production + statusBonus + yearsLeft * 200000;
+    const offer = Math.round(Math.max(target.contract?.salary || 0, base) * randFloat(0.90, 1.50) / 25000) * 25000;
+    const bidder = pick(state.teams.filter(t => t.id !== userTeam.id));
+    state.pendingOffer = { id: uuid('offer'), playerId: target.id, bidClub: bidder?.name || 'MLS Club', amount: offer };
+    addTransaction(state, 'Offer', `${state.pendingOffer.bidClub} offered ${offer.toLocaleString()} for ${target.name}.`);
+  };
+
+  // Auto-set team tactic based on roster shape for better tactical AI
+  const _origFinalizeOffseason = null; // don't override, just expose setAutoTactic
+  function setAutoTacticForTeam(state, teamId) {
+    const roster = state.players.filter(p => p.clubId === teamId).sort((a,b)=>(b.overall||0)-(a.overall||0)).slice(0,16);
+    const byPos = pos => roster.filter(p => p.position?.toUpperCase() === pos).length;
+    const coach = (state.coaches||[]).find(c => c.teamId === teamId);
+    const stars = Number(coach?.managerStars || 3);
+    // Count positional depth
+    const cb = byPos('CB'), st = byPos('ST') + byPos('CF'), lw = byPos('LW'), rw = byPos('RW');
+    const cam = byPos('CAM'), cdm = byPos('CDM');
+    let tactic = '4-3-3';
+    if (cb >= 3 && lw >= 1 && rw >= 1) tactic = '3-5-2';
+    else if (cam >= 1 && cdm >= 1) tactic = '4-2-3-1';
+    else if (st >= 2) tactic = '4-4-2';
+    else if (cdm >= 2) tactic = '4-1-4-1';
+    // High-star coaches unlock more sophisticated tactics
+    if (stars >= 4 && cam >= 1 && cdm >= 1) tactic = '4-2-3-1';
+    if (stars >= 5) {
+      if (cb >= 3) tactic = '3-4-3';
+      else tactic = '4-3-3';
+    }
+    const team = state.teams.find(t => t.id === teamId);
+    if (team) team.currentTactic = tactic;
+  }
+  // Set tactics for all teams on each new season start and on weekly advancement
+  const origResetStandings = resetStandingsAndSchedule;
+  // Export setAutoTacticForTeam so app.js can use it
+  if (typeof window !== 'undefined') window.__setAutoTacticForTeam = setAutoTacticForTeam;
+
+})();
