@@ -1,4 +1,4 @@
-// MLS-GM app.js — build v53
+// MLS-GM app.js — build v54
 import { $, $$, formatMoney, formatNumber, downloadJSON, readJSONFile, toast, pick, randInt } from "./utils.js";
 import { saveSlot, loadSlot, listSlots, deleteSlot } from "./db.js";
 import { loadExternalData } from "./assets.js";
@@ -1561,6 +1561,9 @@ function buildLivePitchScene(match) {
     awayFormation,
     homePack,
     awayPack,
+    // Snapshot the original XI player IDs so subs don't move players on pitch
+    homeStarterIds: homePack.xi.map(e => e?.player?.id).filter(Boolean),
+    awayStarterIds: awayPack.xi.map(e => e?.player?.id).filter(Boolean),
     phase: 0,
     momentum: "balanced",
     ballOwner: "home",
@@ -5876,7 +5879,7 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
       .map(ev => ev.outPlayerId)
   );
 
-  // Override renderFotmobPitch with cleaner chip placement
+  // Override renderFotmobPitch — notes inside head row, original starters keep their spots
   renderFotmobPitch = function(match, minute = 1) {
     const pitch = document.getElementById('fotmob-pitch');
     if (!pitch || !livePitchScene) return;
@@ -5884,74 +5887,74 @@ window.addEventListener("beforeunload", ev => { if (simInProgress) { ev.preventD
     const ap = livePitchScene.awayPack;
     const homeLayout = FORMATION_LAYOUT[livePitchScene.homeFormation] || FORMATION_LAYOUT['4-3-3'];
     const awayLayout = FORMATION_LAYOUT[livePitchScene.awayFormation] || FORMATION_LAYOUT['4-3-3'];
-    const homeXi = hp?.xi || [];
-    const awayXi = ap?.xi || [];
-    const allLiveXi = [...homeXi, ...awayXi].map(e => e?.player).filter(Boolean);
-    const bestRating = allLiveXi.length ? Math.max(...allLiveXi.map(p => getLivePlayerRating(p, minute))) : 0;
-    const offIds = subbedOffIds();
 
+    // Use the ORIGINAL starter IDs for positions — sub-ins don't move on the pitch
+    const homeStarterIds = livePitchScene.homeStarterIds || (hp?.xi || []).map(e => e?.player?.id).filter(Boolean);
+    const awayStarterIds = livePitchScene.awayStarterIds || (ap?.xi || []).map(e => e?.player?.id).filter(Boolean);
+    const offIds = subbedOffIds();
+    // Map player id -> current pack entry (for ratings)
+    const allPlayers = [...(hp?.xi || []), ...(hp?.bench || []), ...(ap?.xi || []), ...(ap?.bench || [])]
+      .map(e => e?.player || e).filter(Boolean);
+    const playerById = id => allPlayers.find(p => p?.id === id) || state?.players?.find(p => p?.id === id);
+
+    const allXi = [...(hp?.xi || []), ...(ap?.xi || [])].map(e => e?.player).filter(Boolean);
+    const bestRating = allXi.length ? Math.max(...allXi.map(p => getLivePlayerRating(p, minute))) : 0;
     const ratingCls = r => r >= 7 ? 'good' : r >= 5 ? 'warn' : 'bad';
 
-    const coordFor43 = (slot, side) => {
-      // x = lateral spread (0=top of screen, 1=bottom). GK has x=0.50 → centered vertically.
-      // y = depth from own goal (0.87=GK deep, 0.12=ST near opp goal).
-      // Pitch is HORIZONTAL: home attacks right, away attacks left.
-      // top maps x (lateral) → vertical screen position: 10% to 88%
-      // left maps y (depth) → horizontal screen position
+    const coordFor = (slot, side) => {
       const x = Math.max(0.04, Math.min(0.96, Number(slot?.x ?? 0.5)));
       const y = Math.max(0.05, Math.min(0.95, Number(slot?.y ?? 0.5)));
       const top = 10 + x * 78;
-      // depth: y=0.87(GK) → low depth value (near own goal edge), y=0.12(ST) → high depth (near center)
-      // home: left = 4 + (1-y)*43  → GK at ~8%, ST at ~42%
-      // away: mirror → left = 100 - (4 + (1-y)*43) → GK at ~92%, ST at ~58%
       const depth = 4 + (1 - y) * 43;
       const left = side === 'home' ? depth : 100 - depth;
       return { left: `${left.toFixed(1)}%`, top: `${top.toFixed(1)}%` };
     };
 
-    const renderSide = (entries, layout, side) => entries.map((entry, idx) => {
-      const player = entry?.player;
+    const renderSide = (starterIds, layout, side) => starterIds.map((pid, idx) => {
+      const player = playerById(pid);
       if (!player) return '';
-      const pos = coordFor43(layout[idx] || { x: 0.5, y: 0.5 }, side);
+      const pos = coordFor(layout[idx] || { x: 0.5, y: 0.5 }, side);
       const ratingValue = getLivePlayerRating(player, minute);
       const isBest = minute >= 90 && ratingValue >= bestRating - 0.001 && bestRating >= 7;
-      const isSubbedOff = offIds.has(player.id);
-      const icons = liveEventSummaryForPlayer(player.id);
-      // Only show chips that are meaningful — skip subOff on pitch (they shouldn't be there post-sub)
-      const notes = [];
-      if (icons.goals) notes.push(liveEventChip('goal', 'Goal', icons.goals > 1 ? icons.goals : null));
-      if (icons.assists) notes.push(liveEventChip('assist', 'Assist', icons.assists > 1 ? icons.assists : null));
-      if (icons.yellows) notes.push(liveEventChip('yellow', 'Yellow card'));
-      if (icons.reds) notes.push(liveEventChip('red', 'Red card'));
-      if (icons.subOn) notes.push(liveEventChip('subOn', 'Subbed on'));
-      const name = (() => {
+      const isOff = offIds.has(pid);
+      const icons = liveEventSummaryForPlayer(pid);
+      // Minute label only if they have an event
+      const minuteLabel = icons.latestMinute ? `<span class="fotmob-player-minute">${icons.latestMinute}'</span>` : '';
+      const chips = [];
+      if (icons.goals)   chips.push(liveEventChip('goal',   'Goal',   icons.goals > 1 ? icons.goals : null));
+      if (icons.assists) chips.push(liveEventChip('assist', 'Assist', icons.assists > 1 ? icons.assists : null));
+      if (icons.yellows) chips.push(liveEventChip('yellow', 'Yellow card'));
+      if (icons.reds)    chips.push(liveEventChip('red',    'Red card'));
+      if (isOff)         chips.push(liveEventChip('subOff', 'Subbed off'));
+      const notesHtml = (minuteLabel || chips.length) ? `<div class="fotmob-player-notes">${minuteLabel}${chips.join('')}</div>` : '';
+      const lastName = (() => {
         const full = (player?.name || '').trim();
         const bits = full.split(/\s+/).filter(Boolean);
         const last = bits[bits.length - 1] || full;
         return last.length <= 11 ? last : `${last.slice(0, 10)}…`;
       })();
-      return `<div class="fotmob-player fotmob-player-${side}${isSubbedOff ? ' subbed-off' : ''}" style="left:${pos.left};top:${pos.top};">
+      return `<div class="fotmob-player fotmob-player-${side}${isOff ? ' subbed-off' : ''}" style="left:${pos.left};top:${pos.top};">
         <div class="fotmob-player-head">
+          ${notesHtml}
           <div class="fotmob-player-rating ${ratingCls(ratingValue)} ${isBest ? 'best' : ''}">${ratingValue.toFixed(1)}${isBest ? '<span class="rating-star">★</span>' : ''}</div>
         </div>
         <div class="fotmob-player-avatar-wrap">${playerPhoto(player, 'fotmob-player-avatar allow-initials')}</div>
-        ${notes.length ? `<div class="fotmob-player-notes">${notes.join('')}</div>` : ''}
         <div class="fotmob-player-name" title="${escapeAttr(player?.name || '')}">
-          <span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(name)}
+          <span class="fotmob-player-number">${escapeHtml(getPlayerDisplayNumber(player))}</span> ${escapeHtml(lastName)}
         </div>
         ${livePitchMetric ? `<div class="fotmob-player-metric-wrap">${liveMetricBadge(player)}</div>` : ''}
       </div>`;
     }).join('');
 
     const btn = (key, label) => `<button type="button" class="fotmob-filter-btn ${livePitchMetric === key ? 'active' : ''}" data-pitch-metric="${key}">${label}</button>`;
-    pitch.innerHTML = `<div class="fotmob-pitch-filter-row">${btn('transfer','Transfer value')}${btn('age','Age')}${btn('country','Country')}</div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(homeXi, homeLayout, 'home')}${renderSide(awayXi, awayLayout, 'away')}`;
+    pitch.innerHTML = `<div class="fotmob-pitch-filter-row">${btn('transfer','Transfer value')}${btn('age','Age')}${btn('country','Country')}</div><div class="fotmob-pen-box left"></div><div class="fotmob-pen-box right"></div>${renderSide(homeStarterIds, homeLayout, 'home')}${renderSide(awayStarterIds, awayLayout, 'away')}`;
     pitch.querySelectorAll('[data-pitch-metric]').forEach(b => b.addEventListener('click', () => {
       livePitchMetric = livePitchMetric === b.dataset.pitchMetric ? null : b.dataset.pitchMetric;
       renderFotmobPitch(match, minute);
     }));
 
-    const homeAvg = hp ? avg(homeXi.map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
-    const awayAvg = ap ? avg(awayXi.map(({ player }) => getLivePlayerRating(player, minute))).toFixed(1) : '—';
+    const homeAvg = hp ? avg((hp.xi||[]).map(e => getLivePlayerRating(e?.player, minute))).toFixed(1) : '—';
+    const awayAvg = ap ? avg((ap.xi||[]).map(e => getLivePlayerRating(e?.player, minute))).toFixed(1) : '—';
     const hEl = document.getElementById('fotmob-home-team-rating'); if (hEl) hEl.textContent = homeAvg;
     const aEl = document.getElementById('fotmob-away-team-rating'); if (aEl) aEl.textContent = awayAvg;
     const hf = document.getElementById('fotmob-home-formation'); if (hf) hf.textContent = livePitchScene.homeFormation;
